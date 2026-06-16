@@ -211,23 +211,6 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
         }}>
           Track tasks, manage consultants, and keep every Sage Intacct implementation on time and on budget.
         </p>
-      </div>
-
-      {/* Stats row */}
-      <div style={{
-        display: 'flex',
-        gap: '2rem',
-        zIndex: 1
-      }}>
-        {[
-
-        ].map(stat => (
-          <div key={stat.label}>
-            <div style={{ color: 'white', fontWeight: 700, fontSize: '1.05rem', fontFamily: 'var(--font-heading)' }}>{stat.value}</div>
-            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem', marginTop: '0.1rem' }}>{stat.label}</div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 
