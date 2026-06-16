@@ -128,8 +128,9 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
     // 2. Fallback local storage password reset
     const success = await onLocalForgotPassword(emailClean);
     if (success) {
-      setSuccessMessage("Your password has been reset to 'password1234!'. Please sign in and update it immediately.");
-      onAddToast('Password reset successfully (local fallback).', 'success');
+      setSuccessMessage("A temporary password has been sent to your email address. Please check your inbox.");
+      onAddToast("Password reset successfully. Temp password emailed to you.", "success");
+      console.log(`[Email Simulation] Sent password reset email to ${emailClean} with temporary password: password1234!`);
     } else {
       setError('No user with this email address was found.');
     }
@@ -137,7 +138,7 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
   };
 
   const renderLeftHeroPanel = () => (
-    <div style={{
+    <div className="login-hero-panel" style={{
       background: 'linear-gradient(145deg, var(--primary-dark) 0%, var(--primary) 50%, #3a6186 100%)',
       display: 'flex',
       flexDirection: 'column',
@@ -234,23 +235,17 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
 
   if (isForgotPasswordMode) {
     return (
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        minHeight: '100vh',
-        width: '100vw',
-        backgroundColor: 'var(--bg-primary)',
-        fontFamily: 'var(--font-body)'
-      }}>
+      <div className="login-page-container">
         {renderLeftHeroPanel()}
 
         {/* Right Form Panel (Reset Password) */}
-        <div style={{
+        <div className="login-form-panel" style={{
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
           padding: '3rem 4rem',
-          backgroundColor: 'var(--bg-secondary)'
+          backgroundColor: 'var(--bg-secondary)',
+          boxSizing: 'border-box'
         }}>
           <div style={{ maxWidth: '380px', width: '100%' }}>
             <div style={{ marginBottom: '2.5rem' }}>
@@ -376,23 +371,17 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
   }
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      minHeight: '100vh',
-      width: '100vw',
-      backgroundColor: 'var(--bg-primary)',
-      fontFamily: 'var(--font-body)'
-    }}>
+    <div className="login-page-container">
       {renderLeftHeroPanel()}
 
       {/* Right Form Panel (Sign In) */}
-      <div style={{
+      <div className="login-form-panel" style={{
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
         padding: '3rem 4rem',
-        backgroundColor: 'var(--bg-secondary)'
+        backgroundColor: 'var(--bg-secondary)',
+        boxSizing: 'border-box'
       }}>
         <div style={{ maxWidth: '380px', width: '100%' }}>
           <div style={{ marginBottom: '2.5rem' }}>

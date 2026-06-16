@@ -1003,3 +1003,28 @@ h1, h2, h3, h4, h5, h6 {
     display: none !important;
   }
 }
+
+/* Login Page Layout */
+.login-page-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 100vh;
+  width: 100vw;
+  background-color: var(--bg-primary);
+  font-family: var(--font-body);
+}
+
+@media (max-width: 768px) {
+  .login-page-container {
+    grid-template-columns: 1fr !important;
+  }
+  .login-hero-panel {
+    display: none !important;
+  }
+  .login-form-panel {
+    padding: 2.5rem 1.5rem !important;
+    align-items: center;
+    justify-content: center;
+    width: 100% !important;
+  }
+}
