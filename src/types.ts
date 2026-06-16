@@ -4,7 +4,7 @@ export interface Consultant {
   email: string;
   role: string;
   avatarColor: string;
-  tier: 'admin' | 'project_manager' | 'consultant' | 'read_only';
+  tier: 'superuser' | 'admin' | 'normal';
   passwordHash?: string;
   mustResetPassword?: boolean;
 }

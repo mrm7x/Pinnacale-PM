@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import type { Project, Task, Consultant, O365Config } from '../types';
+import { canCreateProject, canEditProject, canCreateTask, canEditTask, canDeleteTask } from '../utils/permissions';
 import { 
   Plus, Calendar, Trash2, Edit2, ChevronDown, ChevronRight, 
   AlertTriangle, RefreshCw, MailCheck, User, ArrowRight, X, Clock, FolderKanban, Pencil
@@ -77,6 +78,9 @@ export default function ProjectView({
   onSaveAsTemplate,
   activeUserId
 }: ProjectViewProps) {
+  const activeConsultant = consultants.find(c => c.id === activeUserId);
+  const activeRole = activeConsultant?.role || 'Read only';
+
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
   const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -476,42 +480,48 @@ export default function ProjectView({
 
             {/* Col 6: Actions — hidden by default, visible on hover */}
             <div className="task-node-actions" onClick={e => e.stopPropagation()}>
-              {!isTaskParent && (
+              {canEditTask(activeRole) && (
                 <>
-                  <button 
-                    className="btn btn-secondary btn-icon"
-                    title="Sync to MS To-Do"
-                    disabled={syncingTaskId === task.id}
-                    onClick={() => handleSyncToO365(task)}
-                    style={{ color: task.o365TaskId ? 'var(--success)' : 'inherit', padding: '0.25rem' }}
-                  >
-                    <RefreshCw size={13} className={syncingTaskId === task.id ? 'animate-spin' : ''} />
-                  </button>
-                  <button 
-                    className="btn btn-secondary btn-icon"
-                    title="Schedule Calendar Event"
-                    onClick={() => handleOpenCalendarModal(task)}
-                    style={{ color: task.o365CalendarEventId ? 'var(--accent)' : 'inherit', padding: '0.25rem' }}
-                  >
-                    <Calendar size={13} />
+                  {!isTaskParent && (
+                    <>
+                      <button 
+                        className="btn btn-secondary btn-icon"
+                        title="Sync to MS To-Do"
+                        disabled={syncingTaskId === task.id}
+                        onClick={() => handleSyncToO365(task)}
+                        style={{ color: task.o365TaskId ? 'var(--success)' : 'inherit', padding: '0.25rem' }}
+                      >
+                        <RefreshCw size={13} className={syncingTaskId === task.id ? 'animate-spin' : ''} />
+                      </button>
+                      <button 
+                        className="btn btn-secondary btn-icon"
+                        title="Schedule Calendar Event"
+                        onClick={() => handleOpenCalendarModal(task)}
+                        style={{ color: task.o365CalendarEventId ? 'var(--accent)' : 'inherit', padding: '0.25rem' }}
+                      >
+                        <Calendar size={13} />
+                      </button>
+                    </>
+                  )}
+                  <button className="btn btn-secondary btn-icon" onClick={() => handleOpenEditTask(task)} style={{ padding: '0.25rem' }}>
+                    <Edit2 size={13} />
                   </button>
                 </>
               )}
-              <button className="btn btn-secondary btn-icon" onClick={() => handleOpenEditTask(task)} style={{ padding: '0.25rem' }}>
-                <Edit2 size={13} />
-              </button>
-              <button 
-                className="btn btn-secondary btn-icon" 
-                style={{ color: 'var(--danger)', padding: '0.25rem' }} 
-                onClick={() => {
-                  if (confirm(`Delete task "${task.name}"? Subtasks will also be deleted.`)) {
-                    onDeleteTask(task.id);
-                    onAddToast('Task deleted.', 'warning');
-                  }
-                }}
-              >
-                <Trash2 size={13} />
-              </button>
+              {canDeleteTask(activeRole) && (
+                <button 
+                  className="btn btn-secondary btn-icon" 
+                  style={{ color: 'var(--danger)', padding: '0.25rem' }} 
+                  onClick={() => {
+                    if (confirm(`Delete task "${task.name}"? Subtasks will also be deleted.`)) {
+                      onDeleteTask(task.id);
+                      onAddToast('Task deleted.', 'warning');
+                    }
+                  }}
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
             </div>
           </div>
           
@@ -542,13 +552,13 @@ export default function ProjectView({
           ))}
         </select>
 
-        {activeUserId === 'admin' && (
+        {canCreateProject(activeRole) && (
           <button className="btn btn-primary" onClick={() => setIsNewProjectModalOpen(true)} style={{ whiteSpace: 'nowrap' }}>
             <Plus size={16} /> New Project
           </button>
         )}
 
-        {activeProject && activeUserId === 'admin' && (
+        {activeProject && canEditProject(activeRole) && (
           <div style={{ display: 'flex', gap: '0.35rem', marginLeft: 'auto' }}>
             <button 
               className="btn btn-ghost"
@@ -672,23 +682,25 @@ export default function ProjectView({
           {/* Tasks Operations Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ fontSize: '1.2rem' }}>Implementation Tasks</h3>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <button 
-                className={`btn ${editMode ? 'btn-accent' : 'btn-secondary'}`}
-                onClick={() => {
-                  setEditMode(!editMode);
-                  setSelectedTaskIds([]);
-                }}
-                title={editMode ? 'Exit edit mode' : 'Enter edit mode — click any task to edit'}
-                style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}
-              >
-                <Pencil size={14} />
-                {editMode ? 'Exit Edit Mode' : 'Edit Mode'}
-              </button>
-              <button className="btn btn-primary" onClick={handleOpenCreateTask}>
-                <Plus size={16} /> Add Task
-              </button>
-            </div>
+            {canCreateTask(activeRole) && (
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <button 
+                  className={`btn ${editMode ? 'btn-accent' : 'btn-secondary'}`}
+                  onClick={() => {
+                    setEditMode(!editMode);
+                    setSelectedTaskIds([]);
+                  }}
+                  title={editMode ? 'Exit edit mode' : 'Enter edit mode — click any task to edit'}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                >
+                  <Pencil size={14} />
+                  {editMode ? 'Exit Edit Mode' : 'Edit Mode'}
+                </button>
+                <button className="btn btn-primary" onClick={handleOpenCreateTask}>
+                  <Plus size={16} /> Add Task
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Task Tree Container */}

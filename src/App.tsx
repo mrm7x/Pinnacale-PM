@@ -33,11 +33,11 @@ const HASH_PASSWORD = '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721
 
 // Initial Mock Seed Data (admin is now a regular consultant record)
 const defaultConsultants: Consultant[] = [
-  { id: 'admin', name: 'System Administrator', email: 'mohammad.jenabi@gmail.com', role: 'Administrator', avatarColor: '#2d4a65', tier: 'admin', passwordHash: HASH_MANAGER, mustResetPassword: false },
-  { id: 'c1', name: 'Sarah Jenkins', email: 'sarah.jenkins@pinnacle.com', role: 'Lead Consultant', avatarColor: '#0d9488', tier: 'consultant', passwordHash: HASH_PASSWORD, mustResetPassword: true },
-  { id: 'c2', name: 'Alex Rivera', email: 'alex.rivera@pinnacle.com', role: 'Technical Architect', avatarColor: '#6366f1', tier: 'consultant', passwordHash: HASH_PASSWORD, mustResetPassword: true },
-  { id: 'c3', name: 'Marcus Brody', email: 'marcus.brody@pinnacle.com', role: 'Project Manager', avatarColor: '#f59e0b', tier: 'project_manager', passwordHash: HASH_PASSWORD, mustResetPassword: true },
-  { id: 'c4', name: 'David Vance', email: 'david.vance@pinnacle.com', role: 'Executive Sponsor (Read Only)', avatarColor: '#ef4444', tier: 'read_only', passwordHash: HASH_PASSWORD, mustResetPassword: true }
+  { id: 'admin', name: 'System Administrator', email: 'mohammad.jenabi@gmail.com', role: 'Manager', avatarColor: '#2d4a65', tier: 'superuser', passwordHash: HASH_MANAGER, mustResetPassword: false },
+  { id: 'c1', name: 'Sarah Jenkins', email: 'sarah.jenkins@pinnacle.com', role: 'Lead Consultant', avatarColor: '#0d9488', tier: 'normal', passwordHash: HASH_PASSWORD, mustResetPassword: true },
+  { id: 'c2', name: 'Alex Rivera', email: 'alex.rivera@pinnacle.com', role: 'Consultant', avatarColor: '#6366f1', tier: 'normal', passwordHash: HASH_PASSWORD, mustResetPassword: true },
+  { id: 'c3', name: 'Marcus Brody', email: 'marcus.brody@pinnacle.com', role: 'Project Manager', avatarColor: '#f59e0b', tier: 'normal', passwordHash: HASH_PASSWORD, mustResetPassword: true },
+  { id: 'c4', name: 'David Vance', email: 'david.vance@pinnacle.com', role: 'Read only', avatarColor: '#ef4444', tier: 'normal', passwordHash: HASH_PASSWORD, mustResetPassword: true }
 ];
 
 const defaultProjects: Project[] = [
@@ -271,11 +271,12 @@ export default function App() {
 
   // Derive active user's tier for RBAC
   const activeConsultant = consultants.find(c => c.id === activeUserId) || null;
-  const activeUserTier = activeConsultant?.tier || 'read_only';
+  const activeUserTier = activeConsultant?.tier || 'normal';
+  const activeUserRole = activeConsultant?.role || 'Read only';
 
   // Filtered projects list based on access privileges
   const activeProjects = projects.filter(p => !p.isTemplate);
-  const filteredProjects = (activeUserTier === 'admin' || activeUserTier === 'project_manager' || activeUserTier === 'consultant')
+  const filteredProjects = (activeUserRole !== 'Read only')
     ? activeProjects
     : activeProjects.filter(p => p.consultantIds.includes(activeUserId));
   const projectTemplates = projects.filter(p => p.isTemplate);
@@ -920,6 +921,7 @@ export default function App() {
             o365Config={o365Config}
             microsoftAccount={microsoftAccount}
             activeUserTier={activeUserTier}
+            activeUserId={activeUserId}
             onAddConsultant={handleAddConsultant}
             onDeleteConsultant={handleDeleteConsultant}
             onUpdateConsultant={(updated: Consultant) => {
@@ -1049,7 +1051,7 @@ export default function App() {
 
             {/* User Profile Card */}
             <div className="user-profile-card" style={{ padding: '0.75rem', marginBottom: '1.75rem', display: 'flex', alignItems: 'center', gap: '0.85rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: 'var(--radius-lg)' }}>
-              {activeConsultant?.tier === 'admin' ? (
+              {activeConsultant?.tier === 'superuser' || activeConsultant?.tier === 'admin' ? (
                 <div 
                   style={{ 
                     width: '36px', 
@@ -1065,7 +1067,7 @@ export default function App() {
                     flexShrink: 0
                   }}
                 >
-                  AD
+                  {activeConsultant?.tier === 'superuser' ? 'SU' : 'AD'}
                 </div>
               ) : (
                 <div 

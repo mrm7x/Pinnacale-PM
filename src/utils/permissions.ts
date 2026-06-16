@@ -1,10 +1,11 @@
-export type Tier = 'admin' | 'project_manager' | 'consultant' | 'read_only';
+export type Tier = 'superuser' | 'admin' | 'normal';
 
-export const canCreateProject = (tier: Tier) => tier === 'admin' || tier === 'project_manager';
-export const canEditProject = (tier: Tier) => tier === 'admin' || tier === 'project_manager';
-export const canDeleteProject = (tier: Tier) => tier === 'admin' || tier === 'project_manager'; // adjust if needed
-export const canCreateTask = (tier: Tier) => tier !== 'read_only';
-export const canEditTask = (tier: Tier) => tier !== 'read_only';
-export const canDeleteTask = (tier: Tier) => tier === 'admin' || tier === 'project_manager';
-export const canManageUsers = (tier: Tier) => tier === 'admin';
-export const canEditUsers = (tier: Tier) => tier === 'admin' || tier === 'project_manager';
+export const canCreateProject = (role: string) => role === 'Manager' || role === 'Project Manager';
+export const canEditProject = (role: string) => role === 'Manager' || role === 'Project Manager';
+export const canDeleteProject = (role: string) => role === 'Manager' || role === 'Project Manager';
+export const canCreateTask = (role: string) => role !== 'Read only';
+export const canEditTask = (role: string) => role !== 'Read only';
+export const canDeleteTask = (role: string) => role === 'Manager' || role === 'Project Manager' || role === 'Lead Consultant';
+export const canManageUsers = (tier: Tier) => tier === 'superuser' || tier === 'admin';
+export const canEditUsers = (tier: Tier) => tier === 'superuser' || tier === 'admin';
+export const canManageDatabase = (tier: Tier) => tier === 'superuser';
