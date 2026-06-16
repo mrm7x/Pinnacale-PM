@@ -211,6 +211,7 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
         }}>
           Track tasks, manage consultants, and keep every Sage Intacct implementation on time and on budget.
         </p>
+      </div>
     </div>
   );
 
