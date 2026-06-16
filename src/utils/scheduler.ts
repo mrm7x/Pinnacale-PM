@@ -100,6 +100,41 @@ export function hasCircularDependency(tasks: Task[]): boolean {
 }
 
 /**
+ * Calculates the number of working half-days between projectStartDateStr and targetDateStr.
+ */
+export function getHalfDaysBetween(projectStartDateStr: string, targetDateStr: string): number {
+  const projStart = parseDate(projectStartDateStr);
+  const target = parseDate(targetDateStr);
+  
+  if (target <= projStart) return 0;
+  
+  let current = new Date(projStart);
+  let halfDays = 0;
+  let period: 'AM' | 'PM' = 'AM';
+  
+  while (formatDate(current) !== formatDate(target) || period !== 'AM') {
+    if (isWeekend(current)) {
+      current.setDate(current.getDate() + 1);
+      continue;
+    }
+    
+    if (formatDate(current) === formatDate(target)) {
+      break;
+    }
+    
+    if (period === 'AM') {
+      period = 'PM';
+    } else {
+      period = 'AM';
+      current.setDate(current.getDate() + 1);
+    }
+    halfDays++;
+  }
+  
+  return halfDays;
+}
+
+/**
  * Calculates start and end dates for all tasks based on dependencies, Durations, and Hierarchy.
  * Uses a topological sort to compute scheduling.
  */
@@ -160,9 +195,20 @@ export function calculateTaskSchedules(projectStartDate: string, tasks: Task[]):
 
     const isParent = parentIds.has(taskId);
 
-    if (isParent) {
-      // Parents will have their indices calculated from their children after children resolve.
-      // But we need to resolve children first.
+    if (task.customStartDate) {
+      // If a task has an explicit custom start date, it is scheduled independently.
+      const customStartHalfDay = getHalfDaysBetween(projectStartDate, task.customStartDate);
+      const durationHalfDays = Math.round(task.durationDays * 2);
+      const endHalfDay = customStartHalfDay + Math.max(1, durationHalfDays) - 1;
+      scheduleIndices.set(taskId, { start: customStartHalfDay, end: endHalfDay });
+      
+      // If it is a parent task, we also resolve its children so their times bubble up correctly.
+      if (isParent) {
+        const children = scheduledTasks.filter(t => t.parentId === taskId);
+        children.forEach(child => resolveTask(child.id));
+      }
+    } else if (isParent) {
+      // Parents without custom start date will have their indices calculated from their children after children resolve.
       const children = scheduledTasks.filter(t => t.parentId === taskId);
       children.forEach(child => resolveTask(child.id));
 
@@ -181,9 +227,7 @@ export function calculateTaskSchedules(projectStartDate: string, tasks: Task[]):
         scheduleIndices.set(taskId, { start: 0, end: Math.round(task.durationDays * 2) - 1 });
       }
     } else {
-      // Leaf task: start index is max(predecessor.end + 1) or 0 if parent has predecessors.
-      // Wait, what if this task's parent has predecessors? In Gantt scheduling, parent's predecessors shift children.
-      // To implement this properly: find parent's predecessor end indices as well.
+      // Leaf task: start index is max(predecessor.end + 1) or baseline from parent's custom start date.
       let maxPredecessorEnd = -1;
 
       // Direct predecessors
@@ -211,7 +255,19 @@ export function calculateTaskSchedules(projectStartDate: string, tasks: Task[]):
         }
       }
 
-      const startHalfDay = maxPredecessorEnd === -1 ? 0 : maxPredecessorEnd + 1;
+      // Check if any ancestor has a custom start date as a baseline
+      let baselineStart = 0;
+      let checkParentId = task.parentId;
+      while (checkParentId) {
+        const parent = taskMap.get(checkParentId);
+        if (parent && parent.customStartDate) {
+          baselineStart = getHalfDaysBetween(projectStartDate, parent.customStartDate);
+          break;
+        }
+        checkParentId = parent ? parent.parentId : null;
+      }
+
+      const startHalfDay = maxPredecessorEnd === -1 ? baselineStart : Math.max(baselineStart, maxPredecessorEnd + 1);
       const durationHalfDays = Math.round(task.durationDays * 2);
       const endHalfDay = startHalfDay + Math.max(1, durationHalfDays) - 1;
 

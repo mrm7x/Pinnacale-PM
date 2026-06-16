@@ -4,7 +4,7 @@ import type { Project, Task, Consultant, O365Config } from '../types';
 import { canCreateProject, canEditProject, canCreateTask, canEditTask, canDeleteTask } from '../utils/permissions';
 import { 
   Plus, Calendar, Trash2, Edit2, ChevronDown, ChevronRight, ChevronUp,
-  RefreshCw, MailCheck, User, ArrowRight, X, Clock, FolderKanban, Pencil
+  RefreshCw, MailCheck, User, X, Clock, FolderKanban, Pencil
 } from 'lucide-react';
 import { syncTaskToO365, createOutlookCalendarEvent } from '../utils/o365';
 
@@ -107,7 +107,8 @@ export default function ProjectView({
     predecessorIds: [] as string[],
     status: 'not_started' as Task['status'],
     pinkNumber: '',
-    billed: false
+    billed: false,
+    customStartDate: ''
   });
 
   // Bulk Edit States
@@ -217,7 +218,8 @@ export default function ProjectView({
       predecessorIds: [],
       status: 'not_started',
       pinkNumber: '',
-      billed: false
+      billed: false,
+      customStartDate: ''
     });
     setIsTaskModalOpen(true);
   };
@@ -234,7 +236,8 @@ export default function ProjectView({
       predecessorIds: task.predecessorIds || [],
       status: task.status,
       pinkNumber: task.pinkNumber || '',
-      billed: !!task.billed
+      billed: !!task.billed,
+      customStartDate: task.customStartDate || ''
     });
     setIsTaskModalOpen(true);
   };
@@ -258,6 +261,7 @@ export default function ProjectView({
       status: taskForm.status,
       pinkNumber: taskForm.pinkNumber,
       billed: taskForm.billed,
+      customStartDate: taskForm.customStartDate || null,
       sortOrder: editingTask ? editingTask.sortOrder : maxSortOrder + 10
     };
 
@@ -472,7 +476,7 @@ export default function ProjectView({
               borderBottom: '1px solid var(--border-color)',
               opacity: task.status === 'completed' ? 0.55 : 1,
               display: 'grid',
-              gridTemplateColumns: '1fr 90px 240px 140px 100px 100px',
+              gridTemplateColumns: '1fr 90px 140px 140px 100px 100px',
               alignItems: 'center',
               padding: isTaskParent ? '0.85rem 1.5rem' : '0.7rem 1.5rem',
               gap: '1.25rem',
@@ -572,11 +576,6 @@ export default function ProjectView({
                       Billed
                     </span>
                   )}
-                  {task.description && !isTaskParent && (
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3 }} title={task.description}>
-                      {task.description.split('\n')[0]}
-                    </span>
-                  )}
                 </div>
               </div>
             </div>
@@ -586,13 +585,9 @@ export default function ProjectView({
               <Clock size={12} style={{ opacity: 0.5 }} /> {task.durationDays}d
             </span>
 
-            {/* Col 3: Scheduled dates */}
+            {/* Col 3: Start Date */}
             <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
-              {task.plannedStartDate ? (
-                <>{formatDateFriendly(task.plannedStartDate)} <ArrowRight size={10} style={{ display: 'inline', margin: '0 3px', verticalAlign: 'middle', opacity: 0.4 }} /> {formatDateFriendly(task.plannedEndDate)}</>
-              ) : (
-                <span style={{ color: 'var(--text-tertiary)' }}>—</span>
-              )}
+              {task.plannedStartDate ? formatDateFriendly(task.plannedStartDate) : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}
             </span>
 
             {/* Col 4: Assignee */}
@@ -982,7 +977,7 @@ export default function ProjectView({
                 <div 
                   style={{ 
                     display: 'grid',
-                    gridTemplateColumns: '1fr 90px 240px 140px 100px 100px',
+                    gridTemplateColumns: '1fr 90px 140px 140px 100px 100px',
                     alignItems: 'center',
                     padding: '0.7rem 1.5rem',
                     gap: '1.25rem',
@@ -1010,7 +1005,7 @@ export default function ProjectView({
                     Task Name
                   </span>
                   <span style={{ textAlign: 'center' }}>Duration</span>
-                  <span>Dates (AM/PM)</span>
+                  <span>Start Date</span>
                   <span>Assignee</span>
                   <span>Status</span>
                   <span style={{ textAlign: 'right' }}>Actions</span>
@@ -1221,173 +1216,247 @@ export default function ProjectView({
       {/* CREATE/EDIT TASK MODAL */}
       {isTaskModalOpen && (
         <div className="modal-overlay">
-          <div className="modal-container">
-            <div className="modal-header">
-              <h3>{editingTask ? 'Edit Task' : 'Add Implementation Task'}</h3>
-              <button className="btn btn-secondary btn-icon" onClick={() => setIsTaskModalOpen(false)}>
+          <div className="modal-container" style={{ maxWidth: '800px', width: '92%', maxHeight: '90vh' }}>
+            <div className="modal-header" style={{ padding: '1.25rem 1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ 
+                  backgroundColor: 'var(--primary-light)', 
+                  color: 'var(--primary)', 
+                  padding: '0.4rem', 
+                  borderRadius: '6px',
+                  display: 'inline-flex'
+                }}>
+                  <Pencil size={18} />
+                </span>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>
+                  {editingTask ? 'Edit Implementation Task' : 'Add Implementation Task'}
+                </h3>
+              </div>
+              <button className="btn btn-secondary btn-icon" onClick={() => setIsTaskModalOpen(false)} style={{ padding: '0.35rem' }}>
                 <X size={18} />
               </button>
             </div>
-            <form onSubmit={handleTaskSubmit}>
-              <div className="modal-body">
-                <div className="form-group">
-                  <label className="form-label">Task Name</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    placeholder="e.g. Chart of Accounts Setup" 
-                    value={taskForm.name}
-                    onChange={(e) => setTaskForm({ ...taskForm, name: e.target.value })}
-                    required
-                  />
+            
+            <form onSubmit={handleTaskSubmit} style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <div className="modal-body" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', overflowY: 'auto' }}>
+                
+                {/* 2-Column Responsive Grid */}
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
+                  gap: '1.5rem' 
+                }}>
+                  {/* Left Column: Core Fields */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.25rem' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Task Settings
+                      </span>
+                    </div>
+
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label">Task Name</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        placeholder="e.g. Chart of Accounts Setup" 
+                        value={taskForm.name}
+                        onChange={(e) => setTaskForm({ ...taskForm, name: e.target.value })}
+                        required
+                      />
+                    </div>
+
+                    {/* Start Date & Duration */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <Calendar size={12} /> Start Date
+                        </label>
+                        <input 
+                          type="date" 
+                          className="form-input" 
+                          value={taskForm.customStartDate || ''}
+                          onChange={(e) => setTaskForm({ ...taskForm, customStartDate: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <Clock size={12} /> Duration (Days)
+                        </label>
+                        <input 
+                          type="number" 
+                          step="0.5"
+                          min="0.5"
+                          className="form-input" 
+                          value={taskForm.durationDays}
+                          onChange={(e) => setTaskForm({ ...taskForm, durationDays: parseFloat(e.target.value) || 0.5 })}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* Parent & Status */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label">Parent Task</label>
+                        <select 
+                          className="form-select"
+                          value={taskForm.parentId}
+                          onChange={(e) => setTaskForm({ ...taskForm, parentId: e.target.value })}
+                        >
+                          <option value="">None (Top-Level)</option>
+                          {projectTasks
+                            .filter(t => t.id !== editingTask?.id && !isParent(t.id))
+                            .map(t => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                        </select>
+                      </div>
+
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label">Task Status</label>
+                        <select 
+                          className="form-select"
+                          value={taskForm.status}
+                          onChange={(e) => setTaskForm({ ...taskForm, status: e.target.value as Task['status'] })}
+                        >
+                          <option value="not_started">Not Started</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="on_hold">On Hold</option>
+                          <option value="completed">Completed</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Pink Number & Billed Checkbox */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '0.75rem', alignItems: 'center' }}>
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label">Pink Number</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="e.g. PN-12345" 
+                          value={taskForm.pinkNumber}
+                          onChange={(e) => setTaskForm({ ...taskForm, pinkNumber: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="form-group" style={{ margin: 0, display: 'flex', alignItems: 'center', height: '100%', paddingTop: '1.4rem' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
+                          <input 
+                            type="checkbox" 
+                            checked={taskForm.billed}
+                            onChange={(e) => setTaskForm({ ...taskForm, billed: e.target.checked })}
+                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                          />
+                          <span>Billed</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Execution & Relationships */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.25rem' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Assignments & Dependencies
+                      </span>
+                    </div>
+
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label">Assigned Consultant</label>
+                      <select 
+                        className="form-select"
+                        value={taskForm.assignedConsultantId}
+                        onChange={(e) => setTaskForm({ ...taskForm, assignedConsultantId: e.target.value })}
+                      >
+                        <option value="">Unassigned</option>
+                        {consultants.map(c => (
+                          <option key={c.id} value={c.id}>{c.name} ({c.role})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label">Predecessors (Dependencies)</label>
+                      <div style={{ 
+                        maxHeight: '140px', 
+                        overflowY: 'auto', 
+                        border: '1px solid var(--border-color)', 
+                        borderRadius: 'var(--radius-md)',
+                        padding: '0.5rem 0.75rem',
+                        backgroundColor: 'var(--bg-secondary)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.35rem'
+                      }}>
+                        {projectTasks.filter(t => t.id !== editingTask?.id).length === 0 ? (
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', fontStyle: 'italic', padding: '0.5rem 0' }}>
+                            No other tasks available for dependency links.
+                          </span>
+                        ) : (
+                          projectTasks
+                            .filter(t => t.id !== editingTask?.id)
+                            .map(t => (
+                              <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.15rem 0', fontSize: '0.825rem', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                                <input 
+                                  type="checkbox" 
+                                  checked={taskForm.predecessorIds.includes(t.id)}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    setTaskForm(prev => ({
+                                      ...prev,
+                                      predecessorIds: checked 
+                                        ? [...prev.predecessorIds, t.id]
+                                        : prev.predecessorIds.filter(id => id !== t.id)
+                                    }));
+                                  }}
+                                  style={{ cursor: 'pointer' }}
+                                />
+                                <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{t.name}</span>
+                              </label>
+                            ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Description</label>
+
+                {/* Full-Width Description field at the bottom */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Additional Notes
+                    </span>
+                  </div>
+                  <label className="form-label">Task Description</label>
                   <textarea 
                     className="form-textarea" 
                     placeholder="Provide execution steps or details..."
                     value={taskForm.description}
                     onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
+                    rows={3}
                   />
                 </div>
 
-                <div className="grid-cols-12" style={{ gap: '1rem', marginBottom: '1.25rem' }}>
-                  <div className="form-group col-span-8" style={{ margin: 0 }}>
-                    <label className="form-label">Pink Number</label>
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      placeholder="e.g. PN-12345" 
-                      value={taskForm.pinkNumber}
-                      onChange={(e) => setTaskForm({ ...taskForm, pinkNumber: e.target.value })}
-                    />
-                  </div>
-                  <div className="form-group col-span-4" style={{ display: 'flex', alignItems: 'center', height: '100%', paddingTop: '1.75rem', margin: 0 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 500 }}>
-                      <input 
-                        type="checkbox" 
-                        checked={taskForm.billed}
-                        onChange={(e) => setTaskForm({ ...taskForm, billed: e.target.checked })}
-                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                      />
-                      <span>Billed</span>
-                    </label>
-                  </div>
-                </div>
-                
-                <div className="grid-cols-12">
-                  <div className="form-group col-span-6">
-                    <label className="form-label">Duration (Days, in 0.5 units)</label>
-                    <input 
-                      type="number" 
-                      step="0.5"
-                      min="0.5"
-                      className="form-input" 
-                      value={taskForm.durationDays}
-                      onChange={(e) => setTaskForm({ ...taskForm, durationDays: parseFloat(e.target.value) || 0.5 })}
-                      required
-                    />
-                  </div>
-                  
-                  <div className="form-group col-span-6">
-                    <label className="form-label">Assigned Consultant</label>
-                    <select 
-                      className="form-select"
-                      value={taskForm.assignedConsultantId}
-                      onChange={(e) => setTaskForm({ ...taskForm, assignedConsultantId: e.target.value })}
-                    >
-                      <option value="">Unassigned</option>
-                      {consultants.map(c => (
-                        <option key={c.id} value={c.id}>{c.name} ({c.role})</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid-cols-12">
-                  <div className="form-group col-span-6">
-                    <label className="form-label">Parent Task (Nest Under)</label>
-                    <select 
-                      className="form-select"
-                      value={taskForm.parentId}
-                      onChange={(e) => setTaskForm({ ...taskForm, parentId: e.target.value })}
-                    >
-                      <option value="">None (Top-Level)</option>
-                      {projectTasks
-                        .filter(t => t.id !== editingTask?.id && !isParent(t.id)) // prevent choosing self or leaf-to-parent transitions
-                        .map(t => (
-                          <option key={t.id} value={t.id}>{t.name}</option>
-                        ))}
-                    </select>
-                  </div>
-                  
-                  <div className="form-group col-span-6">
-                    <label className="form-label">Task Status</label>
-                    <select 
-                      className="form-select"
-                      value={taskForm.status}
-                      onChange={(e) => setTaskForm({ ...taskForm, status: e.target.value as Task['status'] })}
-                    >
-                      <option value="not_started">Not Started</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="on_hold">On Hold</option>
-                      <option value="completed">Completed</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Predecessors (Dependencies)</label>
-                  <div style={{ 
-                    maxHeight: '120px', 
-                    overflowY: 'auto', 
-                    border: '1px solid var(--border-color)', 
-                    borderRadius: 'var(--radius-md)',
-                    padding: '0.5rem'
-                  }}>
-                    {projectTasks.filter(t => t.id !== editingTask?.id).length === 0 ? (
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>No other tasks to link dependencies to.</span>
-                    ) : (
-                      projectTasks
-                        .filter(t => t.id !== editingTask?.id)
-                        .map(t => (
-                          <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0', fontSize: '0.85rem', cursor: 'pointer' }}>
-                            <input 
-                              type="checkbox" 
-                              checked={taskForm.predecessorIds.includes(t.id)}
-                              onChange={(e) => {
-                                const checked = e.target.checked;
-                                setTaskForm(prev => ({
-                                  ...prev,
-                                  predecessorIds: checked 
-                                    ? [...prev.predecessorIds, t.id]
-                                    : prev.predecessorIds.filter(id => id !== t.id)
-                                }));
-                              }}
-                            />
-                            <span>{t.name}</span>
-                          </label>
-                        ))
-                    )}
-                  </div>
-                </div>
-
-                {/* Apply to Subtasks — only shown when editing a parent task */}
+                {/* Apply to Subtasks Warning */}
                 {editingTask && isParent(editingTask.id) && (
                   <div style={{ 
                     padding: '0.75rem 1rem', 
                     backgroundColor: 'var(--primary-light)', 
                     borderRadius: 'var(--radius-md)',
                     border: '1px solid var(--border-color)',
-                    marginTop: '0.5rem'
+                    marginTop: '0.25rem'
                   }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
                       <input 
                         type="checkbox"
                         checked={applyToSubtasks}
                         onChange={(e) => setApplyToSubtasks(e.target.checked)}
+                        style={{ cursor: 'pointer' }}
                       />
-                      Apply assignee & status changes to all sub-tasks
+                      <span>Apply assignee & status changes to all sub-tasks</span>
                     </label>
                     <span style={{ fontSize: '0.725rem', color: 'var(--text-tertiary)', display: 'block', marginTop: '0.25rem', paddingLeft: '1.5rem' }}>
                       When checked, the selected assignee and status will also be applied to every child task under this parent.
@@ -1396,9 +1465,12 @@ export default function ProjectView({
                 )}
 
               </div>
-              <div className="modal-footer">
+              
+              <div className="modal-footer" style={{ padding: '1rem 1.5rem' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setIsTaskModalOpen(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">{editingTask ? 'Save Changes' : 'Create Task'}</button>
+                <button type="submit" className="btn btn-primary">
+                  {editingTask ? 'Save Changes' : 'Create Task'}
+                </button>
               </div>
             </form>
           </div>

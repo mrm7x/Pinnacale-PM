@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     pink_number TEXT,
     billed BOOLEAN DEFAULT false,
     sort_order INTEGER DEFAULT 0,
+    custom_start_date TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

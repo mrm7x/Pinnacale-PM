@@ -37,6 +37,7 @@ export interface Task {
   pinkNumber?: string;
   billed?: boolean;
   sortOrder?: number;
+  customStartDate?: string | null;
   
   // Computed scheduling fields (dynamically calculated)
   plannedStartDate?: string; // YYYY-MM-DD
