@@ -22,6 +22,7 @@ interface ProjectViewProps {
   onDeleteTask: (id: string) => void;
   onBulkUpdateTasks: (ids: string[], updates: Partial<Task>) => void;
   onBulkDeleteTasks: (ids: string[]) => void;
+  onUpdateTaskAndSubtasks: (task: Task, subtaskIds: string[], subtaskUpdates: Partial<Task>) => void;
   onAddToast: (msg: string, type: 'success' | 'error' | 'warning' | 'info') => void;
   projectTemplates: Project[];
   onDuplicateProject: (projectId: string, config: { name: string; clientName: string; startDate: string; copyAssignments: boolean }) => void;
@@ -44,6 +45,7 @@ export default function ProjectView({
   onDeleteTask,
   onBulkUpdateTasks,
   onBulkDeleteTasks,
+  onUpdateTaskAndSubtasks,
   onAddToast,
   projectTemplates,
   onDuplicateProject,
@@ -204,8 +206,6 @@ export default function ProjectView({
     };
 
     if (editingTask) {
-      onUpdateTask({ ...editingTask, ...taskData });
-      // Apply assignee, status changes to subtasks if checkbox is checked
       if (applyToSubtasks) {
         const getSubtaskIds = (parentId: string): string[] => {
           const children = tasks.filter(t => t.parentId === parentId && t.projectId === selectedProjectId);
@@ -217,18 +217,17 @@ export default function ProjectView({
           return ids;
         };
         const subtaskIds = getSubtaskIds(editingTask.id);
-        for (const subtaskId of subtaskIds) {
-          const subtask = tasks.find(t => t.id === subtaskId);
-          if (subtask) {
-            const updates: Partial<typeof subtask> = {};
-            if (taskData.assignedConsultantId) updates.assignedConsultantId = taskData.assignedConsultantId;
-            if (taskData.status) updates.status = taskData.status;
-            onUpdateTask({ ...subtask, ...updates });
-          }
-        }
+        
+        onUpdateTaskAndSubtasks(
+          { ...editingTask, ...taskData },
+          subtaskIds,
+          { assignedConsultantId: taskData.assignedConsultantId, status: taskData.status }
+        );
+      } else {
+        onUpdateTask({ ...editingTask, ...taskData });
+        onAddToast('Task updated successfully!', 'success');
       }
       setApplyToSubtasks(false);
-      onAddToast('Task updated successfully!', 'success');
     } else {
       onCreateTask(taskData);
       onAddToast('Task created successfully!', 'success');

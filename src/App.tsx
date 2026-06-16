@@ -568,6 +568,24 @@ export default function App() {
     addToast(`Successfully updated ${taskIds.length} tasks!`, 'success');
   };
 
+  const handleUpdateTaskAndSubtasks = async (task: Task, subtaskIds: string[], subtaskUpdates: Partial<Task>) => {
+    const activeProj = projects.find(p => p.id === task.projectId);
+    if (!activeProj) return;
+
+    const updatedTasksList = tasks.map(t => {
+      if (t.id === task.id) {
+        return task;
+      }
+      if (subtaskIds.includes(t.id)) {
+        return { ...t, ...subtaskUpdates };
+      }
+      return t;
+    });
+
+    await rescheduleProjectTasks(task.projectId, activeProj.startDate, updatedTasksList);
+    addToast('Task and subtasks updated successfully!', 'success');
+  };
+
   const handleBulkDeleteTasks = async (taskIds: string[]) => {
     if (taskIds.length === 0) return;
 
@@ -796,6 +814,7 @@ export default function App() {
             onDeleteTask={handleDeleteTask}
             onBulkUpdateTasks={handleBulkUpdateTasks}
             onBulkDeleteTasks={handleBulkDeleteTasks}
+            onUpdateTaskAndSubtasks={handleUpdateTaskAndSubtasks}
             onAddToast={addToast}
             projectTemplates={projectTemplates}
             onDuplicateProject={handleDuplicateProject}
