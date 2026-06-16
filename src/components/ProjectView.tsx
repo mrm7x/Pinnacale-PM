@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import type { Project, Task, Consultant, O365Config } from '../types';
 import { 
@@ -20,6 +20,8 @@ interface ProjectViewProps {
   onCreateTask: (task: Omit<Task, 'id'>) => void;
   onUpdateTask: (task: Task) => void;
   onDeleteTask: (id: string) => void;
+  onBulkUpdateTasks: (ids: string[], updates: Partial<Task>) => void;
+  onBulkDeleteTasks: (ids: string[]) => void;
   onAddToast: (msg: string, type: 'success' | 'error' | 'warning' | 'info') => void;
   projectTemplates: Project[];
   onDuplicateProject: (projectId: string, config: { name: string; clientName: string; startDate: string; copyAssignments: boolean }) => void;
@@ -40,6 +42,8 @@ export default function ProjectView({
   onCreateTask,
   onUpdateTask,
   onDeleteTask,
+  onBulkUpdateTasks,
+  onBulkDeleteTasks,
   onAddToast,
   projectTemplates,
   onDuplicateProject,
@@ -70,6 +74,16 @@ export default function ProjectView({
     predecessorIds: [] as string[],
     status: 'not_started' as Task['status']
   });
+
+  // Bulk Edit States
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [bulkDuration, setBulkDuration] = useState<string>('');
+
+  // Clear selections when project changes
+  useEffect(() => {
+    setSelectedTaskIds([]);
+    setBulkDuration('');
+  }, [selectedProjectId]);
 
   // Calendar Event Form State
   const [calendarTask, setCalendarTask] = useState<Task | null>(null);
@@ -284,6 +298,40 @@ export default function ProjectView({
     }
   };
 
+  // Bulk Action Handlers
+  const handleBulkStatusChange = (status: Task['status']) => {
+    if (status) {
+      onBulkUpdateTasks(selectedTaskIds, { status });
+      setSelectedTaskIds([]);
+    }
+  };
+
+  const handleBulkAssigneeChange = (consultantId: string) => {
+    if (consultantId) {
+      const assignedConsultantId = consultantId === 'unassigned' ? null : consultantId;
+      onBulkUpdateTasks(selectedTaskIds, { assignedConsultantId });
+      setSelectedTaskIds([]);
+    }
+  };
+
+  const handleBulkDurationApply = () => {
+    const days = parseFloat(bulkDuration);
+    if (!isNaN(days) && days >= 0) {
+      onBulkUpdateTasks(selectedTaskIds, { durationDays: days });
+      setSelectedTaskIds([]);
+      setBulkDuration('');
+    } else {
+      onAddToast('Please enter a valid duration number (>= 0).', 'error');
+    }
+  };
+
+  const handleBulkDeleteApply = () => {
+    if (confirm(`Are you sure you want to delete the ${selectedTaskIds.length} selected tasks? Subtasks of selected tasks will also be deleted.`)) {
+      onBulkDeleteTasks(selectedTaskIds);
+      setSelectedTaskIds([]);
+    }
+  };
+
   // Recursively render hierarchical tasks
   const renderTaskTree = (parentId: string | null, depth = 0) => {
     const levelTasks = projectTasks.filter(t => t.parentId === parentId);
@@ -312,6 +360,20 @@ export default function ProjectView({
           >
             {/* Col 1: Task Name */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingLeft: `${depth * 22}px`, minWidth: 0 }}>
+              {editMode && (
+                <input
+                  type="checkbox"
+                  checked={selectedTaskIds.includes(task.id)}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setSelectedTaskIds(prev => 
+                      checked ? [...prev, task.id] : prev.filter(id => id !== task.id)
+                    );
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ marginRight: '0.25rem', cursor: 'pointer', width: '15px', height: '15px' }}
+                />
+              )}
               {isTaskParent ? (
                 <span className="task-node-toggle" onClick={(e) => { e.stopPropagation(); toggleExpand(task.id); }} style={{ padding: '2px' }}>
                   {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -589,7 +651,10 @@ export default function ProjectView({
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <button 
                 className={`btn ${editMode ? 'btn-accent' : 'btn-secondary'}`}
-                onClick={() => setEditMode(!editMode)}
+                onClick={() => {
+                  setEditMode(!editMode);
+                  setSelectedTaskIds([]);
+                }}
                 title={editMode ? 'Exit edit mode' : 'Enter edit mode — click any task to edit'}
                 style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}
               >
@@ -627,7 +692,20 @@ export default function ProjectView({
                     letterSpacing: '0.08em'
                   }}
                 >
-                  <span>Task Name</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {editMode && (
+                      <input
+                        type="checkbox"
+                        checked={projectTasks.length > 0 && selectedTaskIds.length === projectTasks.length}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setSelectedTaskIds(checked ? projectTasks.map(t => t.id) : []);
+                        }}
+                        style={{ cursor: 'pointer', width: '15px', height: '15px' }}
+                      />
+                    )}
+                    Task Name
+                  </span>
                   <span style={{ textAlign: 'right' }}>Duration</span>
                   <span>Dates (AM/PM)</span>
                   <span>Assignee</span>
@@ -1195,6 +1273,125 @@ export default function ProjectView({
                 <button type="submit" className="btn btn-primary">Save Template</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* FLOATING BULK ACTIONS TOOLBAR */}
+      {editMode && selectedTaskIds.length > 0 && (
+        <div 
+          style={{
+            position: 'fixed',
+            bottom: '2rem',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: 'var(--bg-secondary)',
+            border: '1px solid var(--border-color)',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '0.75rem 1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1rem',
+            zIndex: 1000,
+            animation: 'slideUp 0.2s ease-out',
+            flexWrap: 'wrap'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderRight: '1px solid var(--border-color)', paddingRight: '1rem' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+              {selectedTaskIds.length} tasks selected
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            {/* Status Select */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>Status:</span>
+              <select 
+                className="form-select" 
+                style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem', height: 'auto', width: 'auto', minWidth: '120px' }}
+                onChange={(e) => {
+                  handleBulkStatusChange(e.target.value as Task['status']);
+                  e.target.value = '';
+                }}
+                defaultValue=""
+              >
+                <option value="" disabled>Change Status...</option>
+                <option value="not_started">Not Started</option>
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+                <option value="blocked">Blocked</option>
+              </select>
+            </div>
+
+            {/* Assignee Select */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>Assignee:</span>
+              <select 
+                className="form-select" 
+                style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem', height: 'auto', width: 'auto', minWidth: '140px' }}
+                onChange={(e) => {
+                  handleBulkAssigneeChange(e.target.value);
+                  e.target.value = '';
+                }}
+                defaultValue=""
+              >
+                <option value="" disabled>Change Assignee...</option>
+                <option value="unassigned">Unassigned</option>
+                {consultants.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Set Duration */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>Duration:</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <input 
+                  type="number" 
+                  step="0.5" 
+                  min="0"
+                  className="form-input" 
+                  placeholder="days"
+                  value={bulkDuration}
+                  onChange={(e) => setBulkDuration(e.target.value)}
+                  style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem', width: '70px', height: 'auto' }}
+                />
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={handleBulkDurationApply}
+                  style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}
+                >
+                  Set
+                </button>
+              </div>
+            </div>
+
+            <div style={{ width: '1px', height: '20px', backgroundColor: 'var(--border-color)' }} />
+
+            {/* Delete button */}
+            <button 
+              type="button" 
+              className="btn btn-danger" 
+              onClick={handleBulkDeleteApply}
+              style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+            >
+              <Trash2 size={13} />
+              <span>Delete</span>
+            </button>
+
+            {/* Deselect All button */}
+            <button 
+              type="button" 
+              className="btn btn-secondary" 
+              onClick={() => setSelectedTaskIds([])}
+              style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
+            >
+              Deselect All
+            </button>
           </div>
         </div>
       )}

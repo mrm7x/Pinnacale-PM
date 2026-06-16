@@ -548,6 +548,67 @@ export default function App() {
     }
   };
 
+  const handleBulkUpdateTasks = async (taskIds: string[], updates: Partial<Task>) => {
+    if (taskIds.length === 0) return;
+    
+    const firstTask = tasks.find(t => t.id === taskIds[0]);
+    if (!firstTask) return;
+    
+    const activeProj = projects.find(p => p.id === firstTask.projectId);
+    if (!activeProj) return;
+
+    const updatedTasksList = tasks.map(t => {
+      if (taskIds.includes(t.id)) {
+        return { ...t, ...updates };
+      }
+      return t;
+    });
+
+    await rescheduleProjectTasks(firstTask.projectId, activeProj.startDate, updatedTasksList);
+    addToast(`Successfully updated ${taskIds.length} tasks!`, 'success');
+  };
+
+  const handleBulkDeleteTasks = async (taskIds: string[]) => {
+    if (taskIds.length === 0) return;
+
+    const firstTask = tasks.find(t => t.id === taskIds[0]);
+    if (!firstTask) return;
+
+    const activeProj = projects.find(p => p.id === firstTask.projectId);
+    if (!activeProj) return;
+
+    const getDescendants = (parentIds: string[]): string[] => {
+      const children = tasks.filter(t => t.parentId && parentIds.includes(t.parentId));
+      if (children.length === 0) return [];
+      const childIds = children.map(c => c.id);
+      return [...childIds, ...getDescendants(childIds)];
+    };
+
+    const descendants = getDescendants(taskIds);
+    const allIdsToDelete = Array.from(new Set([...taskIds, ...descendants]));
+    const filteredTasksList = tasks.filter(t => !allIdsToDelete.includes(t.id));
+
+    setTasks(filteredTasksList);
+
+    if (isSupabaseConfigured()) {
+      try {
+        await api.tasks.deleteMultiple(allIdsToDelete);
+        const projTasks = filteredTasksList.filter(t => t.projectId === firstTask.projectId);
+        const rescheduled = calculateTaskSchedules(activeProj.startDate, projTasks);
+        await api.tasks.saveAll(rescheduled);
+        
+        const otherTasks = filteredTasksList.filter(t => t.projectId !== firstTask.projectId);
+        setTasks([...otherTasks, ...rescheduled]);
+      } catch (err) {
+        console.error(err);
+        addToast('Failed to delete tasks from database.', 'error');
+      }
+    } else {
+      await rescheduleProjectTasks(firstTask.projectId, activeProj.startDate, filteredTasksList);
+    }
+    addToast(`Successfully deleted ${taskIds.length} tasks.`, 'warning');
+  };
+
   // Consultant CRUD Action Handlers
   const handleAddConsultant = async (cData: Omit<Consultant, 'id'>) => {
     // Hash password if provided as plaintext via the form
@@ -733,6 +794,8 @@ export default function App() {
             onCreateTask={handleCreateTask}
             onUpdateTask={handleUpdateTask}
             onDeleteTask={handleDeleteTask}
+            onBulkUpdateTasks={handleBulkUpdateTasks}
+            onBulkDeleteTasks={handleBulkDeleteTasks}
             onAddToast={addToast}
             projectTemplates={projectTemplates}
             onDuplicateProject={handleDuplicateProject}
