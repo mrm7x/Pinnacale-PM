@@ -136,6 +136,9 @@ export default function ProjectView({
   const [editMode, setEditMode] = useState(false);
   const [applyToSubtasks, setApplyToSubtasks] = useState(false);
 
+  const [hideCompleted, setHideCompleted] = useState(false);
+  const [billedFilter, setBilledFilter] = useState<'all' | 'only' | 'hide'>('all');
+
   // Active Project Data
   const activeProject = projects.find(p => p.id === selectedProjectId) || null;
   const projectTasks = tasks
@@ -358,6 +361,11 @@ export default function ProjectView({
     }
   };
 
+  const handleBulkBillingChange = (billed: boolean) => {
+    onBulkUpdateTasks(selectedTaskIds, { billed });
+    setSelectedTaskIds([]);
+  };
+
   const handleBulkDurationApply = () => {
     const days = parseFloat(bulkDuration);
     if (!isNaN(days) && days >= 0) {
@@ -400,15 +408,38 @@ export default function ProjectView({
     onReorderTasks(updates);
   };
 
+  const matchesFilters = (task: Task): boolean => {
+    let selfMatches = true;
+    if (hideCompleted && task.status === 'completed') {
+      selfMatches = false;
+    }
+    if (billedFilter === 'hide') {
+      if (task.billed) selfMatches = false;
+    } else if (billedFilter === 'only') {
+      if (!task.billed) selfMatches = false;
+    }
+
+    if (selfMatches) return true;
+
+    // Even if this task doesn't match, we still render it if any of its children match
+    const children = tasks.filter(t => t.parentId === task.id && t.projectId === selectedProjectId);
+    return children.some(c => matchesFilters(c));
+  };
+
   // Recursively render hierarchical tasks with dynamic WBS numbering
   const renderTaskTree = (parentId: string | null, depth = 0, parentNumber = '') => {
     const levelTasks = projectTasks.filter(t => t.parentId === parentId);
     
     return levelTasks.map((task, index) => {
+      const taskNumber = parentNumber ? `${parentNumber}.${index + 1}` : `${index + 1}`;
+
+      if (!matchesFilters(task)) {
+        return null;
+      }
+
       const isTaskParent = isParent(task.id);
       const isExpanded = expandedTasks[task.id] !== false; // expanded by default
       const assignedConsultant = consultants.find(c => c.id === task.assignedConsultantId);
-      const taskNumber = parentNumber ? `${parentNumber}.${index + 1}` : `${index + 1}`;
 
       const siblings = projectTasks.filter(t => t.parentId === task.parentId);
       const siblingIndex = siblings.findIndex(s => s.id === task.id);
@@ -802,6 +833,51 @@ export default function ProjectView({
                 </button>
               </div>
             )}
+          </div>
+
+          {/* Filters Row */}
+          <div style={{ 
+            display: 'flex', 
+            gap: '1.25rem', 
+            alignItems: 'center', 
+            backgroundColor: 'var(--bg-secondary)', 
+            padding: '0.75rem 1.25rem', 
+            borderRadius: 'var(--radius-md)', 
+            border: '1px solid var(--border-color)',
+            flexWrap: 'wrap',
+            marginBottom: '1rem'
+          }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Filters:
+            </span>
+
+            {/* Hide Completed */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500 }}>
+              <input 
+                type="checkbox" 
+                checked={hideCompleted}
+                onChange={(e) => setHideCompleted(e.target.checked)}
+                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+              />
+              <span>Hide Completed</span>
+            </label>
+
+            <span style={{ color: 'var(--border-color)', height: '15px', borderLeft: '1px solid currentColor' }} />
+
+            {/* Billed Filter */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Billed Tasks:</span>
+              <select 
+                className="form-select" 
+                style={{ padding: '0.2rem 1.5rem 0.2rem 0.5rem', fontSize: '0.8rem', width: 'auto', minWidth: '120px' }}
+                value={billedFilter}
+                onChange={(e) => setBilledFilter(e.target.value as 'all' | 'only' | 'hide')}
+              >
+                <option value="all">Show All</option>
+                <option value="only">Show Only Billed</option>
+                <option value="hide">Hide Billed</option>
+              </select>
+            </div>
           </div>
 
           {/* Task Tree Container */}
@@ -1504,6 +1580,24 @@ export default function ProjectView({
                 {consultants.map(c => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
+              </select>
+            </div>
+
+            {/* Billed Select */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>Billing:</span>
+              <select 
+                className="form-select" 
+                style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem', height: 'auto', width: 'auto', minWidth: '130px' }}
+                onChange={(e) => {
+                  handleBulkBillingChange(e.target.value === 'billed');
+                  e.target.value = '';
+                }}
+                defaultValue=""
+              >
+                <option value="" disabled>Change Billing...</option>
+                <option value="billed">Mark as Billed</option>
+                <option value="unbilled">Mark as Unbilled</option>
               </select>
             </div>
 
