@@ -135,9 +135,9 @@ export default function App() {
 
           await Promise.all([
             api.projects.saveAll(initialProjects),
-            api.consultants.saveAll(initialConsultants),
-            api.tasks.saveAll(initialScheduledTasks)
+            api.consultants.saveAll(initialConsultants)
           ]);
+          await api.tasks.saveAll(initialScheduledTasks);
 
           if (!isSupabaseConfigured()) {
             localStorage.setItem('pinnacle_projects', JSON.stringify(initialProjects));
@@ -641,9 +641,9 @@ export default function App() {
         
         await Promise.all([
           api.projects.saveAll(initialProjects),
-          api.consultants.saveAll(initialConsultants),
-          api.tasks.saveAll(initialScheduledTasks)
+          api.consultants.saveAll(initialConsultants)
         ]);
+        await api.tasks.saveAll(initialScheduledTasks);
 
         setProjects(initialProjects);
         setConsultants(initialConsultants);
