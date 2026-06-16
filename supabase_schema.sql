@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     planned_end_date TEXT,
     start_half_day INTEGER NOT NULL DEFAULT 0,
     end_half_day INTEGER NOT NULL DEFAULT 0,
+    pink_number TEXT,
+    billed BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

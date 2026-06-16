@@ -34,6 +34,8 @@ export interface Task {
   status: 'not_started' | 'in_progress' | 'completed' | 'on_hold';
   o365TaskId?: string | null;
   o365CalendarEventId?: string | null;
+  pinkNumber?: string;
+  billed?: boolean;
   
   // Computed scheduling fields (dynamically calculated)
   plannedStartDate?: string; // YYYY-MM-DD

@@ -103,7 +103,9 @@ export default function ProjectView({
     assignedConsultantId: '',
     parentId: '',
     predecessorIds: [] as string[],
-    status: 'not_started' as Task['status']
+    status: 'not_started' as Task['status'],
+    pinkNumber: '',
+    billed: false
   });
 
   // Bulk Edit States
@@ -198,7 +200,9 @@ export default function ProjectView({
       assignedConsultantId: consultants[0]?.id || '',
       parentId: '',
       predecessorIds: [],
-      status: 'not_started'
+      status: 'not_started',
+      pinkNumber: '',
+      billed: false
     });
     setIsTaskModalOpen(true);
   };
@@ -213,7 +217,9 @@ export default function ProjectView({
       assignedConsultantId: task.assignedConsultantId || '',
       parentId: task.parentId || '',
       predecessorIds: task.predecessorIds || [],
-      status: task.status
+      status: task.status,
+      pinkNumber: task.pinkNumber || '',
+      billed: !!task.billed
     });
     setIsTaskModalOpen(true);
   };
@@ -231,7 +237,9 @@ export default function ProjectView({
       assignedConsultantId: taskForm.assignedConsultantId || null,
       parentId: taskForm.parentId || null,
       predecessorIds: taskForm.predecessorIds,
-      status: taskForm.status
+      status: taskForm.status,
+      pinkNumber: taskForm.pinkNumber,
+      billed: taskForm.billed
     };
 
     if (editingTask) {
@@ -360,14 +368,15 @@ export default function ProjectView({
     }
   };
 
-  // Recursively render hierarchical tasks
-  const renderTaskTree = (parentId: string | null, depth = 0) => {
+  // Recursively render hierarchical tasks with dynamic WBS numbering
+  const renderTaskTree = (parentId: string | null, depth = 0, parentNumber = '') => {
     const levelTasks = projectTasks.filter(t => t.parentId === parentId);
     
-    return levelTasks.map(task => {
+    return levelTasks.map((task, index) => {
       const isTaskParent = isParent(task.id);
       const isExpanded = expandedTasks[task.id] !== false; // expanded by default
       const assignedConsultant = consultants.find(c => c.id === task.assignedConsultantId);
+      const taskNumber = parentNumber ? `${parentNumber}.${index + 1}` : `${index + 1}`;
 
       return (
         <div key={task.id} style={{ display: 'flex', flexDirection: 'column' }}>
@@ -423,11 +432,26 @@ export default function ProjectView({
                   }}
                   title={task.name}
                 >
+                  <span style={{ color: 'var(--text-tertiary)', marginRight: '0.35rem', fontWeight: 600 }}>{taskNumber}</span>
                   {task.name}
                 </span>
-                {task.description && !isTaskParent && (
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3 }}>{task.description.split('\n')[0]}</span>
-                )}
+                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.15rem' }}>
+                  {task.pinkNumber && (
+                    <span style={{ fontSize: '0.68rem', backgroundColor: '#fdf2f8', color: '#db2777', border: '1px solid #fbcfe8', padding: '0.05rem 0.35rem', borderRadius: '4px', fontWeight: 600 }} title="Pink Number">
+                      Pink #: {task.pinkNumber}
+                    </span>
+                  )}
+                  {task.billed && (
+                    <span style={{ fontSize: '0.68rem', backgroundColor: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', padding: '0.05rem 0.35rem', borderRadius: '4px', fontWeight: 600 }} title="Billed Status">
+                      Billed
+                    </span>
+                  )}
+                  {task.description && !isTaskParent && (
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3 }} title={task.description}>
+                      {task.description.split('\n')[0]}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -528,7 +552,7 @@ export default function ProjectView({
           {/* Render children recursively */}
           {isTaskParent && isExpanded && (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {renderTaskTree(task.id, depth + 1)}
+              {renderTaskTree(task.id, depth + 1, taskNumber)}
             </div>
           )}
         </div>
@@ -748,7 +772,7 @@ export default function ProjectView({
                   <span>Status</span>
                   <span style={{ textAlign: 'right' }}>Actions</span>
                 </div>
-                {renderTaskTree(null)}
+                {renderTaskTree(null, 0, '')}
               </div>
             )}
           </div>
@@ -982,6 +1006,30 @@ export default function ProjectView({
                     value={taskForm.description}
                     onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
                   />
+                </div>
+
+                <div className="grid-cols-12" style={{ gap: '1rem', marginBottom: '1.25rem' }}>
+                  <div className="form-group col-span-8" style={{ margin: 0 }}>
+                    <label className="form-label">Pink Number</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="e.g. PN-12345" 
+                      value={taskForm.pinkNumber}
+                      onChange={(e) => setTaskForm({ ...taskForm, pinkNumber: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group col-span-4" style={{ display: 'flex', alignItems: 'center', height: '100%', paddingTop: '1.75rem', margin: 0 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 500 }}>
+                      <input 
+                        type="checkbox" 
+                        checked={taskForm.billed}
+                        onChange={(e) => setTaskForm({ ...taskForm, billed: e.target.checked })}
+                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                      />
+                      <span>Billed</span>
+                    </label>
+                  </div>
                 </div>
                 
                 <div className="grid-cols-12">

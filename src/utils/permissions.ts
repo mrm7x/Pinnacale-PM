@@ -1,7 +1,7 @@
 export type Tier = 'superuser' | 'admin' | 'normal';
 
 export const canCreateProject = (role: string) => role === 'Manager' || role === 'Project Manager';
-export const canEditProject = (role: string) => role === 'Manager' || role === 'Project Manager';
+export const canEditProject = (role: string) => role !== 'Read only';
 export const canDeleteProject = (role: string) => role === 'Manager' || role === 'Project Manager';
 export const canCreateTask = (role: string) => role !== 'Read only';
 export const canEditTask = (role: string) => role !== 'Read only';

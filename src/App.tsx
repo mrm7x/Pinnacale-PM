@@ -80,7 +80,14 @@ const defaultO365Config: O365Config = {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'projects' | 'gantt' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'projects' | 'gantt' | 'settings'>(() => {
+    const saved = localStorage.getItem('pinnacle_active_tab');
+    return (saved as 'dashboard' | 'projects' | 'gantt' | 'settings') || 'dashboard';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('pinnacle_active_tab', activeTab);
+  }, [activeTab]);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [activeUserId, setActiveUserId] = useState<string>('admin');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -105,7 +112,17 @@ export default function App() {
   const [o365Config, setO365Config] = useState<O365Config>(defaultO365Config);
   const [microsoftAccount, setMicrosoftAccount] = useState<AccountInfo | null>(null);
 
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(() => {
+    return localStorage.getItem('pinnacle_selected_project_id');
+  });
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      localStorage.setItem('pinnacle_selected_project_id', selectedProjectId);
+    } else {
+      localStorage.removeItem('pinnacle_selected_project_id');
+    }
+  }, [selectedProjectId]);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   // Migrate old sagepulse_ keys to pinnacle_ prefix (one-time)
@@ -272,13 +289,10 @@ export default function App() {
   // Derive active user's tier for RBAC
   const activeConsultant = consultants.find(c => c.id === activeUserId) || null;
   const activeUserTier = activeConsultant?.tier || 'normal';
-  const activeUserRole = activeConsultant?.role || 'Read only';
 
-  // Filtered projects list based on access privileges
+  // Filtered projects list based on access privileges (all projects visible to all users)
   const activeProjects = projects.filter(p => !p.isTemplate);
-  const filteredProjects = (activeUserRole !== 'Read only')
-    ? activeProjects
-    : activeProjects.filter(p => p.consultantIds.includes(activeUserId));
+  const filteredProjects = activeProjects;
   const projectTemplates = projects.filter(p => p.isTemplate);
 
   // Safety: reset selected project if user switches and the project is no longer visible
