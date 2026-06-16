@@ -220,9 +220,7 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
         zIndex: 1
       }}>
         {[
-          { value: '100%', label: 'Cloud-based' },
-          { value: 'Real-time', label: 'Scheduling' },
-          { value: 'RBAC', label: 'Access Control' },
+
         ].map(stat => (
           <div key={stat.label}>
             <div style={{ color: 'white', fontWeight: 700, fontSize: '1.05rem', fontFamily: 'var(--font-heading)' }}>{stat.value}</div>
@@ -458,8 +456,8 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
                 }}>
                   <KeyRound size={13} /> Password
                 </label>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => {
                     setIsForgotPasswordMode(true);
                     setError(null);
