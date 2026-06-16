@@ -107,7 +107,7 @@ export default function Dashboard({
   // MS To-Do Quick Sync Action for Agenda items
   const handleQuickSync = async (task: Task) => {
     if (!o365Config.isEnabled) {
-      onAddToast('O365 Integration is offline. Simulating To-Do Sync.', 'info');
+      onAddToast('O365 Integration is disabled. Simulating To-Do Sync.', 'info');
     }
     setSyncingTaskId(task.id);
     const result = await syncTaskToO365(task, o365Config, !o365Config.isEnabled);

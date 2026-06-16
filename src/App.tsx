@@ -12,12 +12,13 @@ import GanttChart from './components/GanttChart';
 import Settings from './components/Settings';
 import Login from './components/Login';
 import Logo from './components/Logo';
+import CroppedLogo from './components/CroppedLogo';
 import { 
   FolderKanban, LayoutDashboard, CalendarDays, Settings as SettingsIcon, 
-  Sun, Moon, ShieldCheck, Info, X, LogOut 
+  Sun, Moon, ShieldCheck, X, LogOut, Menu, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { api } from './utils/api';
-import { isSupabaseConfigured, getSupabaseClient } from './utils/supabase';
+import { isSupabaseConfigured, getSupabaseClient, createTemporarySupabaseClient } from './utils/supabase';
 
 // Toast structure
 interface Toast {
@@ -84,6 +85,15 @@ export default function App() {
   const [activeUserId, setActiveUserId] = useState<string>('admin');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem('pinnacle_sidebar_collapsed') === 'true';
+  });
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    localStorage.setItem('pinnacle_sidebar_collapsed', String(isSidebarCollapsed));
+  }, [isSidebarCollapsed]);
+
   // Password reset modal state
   const [showPasswordReset, setShowPasswordReset] = useState<boolean>(false);
   const [resetUserId, setResetUserId] = useState<string>('');
@@ -219,6 +229,26 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('pinnacle_activeuser', activeUserId);
   }, [activeUserId]);
+
+  // Listen to Supabase Auth State Changes for password recovery (Reset Password Link)
+  useEffect(() => {
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+          if (event === 'PASSWORD_RECOVERY') {
+            if (session?.user) {
+              setResetUserId(session.user.id);
+              setShowPasswordReset(true);
+            }
+          }
+        });
+        return () => {
+          subscription.unsubscribe();
+        };
+      }
+    }
+  }, []);
 
   // MSAL Active Login Check
   useEffect(() => {
@@ -628,19 +658,59 @@ export default function App() {
   };
 
   // Consultant CRUD Action Handlers
-  const handleAddConsultant = async (cData: Omit<Consultant, 'id'>) => {
-    // Hash password if provided as plaintext via the form
+  const handleAddConsultant = async (cData: Omit<Consultant, 'id'> & { password?: string }): Promise<boolean> => {
+    let id = `c-${Math.random().toString(36).substring(2, 9)}`;
+    const plaintextPassword = cData.password || 'password';
+
+    if (isSupabaseConfigured()) {
+      try {
+        const tempClient = createTemporarySupabaseClient();
+        if (tempClient) {
+          const { data: authData, error: signUpError } = await tempClient.auth.signUp({
+            email: cData.email,
+            password: plaintextPassword,
+          });
+          
+          if (signUpError) {
+            console.error('Supabase Auth signUp failed:', signUpError);
+            addToast(`Supabase Auth creation failed: ${signUpError.message}`, 'error');
+            return false;
+          }
+          
+          if (authData.user) {
+            id = authData.user.id;
+          }
+        }
+      } catch (err: any) {
+        console.error('Supabase Auth connection error:', err);
+        addToast(`Supabase Auth error: ${err.message || err}`, 'error');
+        return false;
+      }
+    }
+
     let passwordHash = cData.passwordHash;
     if (!passwordHash) {
-      passwordHash = await hashPassword('password'); // default password
+      passwordHash = await hashPassword(plaintextPassword);
     }
+
     const newConsultant: Consultant = {
-      ...cData,
-      id: `c-${Math.random().toString(36).substring(2, 9)}`,
+      name: cData.name,
+      email: cData.email,
+      role: cData.role,
+      avatarColor: cData.avatarColor,
+      tier: cData.tier,
+      id,
       passwordHash,
       mustResetPassword: true
     };
-    await saveConsultantsState([...consultants, newConsultant]);
+
+    try {
+      await saveConsultantsState([...consultants, newConsultant]);
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
   };
 
   const handleDeleteConsultant = async (id: string) => {
@@ -662,6 +732,19 @@ export default function App() {
       localStorage.setItem('pinnacle_consultants', JSON.stringify(nextConsultants));
       localStorage.setItem('pinnacle_tasks', JSON.stringify(updatedTasks));
     }
+  };
+
+  const handleLocalForgotPassword = async (email: string): Promise<boolean> => {
+    const emailClean = email.trim().toLowerCase();
+    const consultant = consultants.find(c => c.email.trim().toLowerCase() === emailClean);
+    if (!consultant) return false;
+
+    const hash = await hashPassword('password1234!');
+    const updatedConsultants = consultants.map(c =>
+      c.email.trim().toLowerCase() === emailClean ? { ...c, passwordHash: hash, mustResetPassword: true } : c
+    );
+    await saveConsultantsState(updatedConsultants);
+    return true;
   };
 
   // Configuration Setup Handlers
@@ -864,6 +947,7 @@ export default function App() {
             consultants={consultants} 
             onLoginSuccess={handleLoginSuccess} 
             onAddToast={addToast} 
+            onLocalForgotPassword={handleLocalForgotPassword}
           />
           {/* Dynamic Toast Container */}
           <div className="toast-container">
@@ -885,7 +969,7 @@ export default function App() {
     }
 
     return (
-      <div className="app-container">
+      <div className={`app-container ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         {/* Password Reset Modal */}
         {showPasswordReset && (
           <PasswordReset
@@ -899,173 +983,260 @@ export default function App() {
                   c.id === resetUserId ? { ...c, passwordHash: hash, mustResetPassword: false } : c
                 );
                 saveConsultantsState(updatedConsultants);
-                addToast('Password reset successfully.', 'success');
+                
+                // If Supabase is active, update Supabase Auth password for the current user
+                if (isSupabaseConfigured()) {
+                  const supabase = getSupabaseClient()!;
+                  supabase.auth.updateUser({ password: newPass }).then(({ error }) => {
+                    if (error) {
+                      console.error('Failed to reset Supabase password:', error);
+                      addToast(`Failed to update Supabase Auth password: ${error.message}`, 'error');
+                    } else {
+                      addToast('Password reset successfully and synced to Supabase Auth.', 'success');
+                    }
+                  });
+                } else {
+                  addToast('Password reset successfully.', 'success');
+                }
               });
               setShowPasswordReset(false);
             }}
             onCancel={() => setShowPasswordReset(false)}
           />
         )}
-      {/* Sidebar navigation */}
-      <aside className="sidebar">
-        <div>
-          <div className="brand-section" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2rem', padding: '0.5rem 0' }}>
-            <Logo style={{ height: '28px', width: 'auto' }} />
-          </div>
 
-          {/* User Profile Card */}
-          <div style={{ padding: '0.75rem', marginBottom: '1.75rem', display: 'flex', alignItems: 'center', gap: '0.85rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: 'var(--radius-lg)' }}>
-            {activeConsultant?.tier === 'admin' ? (
-              <div 
-                style={{ 
-                  width: '36px', 
-                  height: '36px', 
-                  borderRadius: 'var(--radius-md)', 
-                  backgroundColor: 'var(--primary)', 
-                  color: 'white', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  fontWeight: 600,
-                  fontSize: '0.8rem',
-                  flexShrink: 0
-                }}
-              >
-                AD
-              </div>
-            ) : (
-              <div 
-                style={{ 
-                  width: '36px', 
-                  height: '36px', 
-                  borderRadius: 'var(--radius-md)', 
-                  backgroundColor: consultants.find(c => c.id === activeUserId)?.avatarColor || 'var(--primary)', 
-                  color: 'white', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  fontWeight: 600,
-                  fontSize: '0.8rem',
-                  flexShrink: 0
-                }}
-              >
-                {consultants.find(c => c.id === activeUserId)?.name.split(' ').map(n => n[0]).join('') || 'U'}
-              </div>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {activeConsultant?.name || 'User'}
-              </span>
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', fontWeight: 500 }}>
-                {activeConsultant?.role || 'Consultant'}
-              </span>
-            </div>
-          </div>
-
-          <nav>
-            <ul className="nav-list">
-              <li 
-                className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
-                onClick={() => setActiveTab('dashboard')}
-              >
-                <LayoutDashboard size={18} />
-                <span>Dashboard</span>
-              </li>
-              <li 
-                className={`nav-item ${activeTab === 'projects' ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab('projects');
-                }}
-              >
-                <FolderKanban size={18} />
-                <span>Projects</span>
-              </li>
-              <li 
-                className={`nav-item ${activeTab === 'gantt' ? 'active' : ''}`}
-                onClick={() => setActiveTab('gantt')}
-              >
-                <CalendarDays size={18} />
-                <span>Gantt Chart</span>
-              </li>
-              <li 
-                className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
-                onClick={() => setActiveTab('settings')}
-              >
-                <SettingsIcon size={18} />
-                <span>Settings</span>
-              </li>
-            </ul>
-          </nav>
-        </div>
-
-        {/* Microsoft authentication badge indicator in sidebar bottom */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
-          {microsoftAccount ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--success)', fontSize: '0.75rem', fontWeight: 600, padding: '0 0.5rem' }}>
-              <ShieldCheck size={14} />
-              <span>O365 Synced</span>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-tertiary)', fontSize: '0.75rem', padding: '0 0.5rem' }}>
-              <Info size={14} />
-              <span>Offline Mode</span>
-            </div>
-          )}
+        {/* Mobile Header Bar */}
+        <header className="mobile-header">
           <button 
-            className="btn btn-secondary btn-icon"
-            style={{ width: '100%', padding: '0.45rem', borderRadius: 'var(--radius-md)' }}
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className="hamburger-btn"
+            onClick={() => setIsMobileMenuOpen(true)}
+            title="Open Menu"
           >
-            {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-            <span style={{ fontSize: '0.78rem', marginLeft: '0.25rem' }}>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+            <Menu size={20} />
           </button>
-          <button 
-            className="btn btn-secondary btn-icon"
-            style={{ width: '100%', padding: '0.45rem', color: 'var(--danger)', borderColor: 'var(--border-color)', borderRadius: 'var(--radius-md)' }}
-            onClick={handleLogout}
-          >
-            <LogOut size={14} />
-            <span style={{ fontSize: '0.78rem', marginLeft: '0.25rem' }}>Sign Out</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Panel Viewport */}
-      <main className="main-content">
-        <header className="header">
-          <div className="page-title-section">
-            <h1 style={{ fontSize: '1.3rem', textTransform: 'capitalize', letterSpacing: '-0.02em' }}>
-              {activeTab}
-            </h1>
-            <span className="page-subtitle">
-              {activeTab === 'dashboard' && 'Aggregate metrics and project statuses'}
-              {activeTab === 'projects' && 'Build and organize hierarchical implementation tasks'}
-              {activeTab === 'gantt' && 'Chronological business day scheduler and dependency chart'}
-              {activeTab === 'settings' && 'Manage integration keys and consultant team details'}
+          <div className="mobile-brand">
+            <Logo style={{ height: '22px', width: 'auto' }} />
+          </div>
+          <div className="mobile-user-avatar">
+            <span 
+              style={{ 
+                width: '28px', height: '28px', borderRadius: '50%', 
+                backgroundColor: activeConsultant?.avatarColor || 'var(--primary)',
+                color: 'white', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', fontSize: '0.65rem', fontWeight: 'bold'
+              }}
+            >
+              {activeConsultant?.name.split(' ').map(n => n[0]).join('') || 'U'}
             </span>
           </div>
         </header>
 
-        <div className="content-pane">
-          {renderContent()}
-        </div>
-      </main>
+        {/* Mobile Sidebar Backdrop Overlay */}
+        {isMobileMenuOpen && (
+          <div className="sidebar-overlay" onClick={() => setIsMobileMenuOpen(false)} />
+        )}
 
-      {/* Dynamic Toast Container */}
-      <div className="toast-container">
-        {toasts.map(toast => (
-          <div key={toast.id} className={`toast toast-${toast.type}`}>
-            <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>
-              {toast.message}
+        {/* Sidebar navigation */}
+        <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''} ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+            <div className="brand-section" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2rem', padding: '0 0.5rem' }}>
+              {!isSidebarCollapsed ? (
+                <Logo style={{ height: '26px', width: 'auto' }} />
+              ) : (
+                <CroppedLogo style={{ height: '26px', width: 'auto' }} />
+              )}
             </div>
-            <X 
-              size={14} 
-              className="toast-close" 
-              onClick={() => removeToast(toast.id)} 
-            />
+
+            {/* User Profile Card */}
+            <div className="user-profile-card" style={{ padding: '0.75rem', marginBottom: '1.75rem', display: 'flex', alignItems: 'center', gap: '0.85rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: 'var(--radius-lg)' }}>
+              {activeConsultant?.tier === 'admin' ? (
+                <div 
+                  style={{ 
+                    width: '36px', 
+                    height: '36px', 
+                    borderRadius: 'var(--radius-md)', 
+                    backgroundColor: 'var(--primary)', 
+                    color: 'white', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    fontWeight: 600,
+                    fontSize: '0.8rem',
+                    flexShrink: 0
+                  }}
+                >
+                  AD
+                </div>
+              ) : (
+                <div 
+                  style={{ 
+                    width: '36px', 
+                    height: '36px', 
+                    borderRadius: 'var(--radius-md)', 
+                    backgroundColor: consultants.find(c => c.id === activeUserId)?.avatarColor || 'var(--primary)', 
+                    color: 'white', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    fontWeight: 600,
+                    fontSize: '0.8rem',
+                    flexShrink: 0
+                  }}
+                >
+                  {consultants.find(c => c.id === activeUserId)?.name.split(' ').map(n => n[0]).join('') || 'U'}
+                </div>
+              )}
+              {!isSidebarCollapsed && (
+                <div className="user-profile-details" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {activeConsultant?.name || 'User'}
+                  </span>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', fontWeight: 500 }}>
+                    {activeConsultant?.role || 'Consultant'}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <nav style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+              <ul className="nav-list">
+                <li 
+                  className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('dashboard');
+                    setIsMobileMenuOpen(false);
+                  }}
+                  title="Dashboard"
+                >
+                  <LayoutDashboard size={18} />
+                  <span>Dashboard</span>
+                </li>
+                <li 
+                  className={`nav-item ${activeTab === 'projects' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('projects');
+                    setIsMobileMenuOpen(false);
+                  }}
+                  title="Projects"
+                >
+                  <FolderKanban size={18} />
+                  <span>Projects</span>
+                </li>
+                <li 
+                  className={`nav-item ${activeTab === 'gantt' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('gantt');
+                    setIsMobileMenuOpen(false);
+                  }}
+                  title="Gantt Chart"
+                >
+                  <CalendarDays size={18} />
+                  <span>Gantt Chart</span>
+                </li>
+              </ul>
+            </nav>
           </div>
-        ))}
+
+          {/* Microsoft authentication badge indicator and bottom controls */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
+            {microsoftAccount && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'flex-start', gap: '0.5rem', color: 'var(--success)', fontSize: '0.75rem', fontWeight: 600, padding: '0 0.5rem' }} title="O365 Synced">
+                <ShieldCheck size={14} />
+                {!isSidebarCollapsed && <span className="bottom-section-text">O365 Synced</span>}
+              </div>
+            )}
+
+            {/* Bottom Settings navigation item */}
+            <div 
+              className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab('settings');
+                setIsMobileMenuOpen(false);
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.6rem 0.75rem', cursor: 'pointer', borderRadius: 'var(--radius-md)' }}
+              title="Settings"
+            >
+              <SettingsIcon size={18} />
+              {!isSidebarCollapsed && <span>Settings</span>}
+            </div>
+
+            {/* Custom Light/Dark Mode Toggle Switch */}
+            <div className="theme-switch-row" style={{ display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'space-between', padding: isSidebarCollapsed ? '0.5rem 0' : '0.5rem 0.75rem', borderRadius: 'var(--radius-md)', backgroundColor: isSidebarCollapsed ? 'transparent' : 'var(--bg-tertiary)' }}>
+              {!isSidebarCollapsed && (
+                <div className="theme-switch-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                  {theme === 'dark' ? <Moon size={14} className="theme-icon" /> : <Sun size={14} className="theme-icon" />}
+                  <span>{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</span>
+                </div>
+              )}
+              <label className="switch" title="Toggle Dark/Light Mode">
+                <input 
+                  type="checkbox" 
+                  checked={theme === 'dark'} 
+                  onChange={() => setTheme(theme === 'dark' ? 'light' : 'dark')} 
+                />
+                <span className="slider round"></span>
+              </label>
+            </div>
+
+            <button 
+              className="btn btn-secondary btn-icon"
+              style={{ width: '100%', padding: '0.45rem', color: 'var(--danger)', borderColor: 'var(--border-color)', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: isSidebarCollapsed ? 'center' : 'flex-start', alignItems: 'center', gap: '0.5rem' }}
+              onClick={handleLogout}
+              title="Sign Out"
+            >
+              <LogOut size={14} />
+              {!isSidebarCollapsed && <span style={{ fontSize: '0.78rem' }}>Sign Out</span>}
+            </button>
+
+            {/* Collapse toggle button */}
+            <button 
+              className="btn btn-secondary btn-icon desktop-only-toggle"
+              style={{ width: '100%', padding: '0.45rem', borderColor: 'var(--border-color)', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: isSidebarCollapsed ? 'center' : 'flex-start', alignItems: 'center', gap: '0.5rem' }}
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+            >
+              {isSidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+              {!isSidebarCollapsed && <span style={{ fontSize: '0.78rem' }}>Collapse Sidebar</span>}
+            </button>
+          </div>
+        </aside>
+
+        {/* Main Panel Viewport */}
+        <main className="main-content">
+          <header className="header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div className="page-title-section">
+              <h1 style={{ fontSize: '1.3rem', textTransform: 'capitalize', letterSpacing: '-0.02em' }}>
+                {activeTab}
+              </h1>
+              <span className="page-subtitle">
+                {activeTab === 'dashboard' && 'Aggregate metrics and project statuses'}
+                {activeTab === 'projects' && 'Build and organize hierarchical implementation tasks'}
+                {activeTab === 'gantt' && 'Chronological business day scheduler and dependency chart'}
+                {activeTab === 'settings' && 'Manage integration keys and consultant team details'}
+              </span>
+            </div>
+          </header>
+
+          <div className="content-pane">
+            {renderContent()}
+          </div>
+        </main>
+
+        {/* Dynamic Toast Container */}
+        <div className="toast-container">
+          {toasts.map(toast => (
+            <div key={toast.id} className={`toast toast-${toast.type}`}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>
+                {toast.message}
+              </div>
+              <X 
+                size={14} 
+                className="toast-close" 
+                onClick={() => removeToast(toast.id)} 
+              />
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
   );
 }

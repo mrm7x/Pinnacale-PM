@@ -692,13 +692,13 @@ export default function ProjectView({
           </div>
 
           {/* Task Tree Container */}
-          <div className="card" style={{ padding: 0 }}>
+          <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
             {projectTasks.length === 0 ? (
               <p style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '3rem' }}>
                 No tasks created yet for this project. Click 'Add Task' to build your implementation checklist.
               </p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', minWidth: '750px' }}>
                 {/* Column Headers - matching grid */}
                 <div 
                   style={{ 

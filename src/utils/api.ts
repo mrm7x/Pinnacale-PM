@@ -11,7 +11,7 @@ function mapProjectFromDb(db: any): Project {
     description: db.description || '',
     budgetDays: Number(db.budget_days),
     startDate: db.start_date,
-    targetGoLiveDate: db.target_go_live_date,
+    targetGoLiveDate: db.target_go_live_date || undefined,
     consultantIds: db.consultant_ids || [],
     isTemplate: !!db.is_template,
     createdAt: db.created_at
@@ -26,7 +26,7 @@ function mapProjectToDb(p: Project) {
     description: p.description,
     budget_days: p.budgetDays,
     start_date: p.startDate,
-    target_go_live_date: p.targetGoLiveDate,
+    target_go_live_date: p.targetGoLiveDate || '',
     consultant_ids: p.consultantIds,
     is_template: !!p.isTemplate,
     created_at: p.createdAt

@@ -16,7 +16,7 @@ interface SettingsProps {
   o365Config: O365Config;
   microsoftAccount: AccountInfo | null;
   activeUserTier: Tier;
-  onAddConsultant: (consultant: Omit<Consultant, 'id'>) => void;
+  onAddConsultant: (consultant: Omit<Consultant, 'id'> & { password?: string }) => void;
   onDeleteConsultant: (id: string) => void;
   onUpdateConsultant: (consultant: Consultant) => void;
   onUpdateO365Config: (config: O365Config) => void;
@@ -194,7 +194,8 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
       avatarColor: newConsultant.avatarColor,
       tier: newConsultant.tier,
       passwordHash,
-      mustResetPassword: true
+      mustResetPassword: true,
+      password: newConsultant.password
     });
     setNewConsultant({ name: '', email: '', role: 'Consultant', avatarColor: colors[Math.floor(Math.random() * colors.length)], tier: 'consultant', password: '' });
     onAddToast('Consultant added to directory.', 'success');
@@ -862,7 +863,7 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>
                         <ShieldCheck size={16} />
-                        <span>Offline Mode (Simulated Actions Available)</span>
+                        <span>O365 Sync Disabled (Simulated Actions Enabled)</span>
                       </div>
                       <button 
                         type="button" 

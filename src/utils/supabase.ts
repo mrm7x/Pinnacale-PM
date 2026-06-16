@@ -63,3 +63,20 @@ export async function testSupabaseConnection(): Promise<{ success: boolean; mess
     return { success: false, message: err.message || 'Failed to connect to Supabase.' };
   }
 }
+
+/**
+ * Creates a temporary Supabase client with session persistence disabled.
+ * This is used for administrative tasks (like registering other users)
+ * without affecting the currently active session in the app.
+ */
+export function createTemporarySupabaseClient() {
+  if (!isSupabaseConfigured()) return null;
+  const { url, anonKey } = getSupabaseCredentials();
+  return createClient(url, anonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false
+    }
+  });
+}
