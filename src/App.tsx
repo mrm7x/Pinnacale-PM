@@ -245,7 +245,7 @@ export default function App() {
 
   // Filtered projects list based on access privileges
   const activeProjects = projects.filter(p => !p.isTemplate);
-  const filteredProjects = (activeUserTier === 'admin' || activeUserTier === 'project_manager')
+  const filteredProjects = (activeUserTier === 'admin' || activeUserTier === 'project_manager' || activeUserTier === 'consultant')
     ? activeProjects
     : activeProjects.filter(p => p.consultantIds.includes(activeUserId));
   const projectTemplates = projects.filter(p => p.isTemplate);
