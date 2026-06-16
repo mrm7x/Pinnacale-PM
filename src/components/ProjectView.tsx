@@ -7,6 +7,31 @@ import {
 } from 'lucide-react';
 import { syncTaskToO365, createOutlookCalendarEvent } from '../utils/o365';
 
+export function formatDateFriendly(dateStr?: string | null): string {
+  if (!dateStr) return '—';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const monthIndex = parseInt(parts[1]) - 1;
+  const day = parseInt(parts[2]);
+  
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  
+  const getOrdinalSuffix = (d: number) => {
+    if (d > 3 && d < 21) return 'th';
+    switch (d % 10) {
+      case 1:  return "st";
+      case 2:  return "nd";
+      case 3:  return "rd";
+      default: return "th";
+    }
+  };
+  
+  return `${day}${getOrdinalSuffix(day)} of ${months[monthIndex]}`;
+}
+
 interface ProjectViewProps {
   projects: Project[];
   tasks: Task[];
@@ -348,7 +373,7 @@ export default function ProjectView({
               borderBottom: '1px solid var(--border-color)',
               opacity: task.status === 'completed' ? 0.55 : 1,
               display: 'grid',
-              gridTemplateColumns: '1fr 60px 200px 140px 100px 100px',
+              gridTemplateColumns: '1fr 90px 240px 140px 100px 100px',
               alignItems: 'center',
               padding: isTaskParent ? '0.85rem 1.5rem' : '0.7rem 1.5rem',
               gap: '1.25rem',
@@ -403,14 +428,14 @@ export default function ProjectView({
             </div>
 
             {/* Col 2: Duration */}
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.84rem', justifyContent: 'flex-end', color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.84rem', justifyContent: 'center', color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
               <Clock size={12} style={{ opacity: 0.5 }} /> {task.durationDays}d
             </span>
 
             {/* Col 3: Scheduled dates */}
             <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
               {task.plannedStartDate ? (
-                <>{task.plannedStartDate} <ArrowRight size={10} style={{ display: 'inline', margin: '0 3px', verticalAlign: 'middle', opacity: 0.4 }} /> {task.plannedEndDate}</>
+                <>{formatDateFriendly(task.plannedStartDate)} <ArrowRight size={10} style={{ display: 'inline', margin: '0 3px', verticalAlign: 'middle', opacity: 0.4 }} /> {formatDateFriendly(task.plannedEndDate)}</>
               ) : (
                 <span style={{ color: 'var(--text-tertiary)' }}>—</span>
               )}
@@ -598,11 +623,11 @@ export default function ProjectView({
                 <div style={{ marginTop: '0.75rem', fontSize: '0.85rem', color: 'var(--text-tertiary)', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                   <span>Client: <b>{activeProject.clientName}</b></span>
                   <span>•</span>
-                  <span>Start Date: <b>{activeProject.startDate}</b></span>
+                  <span>Start Date: <b>{formatDateFriendly(activeProject.startDate)}</b></span>
                   {activeProject.targetGoLiveDate && (
                     <>
                       <span>•</span>
-                      <span>Target Go-Live: <b style={{ color: 'var(--accent)' }}>{activeProject.targetGoLiveDate}</b></span>
+                      <span>Target Go-Live: <b style={{ color: 'var(--accent)' }}>{formatDateFriendly(activeProject.targetGoLiveDate)}</b></span>
                     </>
                   )}
                 </div>
@@ -678,7 +703,7 @@ export default function ProjectView({
                 <div 
                   style={{ 
                     display: 'grid',
-                    gridTemplateColumns: '1fr 60px 200px 140px 100px 100px',
+                    gridTemplateColumns: '1fr 90px 240px 140px 100px 100px',
                     alignItems: 'center',
                     padding: '0.7rem 1.5rem',
                     gap: '1.25rem',
@@ -705,7 +730,7 @@ export default function ProjectView({
                     )}
                     Task Name
                   </span>
-                  <span style={{ textAlign: 'right' }}>Duration</span>
+                  <span style={{ textAlign: 'center' }}>Duration</span>
                   <span>Dates (AM/PM)</span>
                   <span>Assignee</span>
                   <span>Status</span>
@@ -1286,6 +1311,7 @@ export default function ProjectView({
             transform: 'translateX(-50%)',
             backgroundColor: 'var(--bg-secondary)',
             border: '1px solid var(--border-color)',
+            borderTop: '3px solid var(--accent)',
             boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
             borderRadius: 'var(--radius-lg)',
             padding: '0.75rem 1.5rem',

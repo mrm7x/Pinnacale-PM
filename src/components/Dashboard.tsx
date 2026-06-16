@@ -6,6 +6,31 @@ import {
 } from 'lucide-react';
 import { syncTaskToO365 } from '../utils/o365';
 
+export function formatDateFriendly(dateStr?: string | null): string {
+  if (!dateStr) return '—';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const monthIndex = parseInt(parts[1]) - 1;
+  const day = parseInt(parts[2]);
+  
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  
+  const getOrdinalSuffix = (d: number) => {
+    if (d > 3 && d < 21) return 'th';
+    switch (d % 10) {
+      case 1:  return "st";
+      case 2:  return "nd";
+      case 3:  return "rd";
+      default: return "th";
+    }
+  };
+  
+  return `${day}${getOrdinalSuffix(day)} of ${months[monthIndex]}`;
+}
+
 interface DashboardProps {
   projects: Project[];
   tasks: Task[];
@@ -271,9 +296,9 @@ export default function Dashboard({
                               {task.plannedStartDate && (
                                 <>
                                   <span>•</span>
-                                  <span>Start: <b>{task.plannedStartDate}</b></span>
+                                  <span>Start: <b>{formatDateFriendly(task.plannedStartDate)}</b></span>
                                   <span>•</span>
-                                  <span>End: <b>{task.plannedEndDate}</b></span>
+                                  <span>End: <b>{formatDateFriendly(task.plannedEndDate)}</b></span>
                                 </>
                               )}
                             </div>
@@ -419,7 +444,7 @@ export default function Dashboard({
                             <div 
                               style={{ 
                                 height: '100%', 
-                                backgroundColor: isOverBudget ? 'var(--danger)' : 'var(--primary)', 
+                                backgroundColor: isOverBudget ? 'var(--danger)' : 'var(--accent)', 
                                 width: `${Math.min(100, (projectAllocated / project.budgetDays) * 100)}%`,
                                 transition: 'width 0.3s ease'
                               }} 
@@ -586,11 +611,11 @@ export default function Dashboard({
                     >
                       <div>
                         <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase' }}>Start Date</span>
-                        <span style={{ fontWeight: 500 }}>{project.startDate}</span>
+                        <span style={{ fontWeight: 500 }}>{formatDateFriendly(project.startDate)}</span>
                       </div>
                       <div>
                         <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase' }}>Target Go-Live</span>
-                        <span style={{ fontWeight: 500, color: 'var(--accent)' }}>{project.targetGoLiveDate || 'Not specified'}</span>
+                        <span style={{ fontWeight: 500, color: 'var(--accent)' }}>{project.targetGoLiveDate ? formatDateFriendly(project.targetGoLiveDate) : 'Not specified'}</span>
                       </div>
                       <div>
                         <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase' }}>Allocated / Budget</span>
@@ -608,7 +633,7 @@ export default function Dashboard({
                         <div 
                           style={{ 
                             height: '100%', 
-                            backgroundColor: 'var(--primary)', 
+                            backgroundColor: 'var(--accent)', 
                             width: `${pct}%`,
                             transition: 'width 0.3s ease'
                           }} 
@@ -902,7 +927,7 @@ export default function Dashboard({
                           </div>
                           {task.plannedStartDate && task.plannedEndDate && (
                             <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '0.35rem' }}>
-                              {task.plannedStartDate} → {task.plannedEndDate}
+                              {formatDateFriendly(task.plannedStartDate)} → {formatDateFriendly(task.plannedEndDate)}
                             </div>
                           )}
                         </div>
