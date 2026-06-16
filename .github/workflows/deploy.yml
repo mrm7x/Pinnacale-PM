@@ -17,6 +17,12 @@ jobs:
         with:
           version: latest
 
+      - name: Link Project
+        run: supabase link --project-ref zhpoknwadnxauuyqffgt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
       - name: Deploy migrations
         run: supabase db push
         env:
