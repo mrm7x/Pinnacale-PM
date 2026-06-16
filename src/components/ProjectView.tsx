@@ -4,7 +4,7 @@ import type { Project, Task, Consultant, O365Config } from '../types';
 import { canCreateProject, canEditProject, canCreateTask, canEditTask, canDeleteTask } from '../utils/permissions';
 import { 
   Plus, Calendar, Trash2, Edit2, ChevronDown, ChevronRight, ChevronUp,
-  AlertTriangle, RefreshCw, MailCheck, User, ArrowRight, X, Clock, FolderKanban, Pencil
+  RefreshCw, MailCheck, User, ArrowRight, X, Clock, FolderKanban, Pencil
 } from 'lucide-react';
 import { syncTaskToO365, createOutlookCalendarEvent } from '../utils/o365';
 
@@ -138,6 +138,8 @@ export default function ProjectView({
 
   const [hideCompleted, setHideCompleted] = useState(false);
   const [billedFilter, setBilledFilter] = useState<'all' | 'only' | 'hide'>('all');
+  const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Active Project Data
   const activeProject = projects.find(p => p.id === selectedProjectId) || null;
@@ -151,6 +153,12 @@ export default function ProjectView({
   const leafTasks = projectTasks.filter(t => !isParent(t.id));
   const totalAllocatedDuration = leafTasks.reduce((acc, t) => acc + t.durationDays, 0);
   const isOverBudget = activeProject ? totalAllocatedDuration > activeProject.budgetDays : false;
+
+  const totalLeafTasks = leafTasks.length;
+  const completedLeafTasks = leafTasks.filter(t => t.status === 'completed').length;
+  const completedPercentage = totalLeafTasks > 0 ? Math.round((completedLeafTasks / totalLeafTasks) * 100) : 0;
+  const totalBilledTasks = leafTasks.filter(t => t.billed).length;
+  const billedPercentage = totalLeafTasks > 0 ? Math.round((totalBilledTasks / totalLeafTasks) * 100) : 0;
 
   // Toggle tree expansion
   const toggleExpand = (taskId: string) => {
@@ -417,6 +425,16 @@ export default function ProjectView({
       if (task.billed) selfMatches = false;
     } else if (billedFilter === 'only') {
       if (!task.billed) selfMatches = false;
+    }
+    if (assigneeFilter !== 'all') {
+      if (assigneeFilter === 'unassigned') {
+        if (task.assignedConsultantId) selfMatches = false;
+      } else {
+        if (task.assignedConsultantId !== assigneeFilter) selfMatches = false;
+      }
+    }
+    if (statusFilter !== 'all') {
+      if (task.status !== statusFilter) selfMatches = false;
     }
 
     if (selfMatches) return true;
@@ -757,58 +775,92 @@ export default function ProjectView({
       {activeProject ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           {/* Project Header Card */}
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <h2 style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>{activeProject.name}</h2>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{activeProject.description || 'No description provided.'}</p>
-                <div style={{ marginTop: '0.75rem', fontSize: '0.85rem', color: 'var(--text-tertiary)', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                  <span>Client: <b>{activeProject.clientName}</b></span>
-                  <span>•</span>
-                  <span>Start Date: <b>{formatDateFriendly(activeProject.startDate)}</b></span>
+          <div className="card" style={{ padding: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
+              {/* Left Side: General Project Info */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span className="badge badge-primary" style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem', fontWeight: 600 }}>
+                    Client: {activeProject.clientName}
+                  </span>
+                </div>
+                <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+                  {activeProject.name}
+                </h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', lineHeight: '1.45', margin: 0 }}>
+                  {activeProject.description || 'No description provided.'}
+                </p>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+                  <span style={{ fontSize: '0.75rem', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', padding: '0.25rem 0.6rem', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-secondary)' }}>
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--primary)' }}></span>
+                    Start: <b>{formatDateFriendly(activeProject.startDate)}</b>
+                  </span>
                   {activeProject.targetGoLiveDate && (
-                    <>
-                      <span>•</span>
-                      <span>Target Go-Live: <b style={{ color: 'var(--accent)' }}>{formatDateFriendly(activeProject.targetGoLiveDate)}</b></span>
-                    </>
+                    <span style={{ fontSize: '0.75rem', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', padding: '0.25rem 0.6rem', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-secondary)' }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--accent)' }}></span>
+                      Target Go-Live: <b>{formatDateFriendly(activeProject.targetGoLiveDate)}</b>
+                    </span>
                   )}
                 </div>
               </div>
 
-              <div style={{ textAlign: 'right' }}>
-                <span className="badge badge-secondary" style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}>
-                  Budget: <b>{activeProject.budgetDays} days</b>
-                </span>
-                <div style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
-                  Total Scheduled: <b style={{ color: isOverBudget ? 'var(--danger)' : 'var(--success)' }}>{totalAllocatedDuration} days</b>
-                </div>
+              {/* Right Side: Smart summary table */}
+              <div style={{ 
+                backgroundColor: 'var(--bg-secondary)', 
+                border: '1px solid var(--border-color)', 
+                borderRadius: 'var(--radius-md)', 
+                overflow: 'hidden' 
+              }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border-strong)' }}>
+                      <th style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', fontSize: '0.68rem', letterSpacing: '0.05em' }}>Summary Metric</th>
+                      <th style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', fontSize: '0.68rem', letterSpacing: '0.05em', textAlign: 'right' }}>Target / Total</th>
+                      <th style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', fontSize: '0.68rem', letterSpacing: '0.05em', textAlign: 'right' }}>Scheduled / Done</th>
+                      <th style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', fontSize: '0.68rem', letterSpacing: '0.05em', textAlign: 'right' }}>Status / Progress</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td style={{ padding: '0.6rem 0.75rem', fontWeight: 500, color: 'var(--text-primary)' }}>Time Budget</td>
+                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{activeProject.budgetDays.toFixed(1)}d</td>
+                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{totalAllocatedDuration.toFixed(1)}d</td>
+                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right' }}>
+                        {isOverBudget ? (
+                          <span className="badge badge-danger" style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}>
+                            Over by {(totalAllocatedDuration - activeProject.budgetDays).toFixed(1)}d
+                          </span>
+                        ) : (
+                          <span className="badge badge-success" style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}>
+                            {(activeProject.budgetDays - totalAllocatedDuration).toFixed(1)}d left
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td style={{ padding: '0.6rem 0.75rem', fontWeight: 500, color: 'var(--text-primary)' }}>Task Completion</td>
+                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{totalLeafTasks} tasks</td>
+                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{completedLeafTasks} done</td>
+                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right' }}>
+                        <span className={`badge ${completedPercentage === 100 ? 'badge-success' : 'badge-primary'}`} style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}>
+                          {completedPercentage}%
+                        </span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '0.6rem 0.75rem', fontWeight: 500, color: 'var(--text-primary)' }}>Billed Progress</td>
+                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{totalLeafTasks} tasks</td>
+                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{totalBilledTasks} billed</td>
+                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right' }}>
+                        <span className="badge badge-success" style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}>
+                          {billedPercentage}%
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
-
-            {/* Overbudget warning */}
-            {isOverBudget && (
-              <div 
-                style={{ 
-                  marginTop: '1.25rem', 
-                  backgroundColor: 'var(--danger-light)', 
-                  border: '1px solid var(--danger)',
-                  color: 'var(--danger)',
-                  padding: '1rem',
-                  borderRadius: 'var(--radius-md)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem'
-                }}
-              >
-                <AlertTriangle size={20} />
-                <div>
-                  <h4 style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Project Time Budget Exceeded!</h4>
-                  <p style={{ fontSize: '0.825rem', marginTop: '0.15rem' }}>
-                    Scheduled tasks total <b>{totalAllocatedDuration} days</b>, which exceeds the budget of <b>{activeProject.budgetDays} days</b> by <b>{(totalAllocatedDuration - activeProject.budgetDays).toFixed(1)} days</b>.
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Tasks Operations Header */}
@@ -866,7 +918,7 @@ export default function ProjectView({
 
             {/* Billed Filter */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Billed Tasks:</span>
+              <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Billing:</span>
               <select 
                 className="form-select" 
                 style={{ padding: '0.2rem 1.5rem 0.2rem 0.5rem', fontSize: '0.8rem', width: 'auto', minWidth: '120px' }}
@@ -876,6 +928,44 @@ export default function ProjectView({
                 <option value="all">Show All</option>
                 <option value="only">Show Only Billed</option>
                 <option value="hide">Hide Billed</option>
+              </select>
+            </div>
+
+            <span style={{ color: 'var(--border-color)', height: '15px', borderLeft: '1px solid currentColor' }} />
+
+            {/* Assignee Filter */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Assignee:</span>
+              <select 
+                className="form-select" 
+                style={{ padding: '0.2rem 1.5rem 0.2rem 0.5rem', fontSize: '0.8rem', width: 'auto', minWidth: '140px' }}
+                value={assigneeFilter}
+                onChange={(e) => setAssigneeFilter(e.target.value)}
+              >
+                <option value="all">All Assignees</option>
+                <option value="unassigned">Unassigned</option>
+                {consultants.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <span style={{ color: 'var(--border-color)', height: '15px', borderLeft: '1px solid currentColor' }} />
+
+            {/* Status Filter */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Status:</span>
+              <select 
+                className="form-select" 
+                style={{ padding: '0.2rem 1.5rem 0.2rem 0.5rem', fontSize: '0.8rem', width: 'auto', minWidth: '130px' }}
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="all">All Statuses</option>
+                <option value="not_started">Not Started</option>
+                <option value="in_progress">In Progress</option>
+                <option value="on_hold">On Hold</option>
+                <option value="completed">Completed</option>
               </select>
             </div>
           </div>
