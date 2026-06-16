@@ -36,6 +36,7 @@ export interface Task {
   o365CalendarEventId?: string | null;
   pinkNumber?: string;
   billed?: boolean;
+  sortOrder?: number;
   
   // Computed scheduling fields (dynamically calculated)
   plannedStartDate?: string; // YYYY-MM-DD

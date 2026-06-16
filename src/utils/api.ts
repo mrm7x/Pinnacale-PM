@@ -51,7 +51,8 @@ function mapTaskFromDb(db: any): Task {
     startHalfDay: Number(db.start_half_day),
     endHalfDay: Number(db.end_half_day),
     pinkNumber: db.pink_number || '',
-    billed: !!db.billed
+    billed: !!db.billed,
+    sortOrder: db.sort_order ? Number(db.sort_order) : 0
   };
 }
 
@@ -73,7 +74,8 @@ function mapTaskToDb(t: Task) {
     start_half_day: t.startHalfDay,
     end_half_day: t.endHalfDay,
     pink_number: t.pinkNumber || '',
-    billed: !!t.billed
+    billed: !!t.billed,
+    sort_order: t.sortOrder || 0
   };
 }
 

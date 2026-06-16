@@ -154,7 +154,10 @@ export default function App() {
           // Seed initial defaults
           const initialProjects = defaultProjects;
           const initialConsultants = defaultConsultants;
-          const initialScheduledTasks = calculateTaskSchedules(initialProjects[0].startDate, defaultTasks);
+          const initialScheduledTasks = calculateTaskSchedules(
+            initialProjects[0].startDate,
+            defaultTasks.map((t, idx) => ({ ...t, sortOrder: (idx + 1) * 10 }))
+          );
           
           setProjects(initialProjects);
           setConsultants(initialConsultants);
@@ -613,6 +616,26 @@ export default function App() {
     addToast(`Successfully updated ${taskIds.length} tasks!`, 'success');
   };
 
+  const handleReorderTasks = async (updates: { id: string; sortOrder: number }[]) => {
+    if (updates.length === 0) return;
+
+    const firstTask = tasks.find(t => t.id === updates[0].id);
+    if (!firstTask) return;
+
+    const activeProj = projects.find(p => p.id === firstTask.projectId);
+    if (!activeProj) return;
+
+    const updateMap = new Map(updates.map(u => [u.id, u.sortOrder]));
+    const updatedTasksList = tasks.map(t => {
+      if (updateMap.has(t.id)) {
+        return { ...t, sortOrder: updateMap.get(t.id)! };
+      }
+      return t;
+    });
+
+    await rescheduleProjectTasks(firstTask.projectId, activeProj.startDate, updatedTasksList);
+  };
+
   const handleUpdateTaskAndSubtasks = async (task: Task, subtaskIds: string[], subtaskUpdates: Partial<Task>) => {
     const activeProj = projects.find(p => p.id === task.projectId);
     if (!activeProj) return;
@@ -814,7 +837,10 @@ export default function App() {
         
         const initialProjects = defaultProjects;
         const initialConsultants = defaultConsultants;
-        const initialScheduledTasks = calculateTaskSchedules(initialProjects[0].startDate, defaultTasks);
+        const initialScheduledTasks = calculateTaskSchedules(
+          initialProjects[0].startDate,
+          defaultTasks.map((t, idx) => ({ ...t, sortOrder: (idx + 1) * 10 }))
+        );
         
         await Promise.all([
           api.projects.saveAll(initialProjects),
@@ -918,6 +944,7 @@ export default function App() {
             onDuplicateProject={handleDuplicateProject}
             onSaveAsTemplate={handleSaveAsTemplate}
             activeUserId={activeUserId}
+            onReorderTasks={handleReorderTasks}
           />
         );
       case 'gantt':

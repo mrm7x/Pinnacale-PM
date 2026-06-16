@@ -196,7 +196,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     start_half_day INTEGER NOT NULL DEFAULT 0,
     end_half_day INTEGER NOT NULL DEFAULT 0,
     pink_number TEXT,
-    billed BOOLEAN DEFAULT false
+    billed BOOLEAN DEFAULT false,
+    sort_order INTEGER DEFAULT 0
 );
 
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;

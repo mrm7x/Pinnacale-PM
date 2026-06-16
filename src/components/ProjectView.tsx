@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import type { Project, Task, Consultant, O365Config } from '../types';
 import { canCreateProject, canEditProject, canCreateTask, canEditTask, canDeleteTask } from '../utils/permissions';
 import { 
-  Plus, Calendar, Trash2, Edit2, ChevronDown, ChevronRight, 
+  Plus, Calendar, Trash2, Edit2, ChevronDown, ChevronRight, ChevronUp,
   AlertTriangle, RefreshCw, MailCheck, User, ArrowRight, X, Clock, FolderKanban, Pencil
 } from 'lucide-react';
 import { syncTaskToO365, createOutlookCalendarEvent } from '../utils/o365';
@@ -54,6 +54,7 @@ interface ProjectViewProps {
   onDuplicateProject: (projectId: string, config: { name: string; clientName: string; startDate: string; copyAssignments: boolean }) => void;
   onSaveAsTemplate: (projectId: string, templateName: string) => void;
   activeUserId: string;
+  onReorderTasks: (updates: { id: string; sortOrder: number }[]) => void;
 }
 
 export default function ProjectView({
@@ -76,7 +77,8 @@ export default function ProjectView({
   projectTemplates,
   onDuplicateProject,
   onSaveAsTemplate,
-  activeUserId
+  activeUserId,
+  onReorderTasks
 }: ProjectViewProps) {
   const activeConsultant = consultants.find(c => c.id === activeUserId);
   const activeRole = activeConsultant?.role || 'Read only';
@@ -136,7 +138,9 @@ export default function ProjectView({
 
   // Active Project Data
   const activeProject = projects.find(p => p.id === selectedProjectId) || null;
-  const projectTasks = tasks.filter(t => t.projectId === selectedProjectId);
+  const projectTasks = tasks
+    .filter(t => t.projectId === selectedProjectId)
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   
   // Calculate Budgets
   // Note: Parent tasks will be excluded from budget totals to avoid double counting.
@@ -229,6 +233,9 @@ export default function ProjectView({
     e.preventDefault();
     if (!selectedProjectId || !taskForm.name) return;
 
+    const siblings = projectTasks.filter(t => t.parentId === (taskForm.parentId || null));
+    const maxSortOrder = siblings.reduce((max, s) => Math.max(max, s.sortOrder ?? 0), 0);
+
     const taskData = {
       projectId: selectedProjectId,
       name: taskForm.name,
@@ -239,7 +246,8 @@ export default function ProjectView({
       predecessorIds: taskForm.predecessorIds,
       status: taskForm.status,
       pinkNumber: taskForm.pinkNumber,
-      billed: taskForm.billed
+      billed: taskForm.billed,
+      sortOrder: editingTask ? editingTask.sortOrder : maxSortOrder + 10
     };
 
     if (editingTask) {
@@ -368,6 +376,30 @@ export default function ProjectView({
     }
   };
 
+  const handleMoveTask = (taskId: string, direction: 'up' | 'down') => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const siblings = projectTasks.filter(t => t.parentId === task.parentId);
+    const index = siblings.findIndex(s => s.id === taskId);
+    if (index === -1) return;
+
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= siblings.length) return;
+
+    const updates = siblings.map((s, idx) => {
+      let nextSortOrder = (idx + 1) * 10;
+      if (idx === index) {
+        nextSortOrder = (targetIndex + 1) * 10;
+      } else if (idx === targetIndex) {
+        nextSortOrder = (index + 1) * 10;
+      }
+      return { id: s.id, sortOrder: nextSortOrder };
+    });
+
+    onReorderTasks(updates);
+  };
+
   // Recursively render hierarchical tasks with dynamic WBS numbering
   const renderTaskTree = (parentId: string | null, depth = 0, parentNumber = '') => {
     const levelTasks = projectTasks.filter(t => t.parentId === parentId);
@@ -377,6 +409,11 @@ export default function ProjectView({
       const isExpanded = expandedTasks[task.id] !== false; // expanded by default
       const assignedConsultant = consultants.find(c => c.id === task.assignedConsultantId);
       const taskNumber = parentNumber ? `${parentNumber}.${index + 1}` : `${index + 1}`;
+
+      const siblings = projectTasks.filter(t => t.parentId === task.parentId);
+      const siblingIndex = siblings.findIndex(s => s.id === task.id);
+      const isFirstSibling = siblingIndex === 0;
+      const isLastSibling = siblingIndex === siblings.length - 1;
 
       return (
         <div key={task.id} style={{ display: 'flex', flexDirection: 'column' }}>
@@ -398,18 +435,58 @@ export default function ProjectView({
             {/* Col 1: Task Name */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingLeft: `${depth * 22}px`, minWidth: 0 }}>
               {editMode && (
-                <input
-                  type="checkbox"
-                  checked={selectedTaskIds.includes(task.id)}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    setSelectedTaskIds(prev => 
-                      checked ? [...prev, task.id] : prev.filter(id => id !== task.id)
-                    );
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  style={{ marginRight: '0.25rem', cursor: 'pointer', width: '15px', height: '15px' }}
-                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedTaskIds.includes(task.id)}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setSelectedTaskIds(prev => 
+                        checked ? [...prev, task.id] : prev.filter(id => id !== task.id)
+                      );
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ marginRight: '0.25rem', cursor: 'pointer', width: '15px', height: '15px' }}
+                  />
+                  <div style={{ display: 'inline-flex', gap: '0.1rem', marginRight: '0.25rem', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleMoveTask(task.id, 'up'); }}
+                      disabled={isFirstSibling}
+                      style={{
+                        border: 'none',
+                        background: 'none',
+                        cursor: isFirstSibling ? 'not-allowed' : 'pointer',
+                        opacity: isFirstSibling ? 0.25 : 0.75,
+                        color: 'var(--text-secondary)',
+                        padding: '1px',
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}
+                      title="Move Up"
+                    >
+                      <ChevronUp size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleMoveTask(task.id, 'down'); }}
+                      disabled={isLastSibling}
+                      style={{
+                        border: 'none',
+                        background: 'none',
+                        cursor: isLastSibling ? 'not-allowed' : 'pointer',
+                        opacity: isLastSibling ? 0.25 : 0.75,
+                        color: 'var(--text-secondary)',
+                        padding: '1px',
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}
+                      title="Move Down"
+                    >
+                      <ChevronDown size={14} />
+                    </button>
+                  </div>
+                </div>
               )}
               {isTaskParent ? (
                 <span className="task-node-toggle" onClick={(e) => { e.stopPropagation(); toggleExpand(task.id); }} style={{ padding: '2px' }}>
