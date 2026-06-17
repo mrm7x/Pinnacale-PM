@@ -15,7 +15,7 @@ import Logo from './components/Logo';
 import CroppedLogo from './components/CroppedLogo';
 import { 
   FolderKanban, LayoutDashboard, CalendarDays, Settings as SettingsIcon, 
-  Sun, Moon, ShieldCheck, X, LogOut, Menu, ChevronLeft, ChevronRight
+  Sun, Moon, Sparkles, ShieldCheck, X, LogOut, Menu, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { api } from './utils/api';
 import { isSupabaseConfigured, getSupabaseClient, createTemporarySupabaseClient } from './utils/supabase';
@@ -88,7 +88,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('pinnacle_active_tab', activeTab);
   }, [activeTab]);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [theme, setTheme] = useState<'light' | 'dark' | 'modern'>(() => {
+    const saved = localStorage.getItem('pinnacle_theme');
+    return (saved as 'light' | 'dark' | 'modern') || 'light';
+  });
   const [activeUserId, setActiveUserId] = useState<string>('admin');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   
@@ -224,11 +227,6 @@ export default function App() {
     if (savedConfig) {
       setO365Config(JSON.parse(savedConfig));
     }
-    if (savedTheme) {
-      setTheme(savedTheme as 'light' | 'dark');
-    } else {
-      setTheme('light');
-    }
     if (savedAuth && savedActiveUser) {
       setIsAuthenticated(true);
       setActiveUserId(savedActiveUser);
@@ -237,10 +235,11 @@ export default function App() {
 
   // Theme Sync Handler
   useEffect(() => {
+    document.documentElement.classList.remove('dark', 'modern');
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+    } else if (theme === 'modern') {
+      document.documentElement.classList.add('modern');
     }
     localStorage.setItem('pinnacle_theme', theme);
   }, [theme]);
@@ -1203,22 +1202,36 @@ export default function App() {
               {!isSidebarCollapsed && <span>Settings</span>}
             </div>
 
-            {/* Custom Light/Dark Mode Toggle Switch */}
-            <div className="theme-switch-row" style={{ display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'space-between', padding: isSidebarCollapsed ? '0.5rem 0' : '0.5rem 0.75rem', borderRadius: 'var(--radius-md)', backgroundColor: isSidebarCollapsed ? 'transparent' : 'var(--bg-tertiary)' }}>
+            {/* Custom Theme Toggle Switch */}
+            <div className="theme-switch-row" style={{ display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'space-between', padding: isSidebarCollapsed ? '0.5rem 0' : '0.5rem 0.75rem', borderRadius: 'var(--radius-md)', backgroundColor: isSidebarCollapsed ? 'transparent' : 'var(--bg-tertiary)', gap: '0.5rem', flexDirection: isSidebarCollapsed ? 'column' : 'row' }}>
               {!isSidebarCollapsed && (
-                <div className="theme-switch-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                  {theme === 'dark' ? <Moon size={14} className="theme-icon" /> : <Sun size={14} className="theme-icon" />}
-                  <span>{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</span>
+                <div className="theme-switch-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                  Theme
                 </div>
               )}
-              <label className="switch" title="Toggle Dark/Light Mode">
-                <input 
-                  type="checkbox" 
-                  checked={theme === 'dark'} 
-                  onChange={() => setTheme(theme === 'dark' ? 'light' : 'dark')} 
-                />
-                <span className="slider round"></span>
-              </label>
+              <div style={{ display: 'flex', gap: '0.25rem', backgroundColor: 'var(--bg-secondary)', padding: '0.2rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', flexDirection: isSidebarCollapsed ? 'column' : 'row' }}>
+                <button 
+                  title="Light Mode"
+                  onClick={() => setTheme('light')}
+                  style={{ background: theme === 'light' ? 'var(--primary-light)' : 'transparent', color: theme === 'light' ? 'var(--primary)' : 'var(--text-tertiary)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '0.3rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
+                >
+                  <Sun size={14} />
+                </button>
+                <button 
+                  title="Dark Mode"
+                  onClick={() => setTheme('dark')}
+                  style={{ background: theme === 'dark' ? 'var(--primary-light)' : 'transparent', color: theme === 'dark' ? 'var(--primary)' : 'var(--text-tertiary)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '0.3rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
+                >
+                  <Moon size={14} />
+                </button>
+                <button 
+                  title="Modern Sleek Mode"
+                  onClick={() => setTheme('modern')}
+                  style={{ background: theme === 'modern' ? 'var(--primary-light)' : 'transparent', color: theme === 'modern' ? 'var(--primary)' : 'var(--text-tertiary)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '0.3rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
+                >
+                  <Sparkles size={14} />
+                </button>
+              </div>
             </div>
 
             <button 

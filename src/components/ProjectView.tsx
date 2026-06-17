@@ -449,7 +449,7 @@ export default function ProjectView({
   };
 
   // Recursively render hierarchical tasks with dynamic WBS numbering
-  const renderTaskTree = (parentId: string | null, depth = 0, parentNumber = '') => {
+  const renderTaskTree = (parentId: string | null, depth = 0, parentNumber = '', depthIsLast: boolean[] = []) => {
     const levelTasks = projectTasks.filter(t => t.parentId === parentId);
     
     return levelTasks.map((task, index) => {
@@ -471,22 +471,36 @@ export default function ProjectView({
       return (
         <div key={task.id} style={{ display: 'flex', flexDirection: 'column' }}>
           <div 
-            className={`task-node-row ${isTaskParent ? 'task-parent-row' : ''} ${editMode ? 'task-node-editable' : ''}`}
+            className={`task-node-row task-status-${task.status} ${isTaskParent ? 'task-parent-row' : ''} ${editMode ? 'task-node-editable' : ''}`}
             style={{ 
-              borderBottom: '1px solid var(--border-color)',
-              opacity: task.status === 'completed' ? 0.55 : 1,
+              opacity: task.status === 'completed' ? 0.65 : 1,
               display: 'grid',
-              gridTemplateColumns: '1fr 90px 140px 140px 100px 100px',
+              gridTemplateColumns: '1fr 90px 140px 150px 120px 100px',
               alignItems: 'center',
               padding: isTaskParent ? '0.85rem 1.5rem' : '0.7rem 1.5rem',
               gap: '1.25rem',
               cursor: editMode ? 'pointer' : 'default',
-              minHeight: isTaskParent ? '52px' : '46px'
+              minHeight: isTaskParent ? '52px' : '46px',
+              position: 'relative'
             }}
             onClick={() => { if (editMode) handleOpenEditTask(task); }}
           >
             {/* Col 1: Task Name */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingLeft: `${depth * 22}px`, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, position: 'relative', height: '100%', flex: 1 }}>
+              <div style={{ display: 'flex', height: '100%', position: 'absolute', left: 0, top: 0, pointerEvents: 'none' }}>
+                {Array.from({ length: depth }).map((_, i) => (
+                  <div key={i} className="tree-guide" style={{ width: '22px', height: '100%', position: 'relative' }}>
+                    {i < depth - 1 && !depthIsLast[i] && <div className="tree-line-vertical" />}
+                    {i === depth - 1 && (
+                      <>
+                        <div className={`tree-line-vertical ${isLastSibling ? 'half' : ''}`} />
+                        <div className="tree-line-horizontal" />
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div style={{ paddingLeft: `${depth * 22}px`, display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0, zIndex: 1 }}>
               {editMode && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                   <input
@@ -506,16 +520,7 @@ export default function ProjectView({
                       type="button"
                       onClick={(e) => { e.stopPropagation(); handleMoveTask(task.id, 'up'); }}
                       disabled={isFirstSibling}
-                      style={{
-                        border: 'none',
-                        background: 'none',
-                        cursor: isFirstSibling ? 'not-allowed' : 'pointer',
-                        opacity: isFirstSibling ? 0.25 : 0.75,
-                        color: 'var(--text-secondary)',
-                        padding: '1px',
-                        display: 'flex',
-                        alignItems: 'center'
-                      }}
+                      style={{ border: 'none', background: 'none', cursor: isFirstSibling ? 'not-allowed' : 'pointer', opacity: isFirstSibling ? 0.25 : 0.75, color: 'var(--text-secondary)', padding: '1px', display: 'flex', alignItems: 'center' }}
                       title="Move Up"
                     >
                       <ChevronUp size={14} />
@@ -524,16 +529,7 @@ export default function ProjectView({
                       type="button"
                       onClick={(e) => { e.stopPropagation(); handleMoveTask(task.id, 'down'); }}
                       disabled={isLastSibling}
-                      style={{
-                        border: 'none',
-                        background: 'none',
-                        cursor: isLastSibling ? 'not-allowed' : 'pointer',
-                        opacity: isLastSibling ? 0.25 : 0.75,
-                        color: 'var(--text-secondary)',
-                        padding: '1px',
-                        display: 'flex',
-                        alignItems: 'center'
-                      }}
+                      style={{ border: 'none', background: 'none', cursor: isLastSibling ? 'not-allowed' : 'pointer', opacity: isLastSibling ? 0.25 : 0.75, color: 'var(--text-secondary)', padding: '1px', display: 'flex', alignItems: 'center' }}
                       title="Move Down"
                     >
                       <ChevronDown size={14} />
@@ -552,9 +548,9 @@ export default function ProjectView({
                 <span 
                   style={{ 
                     textDecoration: task.status === 'completed' ? 'line-through' : 'none',
-                    fontWeight: isTaskParent ? 600 : 400,
-                    fontSize: isTaskParent ? '0.95rem' : '0.88rem',
-                    color: isTaskParent ? 'var(--primary-dark)' : 'var(--text-primary)',
+                    fontWeight: isTaskParent ? 700 : 500,
+                    fontSize: isTaskParent ? '1.05rem' : '0.92rem',
+                    color: isTaskParent ? 'var(--text-primary)' : 'var(--text-secondary)',
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -562,10 +558,10 @@ export default function ProjectView({
                   }}
                   title={task.name}
                 >
-                  <span style={{ color: 'var(--text-tertiary)', marginRight: '0.35rem', fontWeight: 600 }}>{taskNumber}</span>
+                  <span style={{ color: 'var(--text-tertiary)', marginRight: '0.4rem', fontWeight: 600 }}>{taskNumber}</span>
                   {task.name}
                 </span>
-                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.15rem' }}>
+                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.2rem' }}>
                   {task.pinkNumber && (
                     <span style={{ fontSize: '0.68rem', backgroundColor: '#fdf2f8', color: '#db2777', border: '1px solid #fbcfe8', padding: '0.05rem 0.35rem', borderRadius: '4px', fontWeight: 600 }} title="Pink Number">
                       Pink #: {task.pinkNumber}
@@ -578,29 +574,32 @@ export default function ProjectView({
                   )}
                 </div>
               </div>
+              </div>
             </div>
 
             {/* Col 2: Duration */}
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.84rem', justifyContent: 'center', color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
-              <Clock size={12} style={{ opacity: 0.5 }} /> {task.durationDays}d
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.84rem', justifyContent: 'center', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', backgroundColor: 'rgba(30, 52, 73, 0.08)', padding: '0.2rem 0.6rem', borderRadius: '12px', border: '1px solid rgba(30, 52, 73, 0.15)' }}>
+              <Clock size={12} style={{ color: '#e58a3e' }} /> {task.durationDays}d
             </span>
 
             {/* Col 3: Start Date */}
-            <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', fontSize: '0.82rem', color: 'var(--text-primary)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', backgroundColor: 'rgba(229, 138, 62, 0.08)', padding: '0.2rem 0.6rem', borderRadius: '12px', border: '1px solid rgba(229, 138, 62, 0.2)' }}>
+              <Calendar size={12} style={{ color: '#1e3449' }} />
               {task.plannedStartDate ? formatDateFriendly(task.plannedStartDate) : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}
             </span>
 
             {/* Col 4: Assignee */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', minWidth: 0, backgroundColor: 'var(--bg-tertiary)', padding: '0.2rem 0.6rem 0.2rem 0.2rem', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
               {assignedConsultant ? (
                 <>
                   <span 
                     style={{ 
                       width: '22px', height: '22px', borderRadius: '50%', 
-                      backgroundColor: assignedConsultant.avatarColor,
+                      backgroundColor: assignedConsultant.avatarColor || '#1e3449',
                       color: 'white', display: 'flex', alignItems: 'center',
                       justifyContent: 'center', fontSize: '0.58rem', fontWeight: 'bold',
-                      flexShrink: 0, letterSpacing: '-0.02em'
+                      flexShrink: 0, letterSpacing: '-0.02em',
+                      boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
                     }}
                   >
                     {assignedConsultant.name.split(' ').map(n => n[0]).join('')}
@@ -673,7 +672,7 @@ export default function ProjectView({
           {/* Render children recursively */}
           {isTaskParent && isExpanded && (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {renderTaskTree(task.id, depth + 1, taskNumber)}
+              {renderTaskTree(task.id, depth + 1, taskNumber, [...depthIsLast, isLastSibling])}
             </div>
           )}
         </div>
@@ -977,7 +976,7 @@ export default function ProjectView({
                 <div 
                   style={{ 
                     display: 'grid',
-                    gridTemplateColumns: '1fr 90px 140px 140px 100px 100px',
+                    gridTemplateColumns: '1fr 90px 140px 150px 120px 100px',
                     alignItems: 'center',
                     padding: '0.7rem 1.5rem',
                     gap: '1.25rem',
@@ -1005,10 +1004,10 @@ export default function ProjectView({
                     Task Name
                   </span>
                   <span style={{ textAlign: 'center' }}>Duration</span>
-                  <span>Start Date</span>
-                  <span>Assignee</span>
-                  <span>Status</span>
-                  <span style={{ textAlign: 'right' }}>Actions</span>
+                  <span style={{ textAlign: 'center' }}>Start Date</span>
+                  <span style={{ textAlign: 'center' }}>Assignee</span>
+                  <span style={{ textAlign: 'center' }}>Status</span>
+                  <span style={{ textAlign: 'center' }}>Actions</span>
                 </div>
                 {renderTaskTree(null, 0, '')}
               </div>

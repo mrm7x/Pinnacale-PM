@@ -439,26 +439,123 @@ h1, h2, h3, h4, h5, h6 {
   border-color: var(--primary);
 }
 
+/* Flat Row Layout Basics */
 .task-node-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.75rem 1.25rem;
-  gap: 1rem;
-  transition: background-color var(--transition-fast);
+  border-bottom: 1px solid var(--border-color);
+  background-color: transparent;
+  transition: all 0.2s ease;
+  position: relative;
 }
 
+.task-node-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.3rem;
+  opacity: 0;
+  transition: all 0.2s ease;
+}
+
+.task-node-row:hover .task-node-actions {
+  opacity: 1;
+}
+
+/* Light Theme Flair */
 .task-node-row:hover {
   background-color: var(--bg-tertiary) !important;
 }
 
 .task-node-row.task-parent-row {
   border-left: 3px solid var(--primary);
-  background-color: var(--primary-light) !important;
+  background: linear-gradient(90deg, var(--primary-light), transparent) !important;
+}
+
+/* Contextual Status Colors - Light */
+.task-node-row.task-status-completed {
+  background-color: rgba(16, 185, 129, 0.03) !important;
+}
+
+.task-node-row.task-status-in_progress {
+  border-left: 4px solid var(--primary);
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.05), var(--bg-primary));
+}
+
+.task-node-row.task-status-on_hold {
+  border-left: 4px solid var(--warning);
+}
+
+/* ===== Tree View Lines ===== */
+.tree-line-vertical {
+  position: absolute;
+  top: 0;
+  left: 10px;
+  width: 2px;
+  height: 100%;
+  background-color: var(--border-color);
+  transition: all 0.25s ease;
+  z-index: 0;
+}
+
+.tree-line-vertical.half {
+  height: 50%;
+}
+
+.tree-line-horizontal {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  width: 12px;
+  height: 2px;
+  background-color: var(--border-color);
+  transition: all 0.25s ease;
+  z-index: 0;
+}
+
+/* Light Theme (default) tree hover */
+.task-node-row:hover .tree-line-vertical,
+.task-node-row:hover .tree-line-horizontal {
+  background-color: var(--primary);
+}
+
+/* Dark Theme Flair */
+:root.dark .task-node-row {
+  background-color: transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 :root.dark .task-node-row.task-parent-row {
-  background-color: rgba(93, 139, 181, 0.08) !important;
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.1), transparent) !important;
+  border-left: 3px solid var(--primary-light);
+}
+
+:root.dark .task-node-row:hover {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+}
+
+/* Contextual Status Colors - Dark */
+:root.dark .task-node-row.task-status-completed {
+  background-color: rgba(16, 185, 129, 0.05) !important;
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+:root.dark .task-node-row.task-status-in_progress {
+  border-left: 4px solid var(--primary-light);
+  box-shadow: inset 20px 0 30px -20px rgba(99, 102, 241, 0.2);
+}
+
+:root.dark .task-node-row.task-status-on_hold {
+  border-left: 4px solid var(--warning);
+  box-shadow: inset 20px 0 30px -20px rgba(245, 158, 11, 0.15);
+}
+
+:root.dark .tree-line-vertical, 
+:root.dark .tree-line-horizontal {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+:root.dark .task-node-row:hover .tree-line-vertical,
+:root.dark .task-node-row:hover .tree-line-horizontal {
+  background-color: var(--primary-light);
+  box-shadow: 0 0 5px var(--primary-light);
 }
 
 .task-node-left {
@@ -466,13 +563,6 @@ h1, h2, h3, h4, h5, h6 {
   align-items: center;
   gap: 0.5rem;
   flex: 1;
-}
-
-.task-node-indent {
-  width: 24px;
-  border-left: 2px dashed var(--border-color);
-  height: 24px;
-  margin-left: 12px;
 }
 
 .task-node-toggle {
@@ -1027,4 +1117,268 @@ h1, h2, h3, h4, h5, h6 {
     justify-content: center;
     width: 100% !important;
   }
+}
+
+/* ==========================================================================
+   Modern Sleek Theme Configuration (Glassmorphism + Vibrant Gradients)
+   ========================================================================== */
+:root.modern {
+  --bg-primary: #0b111a;
+  --bg-secondary: rgba(26, 36, 50, 0.75);
+  --bg-tertiary: rgba(35, 48, 66, 0.65);
+  --bg-elevated: rgba(45, 60, 80, 0.95);
+  
+  --text-primary: #f8fafc;
+  --text-secondary: #e2e8f0;
+  --text-tertiary: #cbd5e1;
+  
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.15);
+
+  --primary: #1e3449;
+  --primary-hover: #2c4a68;
+  --primary-light: rgba(94, 142, 186, 0.35);
+  --primary-dark: #121f2c;
+
+  --accent: #e58a3e;
+  --accent-light: rgba(229, 138, 62, 0.2);
+
+  --success: #10b981;
+  --success-light: rgba(16, 185, 129, 0.15);
+  --warning: #f59e0b;
+  --warning-light: rgba(245, 158, 11, 0.15);
+  --danger: #ef4444;
+  --danger-light: rgba(239, 68, 68, 0.15);
+
+  --shadow-xs: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 16px 32px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.7);
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.4);
+
+  --radius-sm: 0.75rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.5rem;
+  --radius-xl: 2rem;
+
+  --transition-fast: 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --transition-normal: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Modern Theme Global Overrides */
+html.modern body {
+  background: radial-gradient(circle at 15% 50%, rgba(30, 52, 73, 0.3), transparent 40%),
+              radial-gradient(circle at 85% 30%, rgba(229, 138, 62, 0.25), transparent 40%);
+  background-color: var(--bg-primary);
+  background-attachment: fixed;
+  background-size: 200% 200%;
+  animation: modernBg 20s ease infinite alternate;
+}
+
+@keyframes modernBg {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+html.modern .sidebar {
+  background: rgba(15, 15, 17, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+html.modern .header {
+  background: rgba(10, 10, 12, 0.5);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+html.modern .card, 
+html.modern .modal-container, 
+html.modern .gantt-container {
+  background: rgba(20, 20, 22, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+html.modern .card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+html.modern .btn-primary {
+  background: linear-gradient(135deg, var(--primary), #2c4a68);
+  border: none;
+  box-shadow: 0 4px 15px rgba(30, 52, 73, 0.4);
+}
+
+html.modern .btn-primary:hover {
+  background: linear-gradient(135deg, #2c4a68, #3e6892);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 8px 25px rgba(30, 52, 73, 0.6);
+}
+
+html.modern .btn-accent {
+  background: linear-gradient(135deg, var(--accent), #f09f5e);
+  box-shadow: 0 4px 15px rgba(229, 138, 62, 0.4);
+}
+
+html.modern .btn-accent:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 8px 25px rgba(229, 138, 62, 0.6);
+}
+
+html.modern .form-input, 
+html.modern .form-select, 
+html.modern .form-textarea {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-primary);
+}
+
+html.modern option {
+  background-color: #1e293b;
+  color: #f8fafc;
+}
+
+html.modern .form-input:focus, 
+html.modern .form-select:focus, 
+html.modern .form-textarea:focus {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(30, 52, 73, 0.25);
+}
+
+html.modern .nav-item.active {
+  background: linear-gradient(90deg, var(--primary-light), transparent);
+  border-left: 3px solid var(--accent);
+  box-shadow: inset 2px 0 10px rgba(229, 138, 62, 0.1);
+  color: var(--text-primary);
+}
+
+html.modern .badge-primary { background: rgba(30, 52, 73, 0.8); border: 1px solid rgba(94, 142, 186, 0.4); color: var(--text-primary); }
+html.modern .badge-success { background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); color: var(--text-primary); }
+html.modern .badge-warning { background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.4); color: var(--text-primary); }
+html.modern .badge-danger { background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: var(--text-primary); }
+html.modern .badge-secondary { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15); color: var(--text-primary); }
+
+/* Modern Task List Accents & Flat Rows */
+html.modern .task-node-row {
+  border: none !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  background: rgba(26, 36, 50, 0.5) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+html.modern .task-node-row::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; width: 4px; height: 100%;
+  background: transparent;
+  transition: all 0.4s ease;
+}
+
+html.modern .task-node-row:hover {
+  background: rgba(26, 36, 50, 0.85) !important;
+  border-color: rgba(94, 142, 186, 0.3) !important;
+  box-shadow: inset 0 0 20px rgba(255,255,255,0.02);
+  z-index: 10;
+}
+
+html.modern .task-node-row:hover::before {
+  background: var(--primary);
+  box-shadow: 0 0 15px var(--primary);
+}
+
+html.modern .task-node-row.task-parent-row {
+  background: linear-gradient(135deg, rgba(30, 52, 73, 0.7), rgba(26, 36, 50, 0.4)) !important;
+  border-bottom: 1px solid rgba(94, 142, 186, 0.25) !important;
+  border-left: none !important;
+}
+
+html.modern .task-node-row.task-parent-row::before {
+  background: var(--accent);
+  width: 4px;
+}
+
+html.modern .task-node-row.task-parent-row:hover::before {
+  background: #f09f5e;
+  box-shadow: 0 0 20px var(--accent);
+}
+
+/* Contextual Status Colors - Modern */
+html.modern .task-node-row.task-status-completed {
+  background: rgba(16, 185, 129, 0.08) !important;
+  border-color: rgba(16, 185, 129, 0.15) !important;
+  box-shadow: inset 0 2px 10px rgba(0,0,0,0.1);
+}
+
+html.modern .task-node-row.task-status-in_progress {
+  border-color: rgba(94, 142, 186, 0.4) !important;
+}
+
+html.modern .task-node-row.task-status-in_progress::before {
+  background: var(--primary);
+  width: 4px;
+  box-shadow: 0 0 15px var(--primary);
+}
+
+html.modern .task-node-row.task-status-on_hold::before {
+  background: var(--warning);
+  width: 4px;
+  box-shadow: 0 0 15px var(--warning);
+}
+
+html.modern .task-node-toggle {
+  color: var(--accent);
+  background: rgba(229, 138, 62, 0.15);
+  border-radius: 50%;
+  padding: 4px;
+}
+
+html.modern .task-node-toggle:hover {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 12px var(--accent);
+}
+
+html.modern .tree-line-vertical, 
+html.modern .tree-line-horizontal {
+  background-color: rgba(94, 142, 186, 0.3);
+}
+
+html.modern .task-node-row:hover .tree-line-vertical,
+html.modern .task-node-row:hover .tree-line-horizontal {
+  background-color: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+
+/* Login Page specific modern theme tweaks */
+html.modern .login-hero-panel {
+  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+  position: relative;
+  overflow: hidden;
+}
+html.modern .login-hero-panel::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(30, 52, 73, 0.25) 0%, transparent 50%),
+              radial-gradient(circle at 70% 70%, rgba(229, 138, 62, 0.15) 0%, transparent 50%);
+  animation: rotate 30s linear infinite;
+}
+@keyframes rotate {
+  100% { transform: rotate(360deg); }
 }
