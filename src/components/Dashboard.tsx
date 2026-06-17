@@ -60,6 +60,7 @@ export default function Dashboard({
     return { year: now.getFullYear(), month: now.getMonth() };
   });
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
+  const [selectedCalendarConsultantId, setSelectedCalendarConsultantId] = useState<string>(activeUserId);
 
   // My Agenda State
   const [agendaShowAllTasks, setAgendaShowAllTasks] = useState(false);
@@ -786,7 +787,11 @@ export default function Dashboard({
         while (calendarCells.length % 7 !== 0) calendarCells.push(null);
         
         // Map tasks to date strings for quick lookup
-        const allLeafTasks = tasks.filter(t => !tasks.some(c => c.parentId === t.id));
+        const isManager = activeUser?.tier === 'admin' || activeUser?.tier === 'superuser';
+        const allLeafTasks = tasks.filter(t => 
+          !tasks.some(c => c.parentId === t.id) &&
+          t.assignedConsultantId === selectedCalendarConsultantId
+        );
         const tasksByDate: Record<string, { task: Task; project: Project | undefined; consultant: Consultant | undefined }[]> = {};
         
         allLeafTasks.forEach(task => {
@@ -847,9 +852,23 @@ export default function Dashboard({
                     <ChevronRight size={18} />
                   </button>
                 </div>
-                <button className="btn btn-secondary" onClick={goToToday} style={{ fontSize: '0.8rem' }}>
-                  Today
-                </button>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                  {isManager && (
+                    <select 
+                      className="form-input" 
+                      style={{ padding: '0.25rem 2rem 0.25rem 0.75rem', minHeight: 'auto', fontSize: '0.85rem' }}
+                      value={selectedCalendarConsultantId}
+                      onChange={e => setSelectedCalendarConsultantId(e.target.value)}
+                    >
+                      {consultants.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  )}
+                  <button className="btn btn-secondary" onClick={goToToday} style={{ fontSize: '0.8rem' }}>
+                    Today
+                  </button>
+                </div>
               </div>
             </div>
 
