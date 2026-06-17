@@ -451,8 +451,8 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
 
             <form onSubmit={handleAddConsultantSubmit} style={{ marginBottom: '1.5rem' }}>
               <div className="form-group">
-                <label className="form-label">Consultant Name</label>
-                <input 
+                <label htmlFor="form-field-1" className="form-label">Consultant Name</label>
+                <input id="form-field-1" 
                   type="text" 
                   className="form-input" 
                   placeholder="e.g. John Doe"
@@ -463,8 +463,8 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
               </div>
               
               <div className="form-group">
-                <label className="form-label">Office 365 Business Email</label>
-                <input 
+                <label htmlFor="form-field-2" className="form-label">Office 365 Business Email</label>
+                <input id="form-field-2" 
                   type="email" 
                   className="form-input" 
                   placeholder="e.g. john.doe@acme.onmicrosoft.com"
@@ -476,8 +476,8 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
 
               <div className="grid-cols-12" style={{ gap: '1rem' }}>
                 <div className="form-group col-span-12">
-                  <label className="form-label">Implementation Role</label>
-                  <select 
+                  <label htmlFor="form-field-3" className="form-label">Implementation Role</label>
+                  <select id="form-field-3" 
                     className="form-select"
                     value={newConsultant.role}
                     onChange={(e) => setNewConsultant({ ...newConsultant, role: e.target.value })}
@@ -528,8 +528,8 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
               </div>
 
               <div className="form-group" style={{ marginTop: '1rem' }}>
-                <label className="form-label">Initial Password</label>
-                <input 
+                <label htmlFor="form-field-4" className="form-label">Initial Password</label>
+                <input id="form-field-4" 
                   type="password" 
                   className="form-input" 
                   placeholder="Leave empty for default ('password')"
@@ -624,6 +624,7 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
                             <button
                               className="btn btn-secondary btn-icon"
                               title="Reset Password"
+                              aria-label="Reset Password"
                               onClick={() => { setResetPasswordId(c.id); setResetPasswordValue(''); }}
                             >
                               <Lock size={14} />
@@ -634,15 +635,17 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
                             <button
                               className="btn btn-secondary btn-icon"
                               title="Edit Consultant"
+                              aria-label="Edit Consultant"
                               onClick={() => setEditingConsultant({ ...c })}
                             >
                               <Edit2 size={14} />
                             </button>
                           )}
-                          {/* Delete — admin only */}
                           {canManageUsers(activeUserTier) && (
                             <button
                               className="btn btn-secondary btn-icon"
+                              title="Delete Consultant"
+                              aria-label="Delete Consultant"
                               style={{ color: 'var(--danger)' }}
                               onClick={() => {
                                 if (confirm(`Delete consultant ${c.name}? All tasks assigned to them will be set to Unassigned.`)) {
@@ -697,20 +700,20 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     <div className="grid-cols-12" style={{ gap: '0.75rem' }}>
                       <div className="form-group col-span-6" style={{ margin: 0 }}>
-                        <label className="form-label">Name</label>
-                        <input type="text" className="form-input" value={editingConsultant.name}
+                        <label htmlFor="form-field-5" className="form-label">Name</label>
+                        <input id="form-field-5" type="text" className="form-input" value={editingConsultant.name}
                           onChange={e => setEditingConsultant({ ...editingConsultant, name: e.target.value })} />
                       </div>
                       <div className="form-group col-span-6" style={{ margin: 0 }}>
-                        <label className="form-label">Email</label>
-                        <input type="email" className="form-input" value={editingConsultant.email}
+                        <label htmlFor="form-field-6" className="form-label">Email</label>
+                        <input id="form-field-6" type="email" className="form-input" value={editingConsultant.email}
                           onChange={e => setEditingConsultant({ ...editingConsultant, email: e.target.value })} />
                       </div>
                     </div>
                     <div className="grid-cols-12" style={{ gap: '1rem' }}>
                       <div className="form-group col-span-12" style={{ margin: 0 }}>
-                        <label className="form-label">Role</label>
-                        <select className="form-select" value={editingConsultant.role}
+                        <label htmlFor="form-field-7" className="form-label">Role</label>
+                        <select id="form-field-7" className="form-select" value={editingConsultant.role}
                           onChange={e => setEditingConsultant({ ...editingConsultant, role: e.target.value })}>
                           <option value="Consultant">Consultant</option>
                           <option value="Project Manager">Project Manager</option>
@@ -796,8 +799,8 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
             {showImportArea && (
               <form onSubmit={handleImportSubmit} style={{ border: '1px dashed var(--border-color)', padding: '1rem', borderRadius: 'var(--radius-md)', marginBottom: '1rem' }}>
                 <div className="form-group">
-                  <label className="form-label">Paste Exported JSON Database</label>
-                  <textarea 
+                  <label htmlFor="form-field-8" className="form-label">Paste Exported JSON Database</label>
+                  <textarea id="form-field-8" 
                     className="form-textarea" 
                     style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}
                     rows={4}
@@ -905,8 +908,8 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
               )}
 
               <div className="form-group">
-                <label className="form-label">Supabase Project URL</label>
-                <input
+                <label htmlFor="form-field-9" className="form-label">Supabase Project URL</label>
+                <input id="form-field-9"
                   type="url"
                   className="form-input"
                   placeholder="https://your-project.supabase.co"
@@ -918,8 +921,8 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
               </div>
 
               <div className="form-group">
-                <label className="form-label">Supabase Anon Key (Public Key)</label>
-                <input
+                <label htmlFor="form-field-10" className="form-label">Supabase Anon Key (Public Key)</label>
+                <input id="form-field-10"
                   type="password"
                   className="form-input"
                   placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVC..."
@@ -965,7 +968,7 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
                     className="btn btn-secondary"
                     onClick={handleDownloadSchema}
                     style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}
-                    title="Download PostgreSQL schema template to run in Supabase"
+                    title="Download PostgreSQL schema template to run in Supabase" aria-label="Download PostgreSQL schema template to run in Supabase"
                   >
                     <Download size={14} />
                     <span>Download SQL Setup</span>
@@ -1002,8 +1005,8 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
               {clientForm.isEnabled && (
                 <>
                   <div className="form-group">
-                    <label className="form-label">Directory (tenant) ID</label>
-                    <input 
+                    <label htmlFor="form-field-11" className="form-label">Directory (tenant) ID</label>
+                    <input id="form-field-11" 
                       type="text" 
                       className="form-input" 
                       placeholder="e.g. 8a9d821a-..."
@@ -1014,8 +1017,8 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Application (client) ID</label>
-                    <input 
+                    <label htmlFor="form-field-12" className="form-label">Application (client) ID</label>
+                    <input id="form-field-12" 
                       type="text" 
                       className="form-input" 
                       placeholder="e.g. 5d9d832b-..."
@@ -1026,8 +1029,8 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Authorized Redirect URI</label>
-                    <input 
+                    <label htmlFor="form-field-13" className="form-label">Authorized Redirect URI</label>
+                    <input id="form-field-13" 
                       type="text" 
                       className="form-input" 
                       value={clientForm.redirectUri}
@@ -1037,8 +1040,8 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Microsoft To-Do List Folder Name</label>
-                    <input 
+                    <label htmlFor="form-field-14" className="form-label">Microsoft To-Do List Folder Name</label>
+                    <input id="form-field-14" 
                       type="text" 
                       className="form-input" 
                       value={clientForm.todoListName}

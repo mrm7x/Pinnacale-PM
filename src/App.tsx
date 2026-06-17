@@ -15,7 +15,7 @@ import Logo from './components/Logo';
 import CroppedLogo from './components/CroppedLogo';
 import { 
   FolderKanban, LayoutDashboard, CalendarDays, Settings as SettingsIcon, 
-  Sun, Moon, Sparkles, ShieldCheck, X, LogOut, Menu, ChevronLeft, ChevronRight
+  Sun, Moon, ShieldCheck, X, LogOut, Menu, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { api } from './utils/api';
 import { isSupabaseConfigured, getSupabaseClient, createTemporarySupabaseClient } from './utils/supabase';
@@ -88,9 +88,11 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('pinnacle_active_tab', activeTab);
   }, [activeTab]);
-  const [theme, setTheme] = useState<'light' | 'dark' | 'modern'>(() => {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('pinnacle_theme');
-    return (saved as 'light' | 'dark' | 'modern') || 'light';
+    // Map existing modern theme to light to prevent errors
+    const normalized = saved === 'modern' ? 'light' : saved;
+    return (normalized as 'light' | 'dark') || 'light';
   });
   const [activeUserId, setActiveUserId] = useState<string>('admin');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -220,7 +222,6 @@ export default function App() {
     loadData();
 
     const savedConfig = localStorage.getItem('pinnacle_o365config');
-    const savedTheme = localStorage.getItem('pinnacle_theme');
     const savedActiveUser = localStorage.getItem('pinnacle_activeuser');
     const savedAuth = localStorage.getItem('pinnacle_session');
 
@@ -235,11 +236,9 @@ export default function App() {
 
   // Theme Sync Handler
   useEffect(() => {
-    document.documentElement.classList.remove('dark', 'modern');
+    document.documentElement.classList.remove('dark');
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
-    } else if (theme === 'modern') {
-      document.documentElement.classList.add('modern');
     }
     localStorage.setItem('pinnacle_theme', theme);
   }, [theme]);
@@ -1053,6 +1052,7 @@ export default function App() {
             className="hamburger-btn"
             onClick={() => setIsMobileMenuOpen(true)}
             title="Open Menu"
+            aria-label="Open Mobile Menu"
           >
             <Menu size={20} />
           </button>
@@ -1148,7 +1148,16 @@ export default function App() {
                     setActiveTab('dashboard');
                     setIsMobileMenuOpen(false);
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      setActiveTab('dashboard');
+                      setIsMobileMenuOpen(false);
+                    }
+                  }}
                   title="Dashboard"
+                  aria-label="Navigate to Dashboard"
+                  role="button"
+                  tabIndex={0}
                 >
                   <LayoutDashboard size={18} />
                   <span>Dashboard</span>
@@ -1159,7 +1168,16 @@ export default function App() {
                     setActiveTab('projects');
                     setIsMobileMenuOpen(false);
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      setActiveTab('projects');
+                      setIsMobileMenuOpen(false);
+                    }
+                  }}
                   title="Projects"
+                  aria-label="Navigate to Projects"
+                  role="button"
+                  tabIndex={0}
                 >
                   <FolderKanban size={18} />
                   <span>Projects</span>
@@ -1170,7 +1188,16 @@ export default function App() {
                     setActiveTab('gantt');
                     setIsMobileMenuOpen(false);
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      setActiveTab('gantt');
+                      setIsMobileMenuOpen(false);
+                    }
+                  }}
                   title="Gantt Chart"
+                  aria-label="Navigate to Gantt Chart"
+                  role="button"
+                  tabIndex={0}
                 >
                   <CalendarDays size={18} />
                   <span>Gantt Chart</span>
@@ -1195,8 +1222,17 @@ export default function App() {
                 setActiveTab('settings');
                 setIsMobileMenuOpen(false);
               }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  setActiveTab('settings');
+                  setIsMobileMenuOpen(false);
+                }
+              }}
               style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.6rem 0.75rem', cursor: 'pointer', borderRadius: 'var(--radius-md)' }}
               title="Settings"
+              aria-label="Navigate to Settings"
+              role="button"
+              tabIndex={0}
             >
               <SettingsIcon size={18} />
               {!isSidebarCollapsed && <span>Settings</span>}
@@ -1212,6 +1248,7 @@ export default function App() {
               <div style={{ display: 'flex', gap: '0.25rem', backgroundColor: 'var(--bg-secondary)', padding: '0.2rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', flexDirection: isSidebarCollapsed ? 'column' : 'row' }}>
                 <button 
                   title="Light Mode"
+                  aria-label="Switch to Light Theme"
                   onClick={() => setTheme('light')}
                   style={{ background: theme === 'light' ? 'var(--primary-light)' : 'transparent', color: theme === 'light' ? 'var(--primary)' : 'var(--text-tertiary)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '0.3rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
                 >
@@ -1219,17 +1256,11 @@ export default function App() {
                 </button>
                 <button 
                   title="Dark Mode"
+                  aria-label="Switch to Dark Theme"
                   onClick={() => setTheme('dark')}
                   style={{ background: theme === 'dark' ? 'var(--primary-light)' : 'transparent', color: theme === 'dark' ? 'var(--primary)' : 'var(--text-tertiary)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '0.3rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
                 >
                   <Moon size={14} />
-                </button>
-                <button 
-                  title="Modern Sleek Mode"
-                  onClick={() => setTheme('modern')}
-                  style={{ background: theme === 'modern' ? 'var(--primary-light)' : 'transparent', color: theme === 'modern' ? 'var(--primary)' : 'var(--text-tertiary)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '0.3rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
-                >
-                  <Sparkles size={14} />
                 </button>
               </div>
             </div>
@@ -1239,6 +1270,7 @@ export default function App() {
               style={{ width: '100%', padding: '0.45rem', color: 'var(--danger)', borderColor: 'var(--border-color)', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: isSidebarCollapsed ? 'center' : 'flex-start', alignItems: 'center', gap: '0.5rem' }}
               onClick={handleLogout}
               title="Sign Out"
+              aria-label="Sign Out"
             >
               <LogOut size={14} />
               {!isSidebarCollapsed && <span style={{ fontSize: '0.78rem' }}>Sign Out</span>}
@@ -1250,6 +1282,7 @@ export default function App() {
               style={{ width: '100%', padding: '0.45rem', borderColor: 'var(--border-color)', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: isSidebarCollapsed ? 'center' : 'flex-start', alignItems: 'center', gap: '0.5rem' }}
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
               title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+              aria-label={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
             >
               {isSidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
               {!isSidebarCollapsed && <span style={{ fontSize: '0.78rem' }}>Collapse Sidebar</span>}

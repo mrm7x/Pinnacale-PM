@@ -2,11 +2,14 @@ import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import type { Project, Task, Consultant, O365Config } from '../types';
 import { canCreateProject, canEditProject, canCreateTask, canEditTask, canDeleteTask } from '../utils/permissions';
-import { 
+import {
   Plus, Calendar, Trash2, Edit2, ChevronDown, ChevronRight, ChevronUp,
-  RefreshCw, MailCheck, User, X, Clock, FolderKanban, Pencil
+  RefreshCw, MailCheck, User, X, Clock, FolderKanban, Pencil,
+  Folder, Briefcase, Target, Rocket, Star, Layout, Check
 } from 'lucide-react';
 import { syncTaskToO365, createOutlookCalendarEvent } from '../utils/o365';
+import { WinComboBox } from './winui/WinComboBox';
+import { WinDatePicker } from './winui/WinDatePicker';
 
 export function formatDateFriendly(dateStr?: string | null): string {
   if (!dateStr) return '—';
@@ -14,22 +17,22 @@ export function formatDateFriendly(dateStr?: string | null): string {
   if (parts.length !== 3) return dateStr;
   const monthIndex = parseInt(parts[1]) - 1;
   const day = parseInt(parts[2]);
-  
+
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
-  
+
   const getOrdinalSuffix = (d: number) => {
     if (d > 3 && d < 21) return 'th';
     switch (d % 10) {
-      case 1:  return "st";
-      case 2:  return "nd";
-      case 3:  return "rd";
+      case 1: return "st";
+      case 2: return "nd";
+      case 3: return "rd";
       default: return "th";
     }
   };
-  
+
   return `${day}${getOrdinalSuffix(day)} of ${months[monthIndex]}`;
 }
 
@@ -56,6 +59,17 @@ interface ProjectViewProps {
   activeUserId: string;
   onReorderTasks: (updates: { id: string; sortOrder: number }[]) => void;
 }
+
+const PROJECT_COLORS = ['#D32F2F', '#C2185B', '#7B1FA2', '#303F9F', '#0288D1', '#00796B', '#388E3C', '#E64A19'];
+
+const PROJECT_ICONS = [
+  { name: 'Folder', Icon: Folder },
+  { name: 'Briefcase', Icon: Briefcase },
+  { name: 'Target', Icon: Target },
+  { name: 'Rocket', Icon: Rocket },
+  { name: 'Star', Icon: Star },
+  { name: 'Layout', Icon: Layout }
+];
 
 export default function ProjectView({
   projects,
@@ -90,13 +104,19 @@ export default function ProjectView({
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
   const [isTemplateSaveModalOpen, setIsTemplateSaveModalOpen] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
-  
+
   const [duplicateForm, setDuplicateForm] = useState({ name: '', clientName: '', startDate: '', copyAssignments: true });
   const [templateForm, setTemplateForm] = useState({ name: '' });
-  
+
   // Form States
-  const [newProject, setNewProject] = useState({ name: '', clientName: '', description: '', budgetDays: 10, startDate: new Date().toISOString().split('T')[0], targetGoLiveDate: '', consultantIds: [] as string[] });
-  const [editProjectForm, setEditProjectForm] = useState({ id: '', name: '', clientName: '', description: '', budgetDays: 10, startDate: '', targetGoLiveDate: '', consultantIds: [] as string[] });
+  const [newProject, setNewProject] = useState({ name: '', clientName: '', description: '', budgetDays: 10, startDate: new Date().toISOString().split('T')[0], targetGoLiveDate: '', consultantIds: [] as string[], icon: 'Folder', colorTheme: '#0288D1' });
+  const [editProjectForm, setEditProjectForm] = useState({ id: '', name: '', clientName: '', description: '', budgetDays: 10, startDate: '', targetGoLiveDate: '', consultantIds: [] as string[], icon: 'Folder', colorTheme: '#0288D1' });
+  
+  const [inlineEditingTaskId, setInlineEditingTaskId] = useState<string | null>(null);
+  const [inlineEditField, setInlineEditField] = useState<'duration' | 'startDate' | 'assignee' | 'status' | 'pinkNumber' | null>(null);
+  const [inlineEditForm, setInlineEditForm] = useState<Partial<Task>>({});
+  const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null);
+  
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [taskForm, setTaskForm] = useState({
     name: '',
@@ -147,7 +167,7 @@ export default function ProjectView({
   const projectTasks = tasks
     .filter(t => t.projectId === selectedProjectId)
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-  
+
   // Calculate Budgets
   // Note: Parent tasks will be excluded from budget totals to avoid double counting.
   const isParent = (taskId: string) => tasks.some(t => t.parentId === taskId);
@@ -172,7 +192,7 @@ export default function ProjectView({
     if (!newProject.name || !newProject.clientName) return;
     onCreateProject(newProject, selectedTemplateId || undefined);
     setIsNewProjectModalOpen(false);
-    setNewProject({ name: '', clientName: '', description: '', budgetDays: 10, startDate: new Date().toISOString().split('T')[0], targetGoLiveDate: '', consultantIds: [] });
+    setNewProject({ name: '', clientName: '', description: '', budgetDays: 10, startDate: new Date().toISOString().split('T')[0], targetGoLiveDate: '', consultantIds: [], icon: 'Folder', colorTheme: '#0288D1' });
     setSelectedTemplateId('');
   };
 
@@ -187,7 +207,9 @@ export default function ProjectView({
       description: editProjectForm.description,
       budgetDays: parseFloat(editProjectForm.budgetDays.toString()) || 0,
       startDate: editProjectForm.startDate,
-      targetGoLiveDate: editProjectForm.targetGoLiveDate || undefined
+      targetGoLiveDate: editProjectForm.targetGoLiveDate || undefined,
+      icon: editProjectForm.icon,
+      colorTheme: editProjectForm.colorTheme
     });
     setIsEditProjectModalOpen(false);
   };
@@ -242,6 +264,17 @@ export default function ProjectView({
     setIsTaskModalOpen(true);
   };
 
+  // Handle Inline Save
+  const handleInlineSave = (taskId: string) => {
+    const task = projectTasks.find(t => t.id === taskId);
+    if (!task) return;
+    
+    onUpdateTask({ ...task, ...inlineEditForm });
+    setInlineEditingTaskId(null);
+    setInlineEditField(null);
+    setInlineEditForm({});
+  };
+
   // Handle Task Submit
   const handleTaskSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -277,7 +310,7 @@ export default function ProjectView({
           return ids;
         };
         const subtaskIds = getSubtaskIds(editingTask.id);
-        
+
         onUpdateTaskAndSubtasks(
           { ...editingTask, ...taskData },
           subtaskIds,
@@ -300,7 +333,7 @@ export default function ProjectView({
     if (!o365Config.isEnabled) {
       onAddToast('O365 Integration is disabled. Set it up in Settings to sync with a real account. Simulating sync instead.', 'info');
     }
-    
+
     setSyncingTaskId(task.id);
     const result = await syncTaskToO365(task, o365Config, !o365Config.isEnabled);
     setSyncingTaskId(null);
@@ -451,7 +484,7 @@ export default function ProjectView({
   // Recursively render hierarchical tasks with dynamic WBS numbering
   const renderTaskTree = (parentId: string | null, depth = 0, parentNumber = '', depthIsLast: boolean[] = []) => {
     const levelTasks = projectTasks.filter(t => t.parentId === parentId);
-    
+
     return levelTasks.map((task, index) => {
       const taskNumber = parentNumber ? `${parentNumber}.${index + 1}` : `${index + 1}`;
 
@@ -470,9 +503,11 @@ export default function ProjectView({
 
       return (
         <div key={task.id} style={{ display: 'flex', flexDirection: 'column' }}>
-          <div 
+          <div
             className={`task-node-row task-status-${task.status} ${isTaskParent ? 'task-parent-row' : ''} ${editMode ? 'task-node-editable' : ''}`}
-            style={{ 
+            onMouseEnter={() => setHoveredTaskId(task.id)}
+            onMouseLeave={() => setHoveredTaskId(null)}
+            style={{
               opacity: task.status === 'completed' ? 0.65 : 1,
               display: 'grid',
               gridTemplateColumns: '1fr 90px 140px 150px 120px 100px',
@@ -501,126 +536,218 @@ export default function ProjectView({
                 ))}
               </div>
               <div style={{ paddingLeft: `${depth * 22}px`, display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0, zIndex: 1 }}>
-              {editMode && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedTaskIds.includes(task.id)}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      setSelectedTaskIds(prev => 
-                        checked ? [...prev, task.id] : prev.filter(id => id !== task.id)
-                      );
+                {editMode && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                    <input type="checkbox" className="win-checkbox"
+                      checked={selectedTaskIds.includes(task.id)}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setSelectedTaskIds(prev =>
+                          checked ? [...prev, task.id] : prev.filter(id => id !== task.id)
+                        );
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ marginRight: '0.25rem', cursor: 'pointer', width: '15px', height: '15px' }}
+                    />
+                    <div style={{ display: 'inline-flex', gap: '0.1rem', marginRight: '0.25rem', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleMoveTask(task.id, 'up'); }}
+                        disabled={isFirstSibling}
+                        style={{ border: 'none', background: 'none', cursor: isFirstSibling ? 'not-allowed' : 'pointer', opacity: isFirstSibling ? 0.25 : 0.75, color: 'var(--text-secondary)', padding: '1px', display: 'flex', alignItems: 'center' }}
+                        title="Move Up"
+                      >
+                        <ChevronUp size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleMoveTask(task.id, 'down'); }}
+                        disabled={isLastSibling}
+                        style={{ border: 'none', background: 'none', cursor: isLastSibling ? 'not-allowed' : 'pointer', opacity: isLastSibling ? 0.25 : 0.75, color: 'var(--text-secondary)', padding: '1px', display: 'flex', alignItems: 'center' }}
+                        title="Move Down"
+                      >
+                        <ChevronDown size={14} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {isTaskParent ? (
+                  <span className="task-node-toggle" onClick={(e) => { e.stopPropagation(); toggleExpand(task.id); }} style={{ padding: '2px' }}>
+                    {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  </span>
+                ) : (
+                  <span style={{ width: '16px', flexShrink: 0 }} />
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                  <span
+                    style={{
+                      textDecoration: task.status === 'completed' ? 'line-through' : 'none',
+                      fontWeight: isTaskParent ? 700 : 500,
+                      fontSize: isTaskParent ? '1.05rem' : '0.92rem',
+                      color: isTaskParent ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      lineHeight: 1.4
                     }}
-                    onClick={(e) => e.stopPropagation()}
-                    style={{ marginRight: '0.25rem', cursor: 'pointer', width: '15px', height: '15px' }}
-                  />
-                  <div style={{ display: 'inline-flex', gap: '0.1rem', marginRight: '0.25rem', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); handleMoveTask(task.id, 'up'); }}
-                      disabled={isFirstSibling}
-                      style={{ border: 'none', background: 'none', cursor: isFirstSibling ? 'not-allowed' : 'pointer', opacity: isFirstSibling ? 0.25 : 0.75, color: 'var(--text-secondary)', padding: '1px', display: 'flex', alignItems: 'center' }}
-                      title="Move Up"
-                    >
-                      <ChevronUp size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); handleMoveTask(task.id, 'down'); }}
-                      disabled={isLastSibling}
-                      style={{ border: 'none', background: 'none', cursor: isLastSibling ? 'not-allowed' : 'pointer', opacity: isLastSibling ? 0.25 : 0.75, color: 'var(--text-secondary)', padding: '1px', display: 'flex', alignItems: 'center' }}
-                      title="Move Down"
-                    >
-                      <ChevronDown size={14} />
-                    </button>
+                    title={task.name}
+                  >
+                    <span style={{ color: 'var(--text-tertiary)', marginRight: '0.4rem', fontWeight: 600 }}>{taskNumber}</span>
+                    {task.name}
+                  </span>
+                  <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.2rem' }}>
+                    {inlineEditingTaskId === task.id && inlineEditField === 'pinkNumber' ? (
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.25rem' }}>
+                        <input
+                          type="text"
+                          autoFocus
+                          className="form-input"
+                          style={{ padding: '0.1rem 0.4rem', fontSize: '0.75rem', height: 'auto', minHeight: '24px', width: '100px' }}
+                          placeholder="Pink #"
+                          value={inlineEditForm.pinkNumber || ''}
+                          onChange={(e) => setInlineEditForm({ ...inlineEditForm, pinkNumber: e.target.value })}
+                        />
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.75rem', cursor: 'pointer', margin: 0 }}>
+                          <input type="checkbox" className="win-checkbox" style={{ width: '14px', height: '14px', margin: 0 }}
+                            checked={inlineEditForm.billed || false}
+                            onChange={(e) => setInlineEditForm({ ...inlineEditForm, billed: e.target.checked })}
+                          /> Billed
+                        </label>
+                        <button type="button" className="btn btn-primary" style={{ padding: '0.15rem', borderRadius: '4px' }} onClick={(e) => { e.stopPropagation(); handleInlineSave(task.id); }}>
+                          <Check size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        {task.pinkNumber && (
+                          <span style={{ fontSize: '0.68rem', backgroundColor: '#fdf2f8', color: '#db2777', border: '1px solid #fbcfe8', padding: '0.05rem 0.35rem', borderRadius: '4px', fontWeight: 600, cursor: 'pointer' }} title="Pink Number" onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('pinkNumber'); setInlineEditForm({ pinkNumber: task.pinkNumber, billed: task.billed }); }}>
+                            Pink #: {task.pinkNumber}
+                          </span>
+                        )}
+                        {task.billed && (
+                          <span style={{ fontSize: '0.68rem', backgroundColor: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', padding: '0.05rem 0.35rem', borderRadius: '4px', fontWeight: 600 }} title="Billed Status">
+                            Billed
+                          </span>
+                        )}
+                        {!task.pinkNumber && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('pinkNumber'); setInlineEditForm({ pinkNumber: '', billed: false }); }}
+                            style={{ 
+                              fontSize: '0.68rem', color: 'var(--text-tertiary)', border: '1px dashed var(--border-color)', background: 'transparent', padding: '0.05rem 0.35rem', borderRadius: '4px', cursor: 'pointer',
+                              opacity: hoveredTaskId === task.id ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: hoveredTaskId === task.id ? 'auto' : 'none'
+                            }}
+                          >
+                            + Add Pink Number
+                          </button>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
-              )}
-              {isTaskParent ? (
-                <span className="task-node-toggle" onClick={(e) => { e.stopPropagation(); toggleExpand(task.id); }} style={{ padding: '2px' }}>
-                  {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                </span>
-              ) : (
-                <span style={{ width: '16px', flexShrink: 0 }} />
-              )}
-              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                <span 
-                  style={{ 
-                    textDecoration: task.status === 'completed' ? 'line-through' : 'none',
-                    fontWeight: isTaskParent ? 700 : 500,
-                    fontSize: isTaskParent ? '1.05rem' : '0.92rem',
-                    color: isTaskParent ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    lineHeight: 1.4
-                  }}
-                  title={task.name}
-                >
-                  <span style={{ color: 'var(--text-tertiary)', marginRight: '0.4rem', fontWeight: 600 }}>{taskNumber}</span>
-                  {task.name}
-                </span>
-                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.2rem' }}>
-                  {task.pinkNumber && (
-                    <span style={{ fontSize: '0.68rem', backgroundColor: '#fdf2f8', color: '#db2777', border: '1px solid #fbcfe8', padding: '0.05rem 0.35rem', borderRadius: '4px', fontWeight: 600 }} title="Pink Number">
-                      Pink #: {task.pinkNumber}
-                    </span>
-                  )}
-                  {task.billed && (
-                    <span style={{ fontSize: '0.68rem', backgroundColor: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', padding: '0.05rem 0.35rem', borderRadius: '4px', fontWeight: 600 }} title="Billed Status">
-                      Billed
-                    </span>
-                  )}
-                </div>
-              </div>
               </div>
             </div>
 
             {/* Col 2: Duration */}
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.84rem', justifyContent: 'center', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', backgroundColor: 'rgba(30, 52, 73, 0.08)', padding: '0.2rem 0.6rem', borderRadius: '12px', border: '1px solid rgba(30, 52, 73, 0.15)' }}>
-              <Clock size={12} style={{ color: '#e58a3e' }} /> {task.durationDays}d
-            </span>
+            {inlineEditingTaskId === task.id && inlineEditField === 'duration' ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', justifyContent: 'center' }}>
+                <input
+                  type="number" step="0.5" min="0.5" autoFocus className="form-input"
+                  style={{ padding: '0.1rem 0.3rem', fontSize: '0.8rem', height: '24px', width: '50px', textAlign: 'center' }}
+                  value={inlineEditForm.durationDays || ''}
+                  onChange={(e) => setInlineEditForm({ ...inlineEditForm, durationDays: parseFloat(e.target.value) || 0 })}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <button type="button" className="btn btn-primary" style={{ padding: '0.15rem' }} onClick={(e) => { e.stopPropagation(); handleInlineSave(task.id); }}><Check size={14} /></button>
+              </div>
+            ) : (
+              <span onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('duration'); setInlineEditForm({ durationDays: task.durationDays }); }} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.84rem', justifyContent: 'center', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', backgroundColor: 'rgba(30, 52, 73, 0.08)', padding: '0.2rem 0.6rem', borderRadius: '12px', border: '1px solid rgba(30, 52, 73, 0.15)', cursor: 'pointer' }}>
+                <Clock size={12} style={{ color: '#e58a3e' }} /> {task.durationDays}d
+              </span>
+            )}
 
             {/* Col 3: Start Date */}
-            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', fontSize: '0.82rem', color: 'var(--text-primary)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', backgroundColor: 'rgba(229, 138, 62, 0.08)', padding: '0.2rem 0.6rem', borderRadius: '12px', border: '1px solid rgba(229, 138, 62, 0.2)' }}>
-              <Calendar size={12} style={{ color: '#1e3449' }} />
-              {task.plannedStartDate ? formatDateFriendly(task.plannedStartDate) : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}
-            </span>
+            {inlineEditingTaskId === task.id && inlineEditField === 'startDate' ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', justifyContent: 'center' }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ width: '110px' }}>
+                  <WinDatePicker 
+                    value={inlineEditForm.customStartDate || ''}
+                    onChange={(value) => setInlineEditForm({ ...inlineEditForm, customStartDate: value })}
+                  />
+                </div>
+                <button type="button" className="btn btn-primary" style={{ padding: '0.15rem' }} onClick={(e) => { e.stopPropagation(); handleInlineSave(task.id); }}><Check size={14} /></button>
+              </div>
+            ) : (
+              <span onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('startDate'); setInlineEditForm({ customStartDate: task.customStartDate || task.plannedStartDate }); }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', fontSize: '0.82rem', color: 'var(--text-primary)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', backgroundColor: 'rgba(229, 138, 62, 0.08)', padding: '0.2rem 0.6rem', borderRadius: '12px', border: '1px solid rgba(229, 138, 62, 0.2)', cursor: 'pointer' }}>
+                <Calendar size={12} style={{ color: '#1e3449' }} />
+                {task.plannedStartDate ? formatDateFriendly(task.plannedStartDate) : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}
+              </span>
+            )}
 
             {/* Col 4: Assignee */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', minWidth: 0, backgroundColor: 'var(--bg-tertiary)', padding: '0.2rem 0.6rem 0.2rem 0.2rem', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
-              {assignedConsultant ? (
-                <>
-                  <span 
-                    style={{ 
-                      width: '22px', height: '22px', borderRadius: '50%', 
-                      backgroundColor: assignedConsultant.avatarColor || '#1e3449',
-                      color: 'white', display: 'flex', alignItems: 'center',
-                      justifyContent: 'center', fontSize: '0.58rem', fontWeight: 'bold',
-                      flexShrink: 0, letterSpacing: '-0.02em',
-                      boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
-                    }}
-                  >
-                    {assignedConsultant.name.split(' ').map(n => n[0]).join('')}
-                  </span>
-                  <span style={{ fontSize: '0.84rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text-secondary)' }}>
-                    {assignedConsultant.name.split(' ')[0]}
-                  </span>
-                </>
-              ) : (
-                <span style={{ color: 'var(--text-tertiary)', fontSize: '0.82rem', fontStyle: 'italic' }}>Unassigned</span>
-              )}
-            </div>
+            {inlineEditingTaskId === task.id && inlineEditField === 'assignee' ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+                <WinComboBox
+                  className="form-select"
+                  value={inlineEditForm.assignedConsultantId || ''}
+                  onChange={(val) => setInlineEditForm({ ...inlineEditForm, assignedConsultantId: val })}
+                  options={[
+                    { label: 'Unassigned', value: '' },
+                    ...consultants.map(c => ({ label: c.name, value: c.id }))
+                  ]}
+                />
+                <button type="button" className="btn btn-primary" style={{ padding: '0.15rem' }} onClick={(e) => { e.stopPropagation(); handleInlineSave(task.id); }}><Check size={14} /></button>
+              </div>
+            ) : (
+              <div onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('assignee'); setInlineEditForm({ assignedConsultantId: task.assignedConsultantId }); }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', minWidth: 0, backgroundColor: 'var(--bg-tertiary)', padding: '0.2rem 0.6rem 0.2rem 0.2rem', borderRadius: '16px', border: '1px solid var(--border-color)', cursor: 'pointer' }}>
+                {assignedConsultant ? (
+                  <>
+                    <span
+                      style={{
+                        width: '22px', height: '22px', borderRadius: '50%',
+                        backgroundColor: assignedConsultant.avatarColor || '#1e3449',
+                        color: 'white', display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', fontSize: '0.58rem', fontWeight: 'bold',
+                        flexShrink: 0, letterSpacing: '-0.02em',
+                        boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+                      }}
+                    >
+                      {assignedConsultant.name.split(' ').map(n => n[0]).join('')}
+                    </span>
+                    <span style={{ fontSize: '0.84rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text-secondary)' }}>
+                      {assignedConsultant.name.split(' ')[0]}
+                    </span>
+                  </>
+                ) : (
+                  <span style={{ color: 'var(--text-tertiary)', fontSize: '0.82rem', fontStyle: 'italic' }}>Unassigned</span>
+                )}
+              </div>
+            )}
 
             {/* Col 5: Status */}
-            <span className={`badge badge-${
-              task.status === 'completed' ? 'success' : 
-              task.status === 'in_progress' ? 'primary' : 
-              task.status === 'on_hold' ? 'warning' : 'secondary'
-            }`} style={{ fontSize: '0.72rem', textAlign: 'center', whiteSpace: 'nowrap', padding: '0.2rem 0.6rem' }}>
-              {task.status.replace('_', ' ')}
-            </span>
+            {inlineEditingTaskId === task.id && inlineEditField === 'status' ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', justifyContent: 'center' }} onClick={(e) => e.stopPropagation()}>
+                <WinComboBox
+                  className="form-select"
+                  value={inlineEditForm.status || 'not_started'}
+                  onChange={(val) => setInlineEditForm({ ...inlineEditForm, status: val as Task['status'] })}
+                  options={[
+                    { label: 'Not Started', value: 'not_started' },
+                    { label: 'In Progress', value: 'in_progress' },
+                    { label: 'On Hold', value: 'on_hold' },
+                    { label: 'Completed', value: 'completed' }
+                  ]}
+                />
+                <button type="button" className="btn btn-primary" style={{ padding: '0.15rem' }} onClick={(e) => { e.stopPropagation(); handleInlineSave(task.id); }}><Check size={14} /></button>
+              </div>
+            ) : (
+              <span onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('status'); setInlineEditForm({ status: task.status }); }} className={`badge badge-${task.status === 'completed' ? 'success' :
+                task.status === 'in_progress' ? 'primary' :
+                  task.status === 'on_hold' ? 'warning' : 'secondary'
+                }`} style={{ justifySelf: 'center', cursor: 'pointer' }}>
+                {task.status.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+              </span>
+            )}
 
             {/* Col 6: Actions — hidden by default, visible on hover */}
             <div className="task-node-actions" onClick={e => e.stopPropagation()}>
@@ -628,18 +755,18 @@ export default function ProjectView({
                 <>
                   {!isTaskParent && (
                     <>
-                      <button 
+                      <button
                         className="btn btn-secondary btn-icon"
-                        title="Sync to MS To-Do"
+                        title="Sync to MS To-Do" aria-label="Sync to MS To-Do"
                         disabled={syncingTaskId === task.id}
                         onClick={() => handleSyncToO365(task)}
                         style={{ color: task.o365TaskId ? 'var(--success)' : 'inherit', padding: '0.25rem' }}
                       >
                         <RefreshCw size={13} className={syncingTaskId === task.id ? 'animate-spin' : ''} />
                       </button>
-                      <button 
+                      <button
                         className="btn btn-secondary btn-icon"
-                        title="Schedule Calendar Event"
+                        title="Schedule Calendar Event" aria-label="Schedule Calendar Event"
                         onClick={() => handleOpenCalendarModal(task)}
                         style={{ color: task.o365CalendarEventId ? 'var(--accent)' : 'inherit', padding: '0.25rem' }}
                       >
@@ -653,9 +780,9 @@ export default function ProjectView({
                 </>
               )}
               {canDeleteTask(activeRole) && (
-                <button 
-                  className="btn btn-secondary btn-icon" 
-                  style={{ color: 'var(--danger)', padding: '0.25rem' }} 
+                <button
+                  className="btn btn-secondary btn-icon"
+                  style={{ color: 'var(--danger)', padding: '0.25rem' }}
                   onClick={() => {
                     if (confirm(`Delete task "${task.name}"? Subtasks will also be deleted.`)) {
                       onDeleteTask(task.id);
@@ -668,7 +795,7 @@ export default function ProjectView({
               )}
             </div>
           </div>
-          
+
           {/* Render children recursively */}
           {isTaskParent && isExpanded && (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -680,21 +807,64 @@ export default function ProjectView({
     });
   };
 
+  // Recursively render dependency checkboxes for the Task Modal
+  const renderDependencyTree = (parentId: string | null, depth = 0, parentNumber = '') => {
+    const levelTasks = projectTasks.filter(t => t.parentId === parentId);
+    if (levelTasks.length === 0) return null;
+
+    return levelTasks.map((task, index) => {
+      // Prevent circular dependencies by not rendering the editing task
+      if (editingTask && task.id === editingTask.id) return null;
+
+      const taskNumber = parentNumber ? `${parentNumber}.${index + 1}` : `${index + 1}`;
+      const isTaskParent = projectTasks.some(t => t.parentId === task.id);
+
+      return (
+        <div key={task.id} style={{ display: 'flex', flexDirection: 'column' }}>
+          <label style={{ 
+            display: 'flex', alignItems: 'center', gap: '0.5rem', 
+            padding: '0.2rem 0', paddingLeft: `${depth * 1.5}rem`,
+            fontSize: '0.825rem', cursor: 'pointer', color: 'var(--text-secondary)' 
+          }}>
+            <input type="checkbox" className="win-checkbox"
+              checked={taskForm.predecessorIds.includes(task.id)}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setTaskForm(prev => ({
+                  ...prev,
+                  predecessorIds: checked 
+                    ? [...prev.predecessorIds, task.id]
+                    : prev.predecessorIds.filter(id => id !== task.id)
+                }));
+              }}
+            />
+            <span style={{ fontWeight: 600, color: 'var(--text-tertiary)', minWidth: '1.5rem', textAlign: 'right' }}>{taskNumber}</span>
+            <span>{task.name}</span>
+          </label>
+          
+          {isTaskParent && (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {renderDependencyTree(task.id, depth + 1, taskNumber)}
+            </div>
+          )}
+        </div>
+      );
+    });
+  };
+
   return (
     <div>
       {/* Project Selector Header */}
       <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        <select 
-          className="form-select" 
-          style={{ maxWidth: '340px', fontSize: '0.9rem', fontWeight: 600 }}
+        <WinComboBox
+          className="form-select"
           value={selectedProjectId || ''}
-          onChange={(e) => onSelectProject(e.target.value || null)}
-        >
-          <option value="">-- Select Project --</option>
-          {projects.map(p => (
-            <option key={p.id} value={p.id}>{p.name} ({p.clientName})</option>
-          ))}
-        </select>
+          onChange={(val) => onSelectProject(val || null)}
+          options={[
+            { label: '-- Select Project --', value: '' },
+            ...projects.map(p => ({ label: `${p.name} (${p.clientName})`, value: p.id }))
+          ]}
+        />
 
         {canCreateProject(activeRole) && (
           <button className="btn btn-primary" onClick={() => setIsNewProjectModalOpen(true)} style={{ whiteSpace: 'nowrap' }}>
@@ -704,7 +874,7 @@ export default function ProjectView({
 
         {activeProject && canEditProject(activeRole) && (
           <div style={{ display: 'flex', gap: '0.35rem', marginLeft: 'auto' }}>
-            <button 
+            <button
               className="btn btn-ghost"
               onClick={() => {
                 setDuplicateForm({
@@ -719,7 +889,7 @@ export default function ProjectView({
             >
               <RefreshCw size={14} /> Duplicate
             </button>
-            <button 
+            <button
               className="btn btn-ghost"
               onClick={() => {
                 setTemplateForm({ name: `${activeProject.name} Template` });
@@ -729,7 +899,7 @@ export default function ProjectView({
             >
               <FolderKanban size={14} /> Template
             </button>
-            <button 
+            <button
               className="btn btn-ghost"
               onClick={() => {
                 setEditProjectForm({
@@ -740,7 +910,9 @@ export default function ProjectView({
                   budgetDays: activeProject.budgetDays,
                   startDate: activeProject.startDate,
                   targetGoLiveDate: activeProject.targetGoLiveDate || '',
-                  consultantIds: activeProject.consultantIds
+                  consultantIds: activeProject.consultantIds,
+                  icon: activeProject.icon || 'Folder',
+                  colorTheme: activeProject.colorTheme || '#0288D1'
                 });
                 setIsEditProjectModalOpen(true);
               }}
@@ -748,8 +920,8 @@ export default function ProjectView({
             >
               <Edit2 size={14} /> Amend
             </button>
-            <button 
-              className="btn btn-ghost" 
+            <button
+              className="btn btn-ghost"
               style={{ color: 'var(--danger)' }}
               onClick={() => {
                 if (confirm(`Are you sure you want to delete project "${activeProject.name}" and all its tasks?`)) {
@@ -769,21 +941,38 @@ export default function ProjectView({
       {activeProject ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           {/* Project Header Card */}
-          <div className="card" style={{ padding: '1.5rem' }}>
+          <div className="card" style={{ padding: '1.5rem', borderTop: `4px solid ${activeProject.colorTheme || 'var(--primary)'}` }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
               {/* Left Side: General Project Info */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span className="badge badge-primary" style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem', fontWeight: 600 }}>
-                    Client: {activeProject.clientName}
-                  </span>
-                </div>
-                <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-                  {activeProject.name}
-                </h2>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', lineHeight: '1.45', margin: 0 }}>
-                  {activeProject.description || 'No description provided.'}
-                </p>
+              <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'flex-start' }}>
+                {activeProject.icon && PROJECT_ICONS.find(i => i.name === activeProject.icon) && (() => {
+                  const IconComp = PROJECT_ICONS.find(i => i.name === activeProject.icon)!.Icon;
+                  return (
+                    <div style={{
+                      width: '64px', height: '64px', flexShrink: 0,
+                      borderRadius: 'var(--radius-lg)',
+                      backgroundColor: activeProject.colorTheme || 'var(--bg-secondary)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: 'rgba(0,0,0,0.6)',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+                      marginTop: '0.25rem'
+                    }}>
+                      <IconComp size={32} />
+                    </div>
+                  );
+                })()}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <span className="badge badge-primary" style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem', fontWeight: 600 }}>
+                      Client: {activeProject.clientName}
+                    </span>
+                  </div>
+                  <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+                    {activeProject.name}
+                  </h2>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', lineHeight: '1.45', margin: 0 }}>
+                    {activeProject.description || 'No description provided.'}
+                  </p>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
                   <span style={{ fontSize: '0.75rem', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', padding: '0.25rem 0.6rem', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-secondary)' }}>
                     <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--primary)' }}></span>
@@ -796,14 +985,15 @@ export default function ProjectView({
                     </span>
                   )}
                 </div>
+                </div>
               </div>
 
               {/* Right Side: Smart summary table */}
-              <div style={{ 
-                backgroundColor: 'var(--bg-secondary)', 
-                border: '1px solid var(--border-color)', 
-                borderRadius: 'var(--radius-md)', 
-                overflow: 'hidden' 
+              <div style={{
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: 'var(--radius-md)',
+                overflow: 'hidden'
               }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', textAlign: 'left' }}>
                   <thead>
@@ -862,7 +1052,7 @@ export default function ProjectView({
             <h3 style={{ fontSize: '1.2rem' }}>Implementation Tasks</h3>
             {canCreateTask(activeRole) && (
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <button 
+                <button
                   className={`btn ${editMode ? 'btn-accent' : 'btn-secondary'}`}
                   onClick={() => {
                     setEditMode(!editMode);
@@ -874,7 +1064,7 @@ export default function ProjectView({
                   <Pencil size={14} />
                   {editMode ? 'Exit Edit Mode' : 'Edit Mode'}
                 </button>
-                <button className="btn btn-primary" onClick={handleOpenCreateTask}>
+                <button className="btn btn-primary" onClick={handleOpenCreateTask} style={{ backgroundColor: activeProject.colorTheme || 'var(--primary)', color: 'white', border: '1px solid rgba(0,0,0,0.1)' }}>
                   <Plus size={16} /> Add Task
                 </button>
               </div>
@@ -882,13 +1072,13 @@ export default function ProjectView({
           </div>
 
           {/* Filters Row */}
-          <div style={{ 
-            display: 'flex', 
-            gap: '1.25rem', 
-            alignItems: 'center', 
-            backgroundColor: 'var(--bg-secondary)', 
-            padding: '0.75rem 1.25rem', 
-            borderRadius: 'var(--radius-md)', 
+          <div style={{
+            display: 'flex',
+            gap: '1.25rem',
+            alignItems: 'center',
+            backgroundColor: 'var(--bg-secondary)',
+            padding: '0.75rem 1.25rem',
+            borderRadius: 'var(--radius-md)',
             border: '1px solid var(--border-color)',
             flexWrap: 'wrap',
             marginBottom: '1rem'
@@ -899,8 +1089,7 @@ export default function ProjectView({
 
             {/* Hide Completed */}
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500 }}>
-              <input 
-                type="checkbox" 
+              <input type="checkbox" className="win-checkbox"
                 checked={hideCompleted}
                 onChange={(e) => setHideCompleted(e.target.checked)}
                 style={{ width: '16px', height: '16px', cursor: 'pointer' }}
@@ -913,16 +1102,16 @@ export default function ProjectView({
             {/* Billed Filter */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Billing:</span>
-              <select 
-                className="form-select" 
-                style={{ padding: '0.2rem 1.5rem 0.2rem 0.5rem', fontSize: '0.8rem', width: 'auto', minWidth: '120px' }}
+              <WinComboBox
+                className="form-select"
                 value={billedFilter}
-                onChange={(e) => setBilledFilter(e.target.value as 'all' | 'only' | 'hide')}
-              >
-                <option value="all">Show All</option>
-                <option value="only">Show Only Billed</option>
-                <option value="hide">Hide Billed</option>
-              </select>
+                onChange={(val) => setBilledFilter(val as 'all' | 'only' | 'hide')}
+                options={[
+                  { label: 'Show All', value: 'all' },
+                  { label: 'Show Only Billed', value: 'only' },
+                  { label: 'Hide Billed', value: 'hide' }
+                ]}
+              />
             </div>
 
             <span style={{ color: 'var(--border-color)', height: '15px', borderLeft: '1px solid currentColor' }} />
@@ -930,18 +1119,16 @@ export default function ProjectView({
             {/* Assignee Filter */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Assignee:</span>
-              <select 
-                className="form-select" 
-                style={{ padding: '0.2rem 1.5rem 0.2rem 0.5rem', fontSize: '0.8rem', width: 'auto', minWidth: '140px' }}
+              <WinComboBox
+                className="form-select"
                 value={assigneeFilter}
-                onChange={(e) => setAssigneeFilter(e.target.value)}
-              >
-                <option value="all">All Assignees</option>
-                <option value="unassigned">Unassigned</option>
-                {consultants.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+                onChange={(val) => setAssigneeFilter(val)}
+                options={[
+                  { label: 'All Assignees', value: 'all' },
+                  { label: 'Unassigned', value: 'unassigned' },
+                  ...consultants.map(c => ({ label: c.name, value: c.id }))
+                ]}
+              />
             </div>
 
             <span style={{ color: 'var(--border-color)', height: '15px', borderLeft: '1px solid currentColor' }} />
@@ -949,23 +1136,23 @@ export default function ProjectView({
             {/* Status Filter */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Status:</span>
-              <select 
-                className="form-select" 
-                style={{ padding: '0.2rem 1.5rem 0.2rem 0.5rem', fontSize: '0.8rem', width: 'auto', minWidth: '130px' }}
+              <WinComboBox
+                className="form-select"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-              >
-                <option value="all">All Statuses</option>
-                <option value="not_started">Not Started</option>
-                <option value="in_progress">In Progress</option>
-                <option value="on_hold">On Hold</option>
-                <option value="completed">Completed</option>
-              </select>
+                onChange={(val) => setStatusFilter(val)}
+                options={[
+                  { label: 'All Statuses', value: 'all' },
+                  { label: 'Not Started', value: 'not_started' },
+                  { label: 'In Progress', value: 'in_progress' },
+                  { label: 'On Hold', value: 'on_hold' },
+                  { label: 'Completed', value: 'completed' }
+                ]}
+              />
             </div>
           </div>
 
           {/* Task Tree Container */}
-          <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+          <div className="card" style={{ padding: 0, overflowX: 'auto', borderTop: `4px solid ${activeProject.colorTheme || 'var(--primary)'}` }}>
             {projectTasks.length === 0 ? (
               <p style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '3rem' }}>
                 No tasks created yet for this project. Click 'Add Task' to build your implementation checklist.
@@ -973,14 +1160,14 @@ export default function ProjectView({
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', minWidth: '750px' }}>
                 {/* Column Headers - matching grid */}
-                <div 
-                  style={{ 
+                <div
+                  style={{
                     display: 'grid',
                     gridTemplateColumns: '1fr 90px 140px 150px 120px 100px',
                     alignItems: 'center',
                     padding: '0.7rem 1.5rem',
                     gap: '1.25rem',
-                    backgroundColor: 'var(--bg-tertiary)',
+                    backgroundColor: activeProject.colorTheme ? `${activeProject.colorTheme}1A` : 'var(--bg-tertiary)',
                     borderBottom: '1px solid var(--border-strong)',
                     fontSize: '0.7rem',
                     fontWeight: 700,
@@ -991,8 +1178,7 @@ export default function ProjectView({
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     {editMode && (
-                      <input
-                        type="checkbox"
+                      <input type="checkbox" className="win-checkbox"
                         checked={projectTasks.length > 0 && selectedTaskIds.length === projectTasks.length}
                         onChange={(e) => {
                           const checked = e.target.checked;
@@ -1041,56 +1227,108 @@ export default function ProjectView({
               <div className="modal-body">
                 <div className="form-group">
                   <label className="form-label">Base on Template (Optional)</label>
-                  <select 
+                  <WinComboBox
                     className="form-select"
                     value={selectedTemplateId}
-                    onChange={(e) => setSelectedTemplateId(e.target.value)}
-                  >
-                    <option value="">-- Start from Scratch (No Template) --</option>
-                    {projectTemplates.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
+                    onChange={(val) => setSelectedTemplateId(val)}
+                    options={[
+                      { label: '-- Start from Scratch (No Template) --', value: '' },
+                      ...projectTemplates.map(t => ({ label: t.name, value: t.id }))
+                    ]}
+                  />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Project Name</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    placeholder="e.g. Sage Intacct Core Phase 1" 
+                  <label htmlFor="form-field-1" className="form-label">Project Name</label>
+                  <input id="form-field-1"
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Sage Intacct Core Phase 1"
                     value={newProject.name}
                     onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
                     required
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Client Name</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    placeholder="e.g. Acme Corp" 
+                  <label htmlFor="form-field-2" className="form-label">Client Name</label>
+                  <input id="form-field-2"
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Acme Corp"
                     value={newProject.clientName}
                     onChange={(e) => setNewProject({ ...newProject, clientName: e.target.value })}
                     required
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Description</label>
-                  <textarea 
-                    className="form-textarea" 
+                  <label htmlFor="form-field-3" className="form-label">Description</label>
+                  <textarea id="form-field-3"
+                    className="form-textarea"
                     placeholder="Describe the scope of implementation..."
                     value={newProject.description}
                     onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
                   />
                 </div>
-                <div className="grid-cols-12">
+                <div className="form-group">
+                  <label className="form-label">Project Theme</label>
+                  <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: '200px' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginBottom: '0.5rem', display: 'block' }}>Icon</span>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {PROJECT_ICONS.map(pi => {
+                          const isSelected = newProject.icon === pi.name;
+                          return (
+                            <button
+                              key={pi.name}
+                              type="button"
+                              onClick={() => setNewProject({ ...newProject, icon: pi.name })}
+                              style={{
+                                width: '32px', height: '32px', borderRadius: 'var(--radius-md)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                backgroundColor: isSelected ? 'var(--primary)' : 'var(--bg-secondary)',
+                                color: isSelected ? 'white' : 'var(--text-secondary)',
+                                border: isSelected ? 'none' : '1px solid var(--border-color)',
+                                cursor: 'pointer', transition: 'all 0.1s'
+                              }}
+                            >
+                              <pi.Icon size={16} />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div style={{ flex: 1, minWidth: '200px' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginBottom: '0.5rem', display: 'block' }}>Color</span>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {PROJECT_COLORS.map(c => {
+                          const isSelected = newProject.colorTheme === c;
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => setNewProject({ ...newProject, colorTheme: c })}
+                              style={{
+                                width: '32px', height: '32px', borderRadius: '50%',
+                                backgroundColor: c,
+                                border: isSelected ? '2px solid var(--primary)' : '1px solid rgba(0,0,0,0.1)',
+                                cursor: 'pointer', transition: 'transform 0.1s',
+                                transform: isSelected ? 'scale(1.15)' : 'scale(1)',
+                                boxShadow: isSelected ? '0 0 0 2px var(--bg-primary) inset' : 'none'
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid-cols-12" style={{ alignItems: 'end' }}>
                   <div className="form-group col-span-4">
-                    <label className="form-label">Total Time Budget (Days)</label>
-                    <input 
-                      type="number" 
+                    <label htmlFor="form-field-4" className="form-label">Budget (Days)</label>
+                    <input id="form-field-4"
+                      type="number"
                       step="0.5"
                       min="0.5"
-                      className="form-input" 
+                      className="form-input"
                       value={newProject.budgetDays}
                       onChange={(e) => setNewProject({ ...newProject, budgetDays: parseFloat(e.target.value) || 0 })}
                       required
@@ -1098,21 +1336,16 @@ export default function ProjectView({
                   </div>
                   <div className="form-group col-span-4">
                     <label className="form-label">Project Start Date</label>
-                    <input 
-                      type="date" 
-                      className="form-input" 
+                    <WinDatePicker 
                       value={newProject.startDate}
-                      onChange={(e) => setNewProject({ ...newProject, startDate: e.target.value })}
-                      required
+                      onChange={(value) => setNewProject({ ...newProject, startDate: value })}
                     />
                   </div>
                   <div className="form-group col-span-4">
-                    <label className="form-label">Target Go-Live Date (Optional)</label>
-                    <input 
-                      type="date" 
-                      className="form-input" 
+                    <label className="form-label">Go Live Date</label>
+                    <WinDatePicker 
                       value={newProject.targetGoLiveDate}
-                      onChange={(e) => setNewProject({ ...newProject, targetGoLiveDate: e.target.value })}
+                      onChange={(value) => setNewProject({ ...newProject, targetGoLiveDate: value })}
                     />
                   </div>
                 </div>
@@ -1139,44 +1372,97 @@ export default function ProjectView({
             <form onSubmit={handleEditProjectSubmit}>
               <div className="modal-body">
                 <div className="form-group">
-                  <label className="form-label">Project Name</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    placeholder="e.g. Sage Intacct Core Phase 1" 
+                  <label htmlFor="form-field-5" className="form-label">Project Name</label>
+                  <input id="form-field-5"
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Sage Intacct Core Phase 1"
                     value={editProjectForm.name}
                     onChange={(e) => setEditProjectForm({ ...editProjectForm, name: e.target.value })}
                     required
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Client Name</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    placeholder="e.g. Acme Corp" 
+                  <label htmlFor="form-field-6" className="form-label">Client Name</label>
+                  <input id="form-field-6"
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Acme Corp"
                     value={editProjectForm.clientName}
                     onChange={(e) => setEditProjectForm({ ...editProjectForm, clientName: e.target.value })}
                     required
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Description</label>
-                  <textarea 
-                    className="form-textarea" 
+                  <label htmlFor="form-field-7" className="form-label">Description</label>
+                  <textarea id="form-field-7"
+                    className="form-textarea"
                     placeholder="Describe the scope of implementation..."
                     value={editProjectForm.description}
                     onChange={(e) => setEditProjectForm({ ...editProjectForm, description: e.target.value })}
                   />
                 </div>
-                <div className="grid-cols-12">
+                <div className="form-group">
+                  <label className="form-label">Project Theme</label>
+                  <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: '200px' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginBottom: '0.5rem', display: 'block' }}>Icon</span>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {PROJECT_ICONS.map(pi => {
+                          const isSelected = editProjectForm.icon === pi.name;
+                          return (
+                            <button
+                              key={pi.name}
+                              type="button"
+                              onClick={() => setEditProjectForm({ ...editProjectForm, icon: pi.name })}
+                              style={{
+                                width: '32px', height: '32px', borderRadius: 'var(--radius-md)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                backgroundColor: isSelected ? 'var(--primary)' : 'var(--bg-secondary)',
+                                color: isSelected ? 'white' : 'var(--text-secondary)',
+                                border: isSelected ? 'none' : '1px solid var(--border-color)',
+                                cursor: 'pointer', transition: 'all 0.1s'
+                              }}
+                            >
+                              <pi.Icon size={16} />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div style={{ flex: 1, minWidth: '200px' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginBottom: '0.5rem', display: 'block' }}>Color</span>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {PROJECT_COLORS.map(c => {
+                          const isSelected = editProjectForm.colorTheme === c;
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => setEditProjectForm({ ...editProjectForm, colorTheme: c })}
+                              style={{
+                                width: '32px', height: '32px', borderRadius: '50%',
+                                backgroundColor: c,
+                                border: isSelected ? '2px solid var(--primary)' : '1px solid rgba(0,0,0,0.1)',
+                                cursor: 'pointer', transition: 'transform 0.1s',
+                                transform: isSelected ? 'scale(1.15)' : 'scale(1)',
+                                boxShadow: isSelected ? '0 0 0 2px var(--bg-primary) inset' : 'none'
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid-cols-12" style={{ alignItems: 'end' }}>
                   <div className="form-group col-span-4">
-                    <label className="form-label">Total Time Budget (Days)</label>
-                    <input 
-                      type="number" 
+                    <label htmlFor="form-field-8" className="form-label">Budget (Days)</label>
+                    <input id="form-field-8"
+                      type="number"
                       step="0.5"
                       min="0.5"
-                      className="form-input" 
+                      className="form-input"
                       value={editProjectForm.budgetDays}
                       onChange={(e) => setEditProjectForm({ ...editProjectForm, budgetDays: parseFloat(e.target.value) || 0 })}
                       required
@@ -1184,21 +1470,16 @@ export default function ProjectView({
                   </div>
                   <div className="form-group col-span-4">
                     <label className="form-label">Project Start Date</label>
-                    <input 
-                      type="date" 
-                      className="form-input" 
+                    <WinDatePicker 
                       value={editProjectForm.startDate}
-                      onChange={(e) => setEditProjectForm({ ...editProjectForm, startDate: e.target.value })}
-                      required
+                      onChange={(value) => setEditProjectForm({ ...editProjectForm, startDate: value })}
                     />
                   </div>
                   <div className="form-group col-span-4">
-                    <label className="form-label">Target Go-Live Date</label>
-                    <input 
-                      type="date" 
-                      className="form-input" 
+                    <label className="form-label">Go Live Date</label>
+                    <WinDatePicker 
                       value={editProjectForm.targetGoLiveDate}
-                      onChange={(e) => setEditProjectForm({ ...editProjectForm, targetGoLiveDate: e.target.value })}
+                      onChange={(value) => setEditProjectForm({ ...editProjectForm, targetGoLiveDate: value })}
                     />
                   </div>
                 </div>
@@ -1218,10 +1499,10 @@ export default function ProjectView({
           <div className="modal-container" style={{ maxWidth: '800px', width: '92%', maxHeight: '90vh' }}>
             <div className="modal-header" style={{ padding: '1.25rem 1.5rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ 
-                  backgroundColor: 'var(--primary-light)', 
-                  color: 'var(--primary)', 
-                  padding: '0.4rem', 
+                <span style={{
+                  backgroundColor: 'var(--primary-light)',
+                  color: 'var(--primary)',
+                  padding: '0.4rem',
                   borderRadius: '6px',
                   display: 'inline-flex'
                 }}>
@@ -1235,15 +1516,15 @@ export default function ProjectView({
                 <X size={18} />
               </button>
             </div>
-            
+
             <form onSubmit={handleTaskSubmit} style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <div className="modal-body" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', overflowY: 'auto' }}>
-                
+
                 {/* 2-Column Responsive Grid */}
-                <div style={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
-                  gap: '1.5rem' 
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                  gap: '1.5rem'
                 }}>
                   {/* Left Column: Core Fields */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -1254,11 +1535,11 @@ export default function ProjectView({
                     </div>
 
                     <div className="form-group" style={{ margin: 0 }}>
-                      <label className="form-label">Task Name</label>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        placeholder="e.g. Chart of Accounts Setup" 
+                      <label htmlFor="form-field-9" className="form-label">Task Name</label>
+                      <input id="form-field-9"
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. Chart of Accounts Setup"
                         value={taskForm.name}
                         onChange={(e) => setTaskForm({ ...taskForm, name: e.target.value })}
                         required
@@ -1268,14 +1549,12 @@ export default function ProjectView({
                     {/* Start Date & Duration */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                       <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <label htmlFor="form-field-1" className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                           <Calendar size={12} /> Start Date
                         </label>
-                        <input 
-                          type="date" 
-                          className="form-input" 
+                        <WinDatePicker 
                           value={taskForm.customStartDate || ''}
-                          onChange={(e) => setTaskForm({ ...taskForm, customStartDate: e.target.value })}
+                          onChange={(value) => setTaskForm({ ...taskForm, customStartDate: value })}
                         />
                       </div>
 
@@ -1283,11 +1562,11 @@ export default function ProjectView({
                         <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                           <Clock size={12} /> Duration (Days)
                         </label>
-                        <input 
-                          type="number" 
+                        <input id="form-field-1"
+                          type="number"
                           step="0.5"
                           min="0.5"
-                          className="form-input" 
+                          className="form-input"
                           value={taskForm.durationDays}
                           onChange={(e) => setTaskForm({ ...taskForm, durationDays: parseFloat(e.target.value) || 0.5 })}
                           required
@@ -1299,43 +1578,43 @@ export default function ProjectView({
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                       <div className="form-group" style={{ margin: 0 }}>
                         <label className="form-label">Parent Task</label>
-                        <select 
+                        <WinComboBox
                           className="form-select"
-                          value={taskForm.parentId}
-                          onChange={(e) => setTaskForm({ ...taskForm, parentId: e.target.value })}
-                        >
-                          <option value="">None (Top-Level)</option>
-                          {projectTasks
-                            .filter(t => t.id !== editingTask?.id && !isParent(t.id))
-                            .map(t => (
-                              <option key={t.id} value={t.id}>{t.name}</option>
-                            ))}
-                        </select>
+                          value={taskForm.parentId || ''}
+                          onChange={(val) => setTaskForm({ ...taskForm, parentId: val })}
+                          options={[
+                            { label: 'None (Top-Level)', value: '' },
+                            ...projectTasks
+                              .filter(t => t.id !== editingTask?.id && !isParent(t.id))
+                              .map(t => ({ label: t.name, value: t.id }))
+                          ]}
+                        />
                       </div>
 
                       <div className="form-group" style={{ margin: 0 }}>
                         <label className="form-label">Task Status</label>
-                        <select 
+                        <WinComboBox
                           className="form-select"
                           value={taskForm.status}
-                          onChange={(e) => setTaskForm({ ...taskForm, status: e.target.value as Task['status'] })}
-                        >
-                          <option value="not_started">Not Started</option>
-                          <option value="in_progress">In Progress</option>
-                          <option value="on_hold">On Hold</option>
-                          <option value="completed">Completed</option>
-                        </select>
+                          onChange={(val) => setTaskForm({ ...taskForm, status: val as Task['status'] })}
+                          options={[
+                            { label: 'Not Started', value: 'not_started' },
+                            { label: 'In Progress', value: 'in_progress' },
+                            { label: 'On Hold', value: 'on_hold' },
+                            { label: 'Completed', value: 'completed' }
+                          ]}
+                        />
                       </div>
                     </div>
 
                     {/* Pink Number & Billed Checkbox */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '0.75rem', alignItems: 'center' }}>
                       <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label">Pink Number</label>
-                        <input 
-                          type="text" 
-                          className="form-input" 
-                          placeholder="e.g. PN-12345" 
+                        <label htmlFor="form-field-10" className="form-label">Pink Number</label>
+                        <input id="form-field-10"
+                          type="text"
+                          className="form-input"
+                          placeholder="e.g. PN-12345"
                           value={taskForm.pinkNumber}
                           onChange={(e) => setTaskForm({ ...taskForm, pinkNumber: e.target.value })}
                         />
@@ -1343,8 +1622,7 @@ export default function ProjectView({
 
                       <div className="form-group" style={{ margin: 0, display: 'flex', alignItems: 'center', height: '100%', paddingTop: '1.4rem' }}>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
-                          <input 
-                            type="checkbox" 
+                          <input type="checkbox" className="win-checkbox"
                             checked={taskForm.billed}
                             onChange={(e) => setTaskForm({ ...taskForm, billed: e.target.checked })}
                             style={{ width: '16px', height: '16px', cursor: 'pointer' }}
@@ -1365,57 +1643,35 @@ export default function ProjectView({
 
                     <div className="form-group" style={{ margin: 0 }}>
                       <label className="form-label">Assigned Consultant</label>
-                      <select 
+                      <WinComboBox
                         className="form-select"
-                        value={taskForm.assignedConsultantId}
-                        onChange={(e) => setTaskForm({ ...taskForm, assignedConsultantId: e.target.value })}
-                      >
-                        <option value="">Unassigned</option>
-                        {consultants.map(c => (
-                          <option key={c.id} value={c.id}>{c.name} ({c.role})</option>
-                        ))}
-                      </select>
+                        value={taskForm.assignedConsultantId || ''}
+                        onChange={(val) => setTaskForm({ ...taskForm, assignedConsultantId: val })}
+                        options={[
+                          { label: 'Unassigned', value: '' },
+                          ...consultants.map(c => ({ label: `${c.name} (${c.role})`, value: c.id }))
+                        ]}
+                      />
                     </div>
-
                     <div className="form-group" style={{ margin: 0 }}>
-                      <label className="form-label">Predecessors (Dependencies)</label>
-                      <div style={{ 
-                        maxHeight: '140px', 
-                        overflowY: 'auto', 
-                        border: '1px solid var(--border-color)', 
+                      <label className="form-label">Dependency</label>
+                      <div style={{
+                        maxHeight: '140px',
+                        overflowY: 'auto',
+                        border: '1px solid var(--border-color)',
                         borderRadius: 'var(--radius-md)',
                         padding: '0.5rem 0.75rem',
                         backgroundColor: 'var(--bg-secondary)',
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: '0.35rem'
+                        gap: '0.15rem'
                       }}>
                         {projectTasks.filter(t => t.id !== editingTask?.id).length === 0 ? (
                           <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', fontStyle: 'italic', padding: '0.5rem 0' }}>
                             No other tasks available for dependency links.
                           </span>
                         ) : (
-                          projectTasks
-                            .filter(t => t.id !== editingTask?.id)
-                            .map(t => (
-                              <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.15rem 0', fontSize: '0.825rem', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-                                <input 
-                                  type="checkbox" 
-                                  checked={taskForm.predecessorIds.includes(t.id)}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked;
-                                    setTaskForm(prev => ({
-                                      ...prev,
-                                      predecessorIds: checked 
-                                        ? [...prev.predecessorIds, t.id]
-                                        : prev.predecessorIds.filter(id => id !== t.id)
-                                    }));
-                                  }}
-                                  style={{ cursor: 'pointer' }}
-                                />
-                                <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{t.name}</span>
-                              </label>
-                            ))
+                          renderDependencyTree(null, 0, '')
                         )}
                       </div>
                     </div>
@@ -1429,9 +1685,9 @@ export default function ProjectView({
                       Additional Notes
                     </span>
                   </div>
-                  <label className="form-label">Task Description</label>
-                  <textarea 
-                    className="form-textarea" 
+                  <label htmlFor="form-field-11" className="form-label">Task Description</label>
+                  <textarea id="form-field-11"
+                    className="form-textarea"
                     placeholder="Provide execution steps or details..."
                     value={taskForm.description}
                     onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
@@ -1441,16 +1697,15 @@ export default function ProjectView({
 
                 {/* Apply to Subtasks Warning */}
                 {editingTask && isParent(editingTask.id) && (
-                  <div style={{ 
-                    padding: '0.75rem 1rem', 
-                    backgroundColor: 'var(--primary-light)', 
+                  <div style={{
+                    padding: '0.75rem 1rem',
+                    backgroundColor: 'var(--primary-light)',
                     borderRadius: 'var(--radius-md)',
                     border: '1px solid var(--border-color)',
                     marginTop: '0.25rem'
                   }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
-                      <input 
-                        type="checkbox"
+                      <input type="checkbox" className="win-checkbox"
                         checked={applyToSubtasks}
                         onChange={(e) => setApplyToSubtasks(e.target.checked)}
                         style={{ cursor: 'pointer' }}
@@ -1464,7 +1719,7 @@ export default function ProjectView({
                 )}
 
               </div>
-              
+
               <div className="modal-footer" style={{ padding: '1rem 1.5rem' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setIsTaskModalOpen(false)}>Cancel</button>
                 <button type="submit" className="btn btn-primary">
@@ -1488,17 +1743,17 @@ export default function ProjectView({
             </div>
             <form onSubmit={handleCalendarSubmit}>
               <div className="modal-body">
-                <div 
-                  style={{ 
-                    backgroundColor: 'var(--accent-light)', 
-                    color: 'var(--accent)', 
-                    padding: '0.75rem 1rem', 
-                    borderRadius: 'var(--radius-md)', 
-                    fontSize: '0.85rem', 
-                    display: 'flex', 
-                    alignItems: 'center', 
+                <div
+                  style={{
+                    backgroundColor: 'var(--accent-light)',
+                    color: 'var(--accent)',
+                    padding: '0.75rem 1rem',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: '0.85rem',
+                    display: 'flex',
+                    alignItems: 'center',
                     gap: '0.5rem',
-                    marginBottom: '1.25rem' 
+                    marginBottom: '1.25rem'
                   }}
                 >
                   <MailCheck size={16} />
@@ -1506,32 +1761,32 @@ export default function ProjectView({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Subject</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
+                  <label htmlFor="form-field-12" className="form-label">Subject</label>
+                  <input id="form-field-12"
+                    type="text"
+                    className="form-input"
                     value={calendarForm.title}
                     onChange={(e) => setCalendarForm({ ...calendarForm, title: e.target.value })}
                     required
                   />
                 </div>
 
-                <div className="grid-cols-12">
+                <div className="grid-cols-12" style={{ alignItems: 'end' }}>
                   <div className="form-group col-span-6">
-                    <label className="form-label">Start Time</label>
-                    <input 
-                      type="time" 
-                      className="form-input" 
+                    <label htmlFor="form-field-13" className="form-label">Start Time</label>
+                    <input id="form-field-13"
+                      type="time"
+                      className="form-input"
                       value={calendarForm.startTime}
                       onChange={(e) => setCalendarForm({ ...calendarForm, startTime: e.target.value })}
                       required
                     />
                   </div>
                   <div className="form-group col-span-6">
-                    <label className="form-label">End Time</label>
-                    <input 
-                      type="time" 
-                      className="form-input" 
+                    <label htmlFor="form-field-14" className="form-label">End Time</label>
+                    <input id="form-field-14"
+                      type="time"
+                      className="form-input"
                       value={calendarForm.endTime}
                       onChange={(e) => setCalendarForm({ ...calendarForm, endTime: e.target.value })}
                       required
@@ -1540,9 +1795,9 @@ export default function ProjectView({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Description / Agenda</label>
-                  <textarea 
-                    className="form-textarea" 
+                  <label htmlFor="form-field-15" className="form-label">Description / Agenda</label>
+                  <textarea id="form-field-15"
+                    className="form-textarea"
                     rows={4}
                     value={calendarForm.description}
                     onChange={(e) => setCalendarForm({ ...calendarForm, description: e.target.value })}
@@ -1552,14 +1807,13 @@ export default function ProjectView({
                 <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '0.75rem', backgroundColor: 'var(--bg-tertiary)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 500 }}>
-                      <User size={14} /> 
+                      <User size={14} />
                       Invited Assignee: <b>
                         {consultants.find(c => c.id === calendarTask.assignedConsultantId)?.name || 'Unassigned'}
                       </b>
                     </span>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
-                      <input 
-                        type="checkbox" 
+                      <input type="checkbox" className="win-checkbox"
                         checked={calendarForm.sendInvites}
                         onChange={(e) => setCalendarForm({ ...calendarForm, sendInvites: e.target.checked })}
                       />
@@ -1592,20 +1846,20 @@ export default function ProjectView({
             <form onSubmit={handleDuplicateSubmit}>
               <div className="modal-body">
                 <div className="form-group">
-                  <label className="form-label">New Project Name</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
+                  <label htmlFor="form-field-16" className="form-label">New Project Name</label>
+                  <input id="form-field-16"
+                    type="text"
+                    className="form-input"
                     value={duplicateForm.name}
                     onChange={(e) => setDuplicateForm({ ...duplicateForm, name: e.target.value })}
                     required
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">New Client Name</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
+                  <label htmlFor="form-field-17" className="form-label">New Client Name</label>
+                  <input id="form-field-17"
+                    type="text"
+                    className="form-input"
                     value={duplicateForm.clientName}
                     onChange={(e) => setDuplicateForm({ ...duplicateForm, clientName: e.target.value })}
                     required
@@ -1613,17 +1867,13 @@ export default function ProjectView({
                 </div>
                 <div className="form-group">
                   <label className="form-label">New Project Start Date</label>
-                  <input 
-                    type="date" 
-                    className="form-input" 
+                  <WinDatePicker 
                     value={duplicateForm.startDate}
-                    onChange={(e) => setDuplicateForm({ ...duplicateForm, startDate: e.target.value })}
-                    required
+                    onChange={(value) => setDuplicateForm({ ...duplicateForm, startDate: value })}
                   />
                 </div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.875rem' }}>
-                  <input 
-                    type="checkbox"
+                  <input type="checkbox" className="win-checkbox"
                     checked={duplicateForm.copyAssignments}
                     onChange={(e) => setDuplicateForm({ ...duplicateForm, copyAssignments: e.target.checked })}
                   />
@@ -1652,10 +1902,10 @@ export default function ProjectView({
             <form onSubmit={handleSaveTemplateSubmit}>
               <div className="modal-body">
                 <div className="form-group">
-                  <label className="form-label">Template Reference Name</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
+                  <label htmlFor="form-field-18" className="form-label">Template Reference Name</label>
+                  <input id="form-field-18"
+                    type="text"
+                    className="form-input"
                     placeholder="e.g. Sage Intacct Standard Light implementation"
                     value={templateForm.name}
                     onChange={(e) => setTemplateForm({ name: e.target.value })}
@@ -1677,7 +1927,7 @@ export default function ProjectView({
 
       {/* FLOATING BULK ACTIONS TOOLBAR */}
       {editMode && selectedTaskIds.length > 0 && (
-        <div 
+        <div
           style={{
             position: 'fixed',
             bottom: '2rem',
@@ -1707,78 +1957,73 @@ export default function ProjectView({
             {/* Status Select */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>Status:</span>
-              <select 
-                className="form-select" 
-                style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem', height: 'auto', width: 'auto', minWidth: '120px' }}
-                onChange={(e) => {
-                  handleBulkStatusChange(e.target.value as Task['status']);
-                  e.target.value = '';
+              <WinComboBox
+                className="form-select"
+                value=""
+                onChange={(val) => {
+                  if (val) handleBulkStatusChange(val as Task['status']);
                 }}
-                defaultValue=""
-              >
-                <option value="" disabled>Change Status...</option>
-                <option value="not_started">Not Started</option>
-                <option value="in_progress">In Progress</option>
-                <option value="completed">Completed</option>
-                <option value="blocked">Blocked</option>
-              </select>
+                options={[
+                  { label: 'Change Status...', value: '' },
+                  { label: 'Not Started', value: 'not_started' },
+                  { label: 'In Progress', value: 'in_progress' },
+                  { label: 'Completed', value: 'completed' },
+                  { label: 'Blocked', value: 'blocked' }
+                ]}
+              />
             </div>
 
             {/* Assignee Select */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>Assignee:</span>
-              <select 
-                className="form-select" 
-                style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem', height: 'auto', width: 'auto', minWidth: '140px' }}
-                onChange={(e) => {
-                  handleBulkAssigneeChange(e.target.value);
-                  e.target.value = '';
+              <WinComboBox
+                className="form-select"
+                value=""
+                onChange={(val) => {
+                  if (val) handleBulkAssigneeChange(val);
                 }}
-                defaultValue=""
-              >
-                <option value="" disabled>Change Assignee...</option>
-                <option value="unassigned">Unassigned</option>
-                {consultants.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+                options={[
+                  { label: 'Change Assignee...', value: '' },
+                  { label: 'Unassigned', value: 'unassigned' },
+                  ...consultants.map(c => ({ label: c.name, value: c.id }))
+                ]}
+              />
             </div>
 
             {/* Billed Select */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>Billing:</span>
-              <select 
-                className="form-select" 
-                style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem', height: 'auto', width: 'auto', minWidth: '130px' }}
-                onChange={(e) => {
-                  handleBulkBillingChange(e.target.value === 'billed');
-                  e.target.value = '';
+              <WinComboBox
+                className="form-select"
+                value=""
+                onChange={(val) => {
+                  if (val) handleBulkBillingChange(val === 'billed');
                 }}
-                defaultValue=""
-              >
-                <option value="" disabled>Change Billing...</option>
-                <option value="billed">Mark as Billed</option>
-                <option value="unbilled">Mark as Unbilled</option>
-              </select>
+                options={[
+                  { label: 'Change Billing...', value: '' },
+                  { label: 'Mark as Billed', value: 'billed' },
+                  { label: 'Mark as Unbilled', value: 'unbilled' }
+                ]}
+              />
             </div>
 
             {/* Set Duration */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>Duration:</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                <input 
-                  type="number" 
-                  step="0.5" 
+                <input
+                  type="number"
+                  step="0.5"
                   min="0"
-                  className="form-input" 
+                  className="form-input"
                   placeholder="days"
                   value={bulkDuration}
                   onChange={(e) => setBulkDuration(e.target.value)}
                   style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem', width: '70px', height: 'auto' }}
                 />
-                <button 
-                  type="button" 
-                  className="btn btn-secondary" 
+                <button
+                  type="button"
+                  className="btn btn-secondary"
                   onClick={handleBulkDurationApply}
                   style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}
                 >
@@ -1790,9 +2035,9 @@ export default function ProjectView({
             <div style={{ width: '1px', height: '20px', backgroundColor: 'var(--border-color)' }} />
 
             {/* Delete button */}
-            <button 
-              type="button" 
-              className="btn btn-danger" 
+            <button
+              type="button"
+              className="btn btn-danger"
               onClick={handleBulkDeleteApply}
               style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
             >
@@ -1801,9 +2046,9 @@ export default function ProjectView({
             </button>
 
             {/* Deselect All button */}
-            <button 
-              type="button" 
-              className="btn btn-secondary" 
+            <button
+              type="button"
+              className="btn btn-secondary"
               onClick={() => setSelectedTaskIds([])}
               style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
             >

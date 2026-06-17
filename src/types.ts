@@ -20,6 +20,8 @@ export interface Project {
   consultantIds: string[]; // List of consultant IDs assigned
   createdAt: string;
   isTemplate?: boolean;
+  icon?: string;
+  colorTheme?: string;
 }
 
 export interface Task {

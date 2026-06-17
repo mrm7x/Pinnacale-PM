@@ -1,80 +1,94 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
-
+/* WinUI 3 Font Stack */
 :root {
-  --bg-primary: #f5f6fa;
-  --bg-secondary: #ffffff;
-  --bg-tertiary: #f0f1f5;
-  --bg-elevated: #ffffff;
-  --text-primary: #1a1d2e;
-  --text-secondary: #5c6078;
-  --text-tertiary: #9499b3;
-  --border-color: rgba(0, 0, 0, 0.06);
+  --bg-primary: #f3f3f3; /* Mica fallback */
+  --mica-bg: radial-gradient(circle at 50% -20%, #e2f1ff, #f3f3f3 60%);
+  --bg-secondary: rgba(255, 255, 255, 0.7); /* Card/Acrylic */
+  --bg-tertiary: rgba(251, 251, 251, 0.6); /* Input/Button rest */
+  --bg-elevated: rgba(255, 255, 255, 0.85);
+  --text-primary: #1a1a1a;
+  --text-secondary: #5d5d5d;
+  --text-tertiary: #8b8b8b;
+  --border-color: rgba(0, 0, 0, 0.05);
   --border-strong: rgba(0, 0, 0, 0.1);
 
-  --primary: #2d4a65;
-  --primary-hover: #1f3a54;
-  --primary-light: #edf2f7;
-  --primary-dark: #1b2d3d;
+  --control-fill: rgba(255, 255, 255, 0.7);
+  --control-fill-hover: rgba(249, 249, 249, 0.5);
+  --control-fill-active: rgba(249, 249, 249, 0.3);
+  --input-fill: rgba(255, 255, 255, 0.7);
+  --input-border-bottom: rgba(0, 0, 0, 0.42);
 
-  --accent: #cc7730;
-  --accent-light: #fdf5ee;
+  --primary: #005fb8; /* Windows 11 Blue */
+  --primary-hover: #0056a3;
+  --primary-light: #cce4f6;
+  --primary-dark: #003e78;
 
-  --success: #22a352;
-  --success-light: #ecfdf3;
-  --warning: #e5960a;
-  --warning-light: #fef9ec;
-  --danger: #e5483d;
-  --danger-light: #fef2f1;
+  --accent: #005fb8;
+  --accent-light: #e6f0f8;
 
-  --font-heading: 'Outfit', sans-serif;
-  --font-body: 'Inter', sans-serif;
+  --success: #0f7b0f;
+  --success-light: #dff6dd;
+  --warning: #9d5d00;
+  --warning-light: #fff4ce;
+  --danger: #c42b1c;
+  --danger-light: #fde7e9;
+
+  --font-heading: 'Segoe UI Variable Display', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
 
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
-  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.14);
+  --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.18);
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.08);
 
-  --radius-sm: 0.5rem;
-  --radius-md: 0.625rem;
-  --radius-lg: 0.875rem;
-  --radius-xl: 1.25rem;
+  --radius-sm: 4px; /* Buttons, TextBoxes */
+  --radius-md: 8px; /* Cards, Flyouts */
+  --radius-lg: 8px;
+  --radius-xl: 12px;
 
-  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: 0.1s ease-out;
+  --transition-normal: 0.2s ease-out;
 }
 
 :root.dark {
-  --bg-primary: #0c0e18;
-  --bg-secondary: #14172a;
-  --bg-tertiary: #1c2038;
-  --bg-elevated: #1e2240;
-  --text-primary: #eef0f6;
-  --text-secondary: #b0b5cc;
-  --text-tertiary: #6b7194;
-  --border-color: rgba(255, 255, 255, 0.06);
-  --border-strong: rgba(255, 255, 255, 0.1);
+  color-scheme: dark;
+  --bg-primary: #202020; /* Dark Mica fallback */
+  --mica-bg: radial-gradient(circle at 50% -20%, #1a3a4d, #202020 60%);
+  --bg-secondary: rgba(44, 44, 44, 0.7); /* Card/Acrylic */
+  --bg-tertiary: rgba(45, 45, 45, 0.6); /* Input/Button rest */
+  --bg-elevated: rgba(51, 51, 51, 0.85);
+  --text-primary: #ffffff;
+  --text-secondary: #d1d1d1;
+  --text-tertiary: #b3b3b3;
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.15);
 
-  --primary: #5d8bb5;
-  --primary-hover: #6e9cc6;
-  --primary-light: #1a2640;
-  --primary-dark: #8bb8e0;
+  --control-fill: rgba(255, 255, 255, 0.06);
+  --control-fill-hover: rgba(255, 255, 255, 0.08);
+  --control-fill-active: rgba(255, 255, 255, 0.03);
+  --input-fill: rgba(255, 255, 255, 0.05);
+  --input-border-bottom: rgba(255, 255, 255, 0.54);
 
-  --accent: #e69148;
-  --accent-light: #2a1e0e;
+  --primary: #60cdff; /* Windows 11 Blue (Dark) */
+  --primary-hover: #55b7e5;
+  --primary-light: #183340;
+  --primary-dark: #60cdff;
 
-  --success: #34d669;
-  --success-light: #0d2618;
-  --warning: #f0a820;
-  --warning-light: #2a1e06;
-  --danger: #f06b62;
-  --danger-light: #2a1210;
+  --accent: #60cdff;
+  --accent-light: #183340;
 
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.4);
-  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.3);
+  --success: #6ccb5f;
+  --success-light: #1a3317;
+  --warning: #fce100;
+  --warning-light: #332d00;
+  --danger: #ff99a4;
+  --danger-light: #331e21;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.5);
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
 /* ===== Global Reset ===== */
@@ -84,8 +98,21 @@
   padding: 0;
 }
 
+/* Accessibility Focus Rings */
+*:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.btn:focus-visible, .form-input:focus-visible, .form-select:focus-visible, .form-textarea:focus-visible, .win-checkbox:focus-visible, .win-radio:focus-visible, .nav-item:focus-visible {
+  outline: 2px solid var(--primary) !important;
+  outline-offset: 2px !important;
+}
+
 body {
   background-color: var(--bg-primary);
+  background-image: var(--mica-bg);
+  background-attachment: fixed;
   color: var(--text-primary);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
@@ -93,15 +120,14 @@ body {
   transition: background-color var(--transition-normal), color var(--transition-normal);
   overflow-x: hidden;
   height: 100vh;
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 14px; /* WinUI standard body text size */
+  line-height: 1.5;
 }
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
   font-weight: 600;
   color: var(--text-primary);
-  letter-spacing: -0.01em;
 }
 
 /* ===== App Layout ===== */
@@ -114,8 +140,7 @@ h1, h2, h3, h4, h5, h6 {
 
 /* ===== Sidebar ===== */
 .sidebar {
-  background-color: var(--bg-secondary);
-  border-right: 1px solid var(--border-color);
+  background-color: transparent;
   display: flex;
   flex-direction: column;
   padding: 2rem 1.25rem;
@@ -163,34 +188,44 @@ h1, h2, h3, h4, h5, h6 {
   display: flex;
   align-items: center;
   gap: 0.85rem;
-  padding: 0.7rem 1rem;
-  color: var(--text-secondary);
-  font-weight: 500;
-  font-size: 0.9rem;
-  border-radius: var(--radius-md);
+  padding: 0.6rem 0.8rem;
+  color: var(--text-primary);
+  font-weight: 400;
+  font-size: 14px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   text-decoration: none;
   transition: all var(--transition-fast);
   border: none;
-  border-left: 3px solid transparent;
+  background-color: transparent;
+  position: relative;
 }
 
 .nav-item:hover {
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
+  background-color: rgba(0, 0, 0, 0.04);
+}
+:root.dark .nav-item:hover {
+  background-color: rgba(255, 255, 255, 0.06);
 }
 
 .nav-item.active {
-  background-color: var(--primary-light);
-  color: var(--primary);
+  background-color: rgba(0, 0, 0, 0.04);
   font-weight: 600;
-  border-left: 3px solid var(--accent);
+}
+:root.dark .nav-item.active {
+  background-color: rgba(255, 255, 255, 0.06);
 }
 
-.dark .nav-item.active {
-  background-color: var(--primary-light);
-  color: var(--primary);
-  border-left: 3px solid var(--accent);
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 16px;
+  background-color: var(--accent);
+  border-radius: 4px;
 }
 
 /* ===== Main Content ===== */
@@ -202,8 +237,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .header {
-  background-color: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
+  background-color: transparent;
   padding: 1.25rem 2.5rem;
   display: flex;
   align-items: center;
@@ -236,16 +270,18 @@ h1, h2, h3, h4, h5, h6 {
 .card {
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  padding: 1.75rem;
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow var(--transition-normal), transform var(--transition-normal);
+  backdrop-filter: blur(20px) saturate(125%);
+  -webkit-backdrop-filter: blur(20px) saturate(125%);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-xs);
+  transition: transform var(--transition-normal);
   position: relative;
   overflow: hidden;
 }
 
 .card:hover {
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .card-header {
@@ -269,38 +305,45 @@ h1, h2, h3, h4, h5, h6 {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.6rem 1.25rem;
-  border-radius: var(--radius-md);
-  font-size: 0.85rem;
-  font-weight: 600;
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 400;
   cursor: pointer;
   transition: all var(--transition-fast);
-  border: none;
   outline: none;
-  letter-spacing: 0.01em;
+  border: 1px solid transparent;
 }
 
 .btn-primary {
   background-color: var(--primary);
   color: white;
-  box-shadow: 0 1px 3px rgba(45, 74, 101, 0.3);
+  border-bottom-color: rgba(0, 0, 0, 0.2);
 }
 
 .btn-primary:hover {
   background-color: var(--primary-hover);
-  box-shadow: 0 2px 6px rgba(45, 74, 101, 0.35);
-  transform: translateY(-1px);
+}
+.btn-primary:active {
+  background-color: var(--primary-dark);
+  color: rgba(255, 255, 255, 0.7);
+  border-bottom-color: transparent;
 }
 
 .btn-secondary {
-  background-color: var(--bg-tertiary);
+  background-color: var(--control-fill);
   color: var(--text-primary);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border-color);
+  border-bottom-color: var(--border-strong);
 }
 
 .btn-secondary:hover {
-  background-color: var(--border-color);
-  border-color: var(--border-strong);
+  background-color: var(--control-fill-hover);
+}
+.btn-secondary:active {
+  background-color: var(--control-fill-active);
+  color: var(--text-secondary);
+  border-bottom-color: var(--border-color);
 }
 
 .btn-accent {
@@ -335,17 +378,19 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .btn-ghost {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  padding: 0.4rem 0.85rem;
-  font-weight: 500;
-  border-radius: var(--radius-md);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-primary);
+  padding: 0.35rem 0.85rem;
+  font-weight: 400;
+  border-radius: var(--radius-sm);
 }
 
 .btn-ghost:hover {
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
+  background-color: rgba(0, 0, 0, 0.04);
+}
+:root.dark .btn-ghost:hover {
+  background-color: rgba(255, 255, 255, 0.06);
 }
 
 /* ===== Forms ===== */
@@ -364,25 +409,61 @@ h1, h2, h3, h4, h5, h6 {
 
 .form-input, .form-select, .form-textarea {
   width: 100%;
-  padding: 0.65rem 1rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-strong);
-  background-color: var(--bg-secondary);
+  padding: 0.45rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  border-bottom-color: var(--input-border-bottom);
+  background-color: var(--input-fill);
   color: var(--text-primary);
   font-family: var(--font-body);
-  font-size: 0.875rem;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  font-size: 14px;
+  transition: all var(--transition-fast);
   outline: none;
 }
 
 .form-input:focus, .form-select:focus, .form-textarea:focus {
+  background-color: var(--bg-secondary);
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(45, 74, 101, 0.1);
+  border-bottom-width: 2px;
+  padding-bottom: calc(0.45rem - 1px);
 }
 
 .form-textarea {
   resize: vertical;
   min-height: 80px;
+}
+
+/* WinUI 3 specific select/dropdown styling */
+.form-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%235d5d5d%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  padding-right: 2rem;
+}
+
+:root.dark .form-select {
+  background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23d1d1d1%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E");
+}
+
+option {
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+/* WinUI 3 specific Date Picker styling */
+input[type="date"].form-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity var(--transition-fast);
+}
+
+input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+:root.dark input[type="date"].form-input::-webkit-calendar-picker-indicator {
+  filter: invert(1);
 }
 
 /* ===== Layout Helpers ===== */
@@ -476,7 +557,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .task-node-row.task-status-in_progress {
   border-left: 4px solid var(--primary);
-  background: linear-gradient(90deg, rgba(99, 102, 241, 0.05), var(--bg-primary));
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.05), transparent);
 }
 
 .task-node-row.task-status-on_hold {
@@ -657,11 +738,13 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .modal-container {
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-elevated);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
+  backdrop-filter: blur(40px) saturate(150%);
+  -webkit-backdrop-filter: blur(40px) saturate(150%);
   width: 100%;
-  max-width: 580px;
+  max-width: 500px;
   max-height: 85vh;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
@@ -1119,266 +1202,76 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
-/* ==========================================================================
-   Modern Sleek Theme Configuration (Glassmorphism + Vibrant Gradients)
-   ========================================================================== */
-:root.modern {
-  --bg-primary: #0b111a;
-  --bg-secondary: rgba(26, 36, 50, 0.75);
-  --bg-tertiary: rgba(35, 48, 66, 0.65);
-  --bg-elevated: rgba(45, 60, 80, 0.95);
-  
-  --text-primary: #f8fafc;
-  --text-secondary: #e2e8f0;
-  --text-tertiary: #cbd5e1;
-  
-  --border-color: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.15);
+/* ===== WinUI 3 Custom Controls ===== */
 
-  --primary: #1e3449;
-  --primary-hover: #2c4a68;
-  --primary-light: rgba(94, 142, 186, 0.35);
-  --primary-dark: #121f2c;
-
-  --accent: #e58a3e;
-  --accent-light: rgba(229, 138, 62, 0.2);
-
-  --success: #10b981;
-  --success-light: rgba(16, 185, 129, 0.15);
-  --warning: #f59e0b;
-  --warning-light: rgba(245, 158, 11, 0.15);
-  --danger: #ef4444;
-  --danger-light: rgba(239, 68, 68, 0.15);
-
-  --shadow-xs: 0 4px 12px rgba(0, 0, 0, 0.5);
-  --shadow-sm: 0 8px 24px rgba(0, 0, 0, 0.5);
-  --shadow-md: 0 16px 32px rgba(0, 0, 0, 0.6);
-  --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.7);
-  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.4);
-
-  --radius-sm: 0.75rem;
-  --radius-md: 1rem;
-  --radius-lg: 1.5rem;
-  --radius-xl: 2rem;
-
-  --transition-fast: 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-  --transition-normal: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+/* Checkbox */
+.win-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background-color: var(--control-fill);
+  outline: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
 }
 
-/* Modern Theme Global Overrides */
-html.modern body {
-  background: radial-gradient(circle at 15% 50%, rgba(30, 52, 73, 0.3), transparent 40%),
-              radial-gradient(circle at 85% 30%, rgba(229, 138, 62, 0.25), transparent 40%);
-  background-color: var(--bg-primary);
-  background-attachment: fixed;
-  background-size: 200% 200%;
-  animation: modernBg 20s ease infinite alternate;
+.win-checkbox:hover {
+  background-color: var(--control-fill-hover);
 }
 
-@keyframes modernBg {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-
-html.modern .sidebar {
-  background: rgba(15, 15, 17, 0.6);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-html.modern .header {
-  background: rgba(10, 10, 12, 0.5);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-html.modern .card, 
-html.modern .modal-container, 
-html.modern .gantt-container {
-  background: rgba(20, 20, 22, 0.6);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-}
-
-html.modern .card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
-  border-color: rgba(255, 255, 255, 0.15);
-}
-
-html.modern .btn-primary {
-  background: linear-gradient(135deg, var(--primary), #2c4a68);
-  border: none;
-  box-shadow: 0 4px 15px rgba(30, 52, 73, 0.4);
-}
-
-html.modern .btn-primary:hover {
-  background: linear-gradient(135deg, #2c4a68, #3e6892);
-  transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 8px 25px rgba(30, 52, 73, 0.6);
-}
-
-html.modern .btn-accent {
-  background: linear-gradient(135deg, var(--accent), #f09f5e);
-  box-shadow: 0 4px 15px rgba(229, 138, 62, 0.4);
-}
-
-html.modern .btn-accent:hover {
-  transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 8px 25px rgba(229, 138, 62, 0.6);
-}
-
-html.modern .form-input, 
-html.modern .form-select, 
-html.modern .form-textarea {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: var(--text-primary);
-}
-
-html.modern option {
-  background-color: #1e293b;
-  color: #f8fafc;
-}
-
-html.modern .form-input:focus, 
-html.modern .form-select:focus, 
-html.modern .form-textarea:focus {
-  background: rgba(255, 255, 255, 0.06);
+.win-checkbox:checked {
+  background-color: var(--primary);
   border-color: var(--primary);
-  box-shadow: 0 0 0 4px rgba(30, 52, 73, 0.25);
+  background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpolyline%20points%3D%2220%206%209%2017%204%2012%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E");
+  background-size: 14px;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
-html.modern .nav-item.active {
-  background: linear-gradient(90deg, var(--primary-light), transparent);
-  border-left: 3px solid var(--accent);
-  box-shadow: inset 2px 0 10px rgba(229, 138, 62, 0.1);
-  color: var(--text-primary);
+.win-checkbox:checked:hover {
+  background-color: var(--primary-hover);
+  border-color: var(--primary-hover);
 }
 
-html.modern .badge-primary { background: rgba(30, 52, 73, 0.8); border: 1px solid rgba(94, 142, 186, 0.4); color: var(--text-primary); }
-html.modern .badge-success { background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); color: var(--text-primary); }
-html.modern .badge-warning { background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.4); color: var(--text-primary); }
-html.modern .badge-danger { background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: var(--text-primary); }
-html.modern .badge-secondary { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15); color: var(--text-primary); }
-
-/* Modern Task List Accents & Flat Rows */
-html.modern .task-node-row {
-  border: none !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
-  background: rgba(26, 36, 50, 0.5) !important;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  position: relative;
-  overflow: hidden;
-}
-
-html.modern .task-node-row::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; width: 4px; height: 100%;
-  background: transparent;
-  transition: all 0.4s ease;
-}
-
-html.modern .task-node-row:hover {
-  background: rgba(26, 36, 50, 0.85) !important;
-  border-color: rgba(94, 142, 186, 0.3) !important;
-  box-shadow: inset 0 0 20px rgba(255,255,255,0.02);
-  z-index: 10;
-}
-
-html.modern .task-node-row:hover::before {
-  background: var(--primary);
-  box-shadow: 0 0 15px var(--primary);
-}
-
-html.modern .task-node-row.task-parent-row {
-  background: linear-gradient(135deg, rgba(30, 52, 73, 0.7), rgba(26, 36, 50, 0.4)) !important;
-  border-bottom: 1px solid rgba(94, 142, 186, 0.25) !important;
-  border-left: none !important;
-}
-
-html.modern .task-node-row.task-parent-row::before {
-  background: var(--accent);
-  width: 4px;
-}
-
-html.modern .task-node-row.task-parent-row:hover::before {
-  background: #f09f5e;
-  box-shadow: 0 0 20px var(--accent);
-}
-
-/* Contextual Status Colors - Modern */
-html.modern .task-node-row.task-status-completed {
-  background: rgba(16, 185, 129, 0.08) !important;
-  border-color: rgba(16, 185, 129, 0.15) !important;
-  box-shadow: inset 0 2px 10px rgba(0,0,0,0.1);
-}
-
-html.modern .task-node-row.task-status-in_progress {
-  border-color: rgba(94, 142, 186, 0.4) !important;
-}
-
-html.modern .task-node-row.task-status-in_progress::before {
-  background: var(--primary);
-  width: 4px;
-  box-shadow: 0 0 15px var(--primary);
-}
-
-html.modern .task-node-row.task-status-on_hold::before {
-  background: var(--warning);
-  width: 4px;
-  box-shadow: 0 0 15px var(--warning);
-}
-
-html.modern .task-node-toggle {
-  color: var(--accent);
-  background: rgba(229, 138, 62, 0.15);
+/* Radio Button */
+.win-radio {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border-strong);
   border-radius: 50%;
-  padding: 4px;
+  background-color: var(--control-fill);
+  outline: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
 }
 
-html.modern .task-node-toggle:hover {
-  background: var(--accent);
-  color: #fff;
-  box-shadow: 0 0 12px var(--accent);
+.win-radio:hover {
+  background-color: var(--control-fill-hover);
 }
 
-html.modern .tree-line-vertical, 
-html.modern .tree-line-horizontal {
-  background-color: rgba(94, 142, 186, 0.3);
+.win-radio:checked {
+  background-color: white;
+  border: 5px solid var(--primary);
 }
 
-html.modern .task-node-row:hover .tree-line-vertical,
-html.modern .task-node-row:hover .tree-line-horizontal {
-  background-color: var(--accent);
-  box-shadow: 0 0 8px var(--accent);
+:root.dark .win-radio:checked {
+  background-color: black;
 }
 
-/* Login Page specific modern theme tweaks */
-html.modern .login-hero-panel {
-  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
-  position: relative;
-  overflow: hidden;
+.win-radio:checked:hover {
+  border-color: var(--primary-hover);
 }
-html.modern .login-hero-panel::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(circle, rgba(30, 52, 73, 0.25) 0%, transparent 50%),
-              radial-gradient(circle at 70% 70%, rgba(229, 138, 62, 0.15) 0%, transparent 50%);
-  animation: rotate 30s linear infinite;
-}
-@keyframes rotate {
-  100% { transform: rotate(360deg); }
-}
+

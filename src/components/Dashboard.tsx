@@ -61,6 +61,13 @@ export default function Dashboard({
   });
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
 
+  // My Agenda State
+  const [agendaShowAllTasks, setAgendaShowAllTasks] = useState(false);
+  const [inlineEditingTaskId, setInlineEditingTaskId] = useState<string | null>(null);
+  const [inlineEditField, setInlineEditField] = useState<'pinkNumber' | null>(null);
+  const [inlineEditForm, setInlineEditForm] = useState<{ pinkNumber: string; billed: boolean }>({ pinkNumber: '', billed: false });
+  const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null);
+
   const activeUser = consultants.find(c => c.id === activeUserId) || null;
 
   // Active User Agenda & KPIs
@@ -74,10 +81,27 @@ export default function Dashboard({
   const myTasksCompletion = myTasks.length > 0 ? Math.round((completedMyTasks / myTasks.length) * 100) : 0;
   const myTotalAllocatedDays = myTasks.reduce((acc, t) => acc + t.durationDays, 0);
 
-  // Chronologically sorted agenda
-  const mySortedTasks = [...myTasks].sort((a, b) => 
-    (a.plannedStartDate || '').localeCompare(b.plannedStartDate || '')
-  );
+  // Filter and group agenda tasks
+  const filteredMyTasks = agendaShowAllTasks ? myTasks : myTasks.filter(t => t.status !== 'completed');
+  
+  // Group by project
+  const tasksByProject = filteredMyTasks.reduce((acc, task) => {
+    if (!acc[task.projectId]) acc[task.projectId] = [];
+    acc[task.projectId].push(task);
+    return acc;
+  }, {} as Record<string, Task[]>);
+
+  // Sort each group chronologically
+  Object.keys(tasksByProject).forEach(projectId => {
+    tasksByProject[projectId].sort((a, b) => (a.plannedStartDate || '').localeCompare(b.plannedStartDate || ''));
+  });
+
+  const handleInlineSave = (task: Task) => {
+    if (!inlineEditingTaskId) return;
+    onUpdateTask({ ...task, pinkNumber: inlineEditForm.pinkNumber, billed: inlineEditForm.billed });
+    setInlineEditingTaskId(null);
+    setInlineEditField(null);
+  };
 
   // Team Dashboard calculations
   const totalProjects = projects.length;
@@ -238,92 +262,186 @@ export default function Dashboard({
           {/* User Agenda Calendar List */}
           <div className="grid-cols-12">
             <div className="card col-span-12">
-              <div className="card-header">
+              <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Calendar size={18} /> My Agenda & Upcoming Schedules
                 </h3>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={agendaShowAllTasks} 
+                      onChange={(e) => setAgendaShowAllTasks(e.target.checked)} 
+                    />
+                    Show all tasks
+                  </label>
+                </div>
               </div>
 
-              {mySortedTasks.length === 0 ? (
+              {Object.keys(tasksByProject).length === 0 ? (
                 <p style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '3rem 0' }}>
                   You do not have any tasks assigned in active projects.
                 </p>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {mySortedTasks.map(task => {
-                    const project = projects.find(p => p.id === task.projectId);
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  {Object.keys(tasksByProject).map(projectId => {
+                    const project = projects.find(p => p.id === projectId);
                     return (
-                      <div 
-                        key={task.id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          border: '1px solid var(--border-color)',
-                          borderRadius: 'var(--radius-md)',
-                          padding: '0.875rem 1.25rem',
-                          backgroundColor: task.status === 'completed' ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
-                          opacity: task.status === 'completed' ? 0.75 : 1
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
-                          {/* Complete status indicator */}
-                          <div 
-                            style={{ cursor: 'pointer', color: task.status === 'completed' ? 'var(--success)' : 'var(--text-tertiary)' }}
-                            onClick={() => {
-                              const nextStatus = task.status === 'completed' ? 'not_started' : 'completed';
-                              onUpdateTask({ ...task, status: nextStatus as Task['status'] });
-                              onAddToast(nextStatus === 'completed' ? 'Marked task completed!' : 'Marked task incomplete.', 'success');
-                            }}
-                          >
-                            {task.status === 'completed' ? <CheckCircle2 size={20} /> : <Circle size={20} />}
-                          </div>
-
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span 
-                              style={{ 
-                                fontWeight: 600, 
-                                fontSize: '0.925rem',
-                                textDecoration: task.status === 'completed' ? 'line-through' : 'none'
+                      <div key={projectId}>
+                        <h4 style={{ 
+                          fontSize: '1rem', 
+                          fontWeight: 600, 
+                          marginBottom: '0.75rem', 
+                          paddingBottom: '0.5rem', 
+                          borderBottom: '1px solid var(--border-color)',
+                          color: project?.colorTheme || 'var(--primary)'
+                        }}>
+                          {project?.name || 'Unknown Project'}
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', fontWeight: 'normal', marginLeft: '0.5rem' }}>
+                            ({project?.clientName})
+                          </span>
+                        </h4>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                          {tasksByProject[projectId].map(task => (
+                            <div 
+                              key={task.id}
+                              className="task-row"
+                              onMouseEnter={() => setHoveredTaskId(task.id)}
+                              onMouseLeave={() => setHoveredTaskId(null)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                border: '1px solid var(--border-color)',
+                                borderRadius: 'var(--radius-md)',
+                                padding: '0.875rem 1.25rem',
+                                backgroundColor: task.status === 'completed' ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
+                                opacity: task.status === 'completed' ? 0.75 : 1,
+                                transition: 'all 0.15s ease'
                               }}
                             >
-                              {task.name}
-                            </span>
-                            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginTop: '0.15rem', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
-                              <span style={{ fontWeight: 600, color: 'var(--primary)' }}>{project?.name} ({project?.clientName})</span>
-                              <span>•</span>
-                              <span>Duration: <b>{task.durationDays} days</b></span>
-                              {task.plannedStartDate && (
-                                <>
-                                  <span>•</span>
-                                  <span>Start: <b>{formatDateFriendly(task.plannedStartDate)}</b></span>
-                                  <span>•</span>
-                                  <span>End: <b>{formatDateFriendly(task.plannedEndDate)}</b></span>
-                                </>
-                              )}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
+                                {/* Complete status indicator */}
+                                <div 
+                                  style={{ cursor: 'pointer', color: task.status === 'completed' ? 'var(--success)' : 'var(--text-tertiary)' }}
+                                  onClick={() => {
+                                    const nextStatus = task.status === 'completed' ? 'not_started' : 'completed';
+                                    onUpdateTask({ ...task, status: nextStatus as Task['status'] });
+                                    onAddToast(nextStatus === 'completed' ? 'Marked task completed!' : 'Marked task incomplete.', 'success');
+                                  }}
+                                >
+                                  {task.status === 'completed' ? <CheckCircle2 size={20} /> : <Circle size={20} />}
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                    <span 
+                                      style={{ 
+                                        fontWeight: 600, 
+                                        fontSize: '0.925rem',
+                                        textDecoration: task.status === 'completed' ? 'line-through' : 'none'
+                                      }}
+                                    >
+                                      {task.name}
+                                    </span>
+                                    
+                                    {/* Pink Number Inline Edit block */}
+                                    {inlineEditingTaskId === task.id && inlineEditField === 'pinkNumber' ? (
+                                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', fontSize: '0.75rem' }} onClick={(e) => e.stopPropagation()}>
+                                        <input 
+                                          type="text" 
+                                          className="form-input" 
+                                          style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', minHeight: 'auto', width: '100px' }}
+                                          placeholder="Pink #"
+                                          value={inlineEditForm.pinkNumber || ''}
+                                          onChange={(e) => setInlineEditForm({ ...inlineEditForm, pinkNumber: e.target.value })}
+                                          autoFocus
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') handleInlineSave(task);
+                                            if (e.key === 'Escape') { setInlineEditingTaskId(null); setInlineEditField(null); }
+                                          }}
+                                        />
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
+                                          <input 
+                                            type="checkbox" 
+                                            checked={inlineEditForm.billed} 
+                                            onChange={(e) => setInlineEditForm({ ...inlineEditForm, billed: e.target.checked })}
+                                          />
+                                          Billed
+                                        </label>
+                                        <button className="btn btn-primary" style={{ padding: '0.1rem 0.4rem', minHeight: 'auto', borderRadius: '4px' }} onClick={() => handleInlineSave(task)}>
+                                          <CheckCircle2 size={14} />
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        {task.pinkNumber && (
+                                          <span style={{ fontSize: '0.68rem', backgroundColor: task.billed ? '#ecfdf5' : '#fdf2f8', color: task.billed ? '#10b981' : '#db2777', border: `1px solid ${task.billed ? '#a7f3d0' : '#fbcfe8'}`, padding: '0.05rem 0.35rem', borderRadius: '4px', fontWeight: 600, cursor: 'pointer' }} title="Pink Number" onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('pinkNumber'); setInlineEditForm({ pinkNumber: task.pinkNumber || '', billed: task.billed || false }); }}>
+                                            {task.billed ? 'Billed: ' : 'Pink #: '}{task.pinkNumber}
+                                          </span>
+                                        )}
+                                        {!task.pinkNumber && (
+                                          <span 
+                                            className="add-pink-number-btn"
+                                            style={{ 
+                                              fontSize: '0.68rem', 
+                                              color: 'var(--text-tertiary)', 
+                                              border: '1px dashed var(--border-color)',
+                                              background: 'transparent',
+                                              padding: '0.05rem 0.35rem',
+                                              borderRadius: '4px',
+                                              cursor: 'pointer', 
+                                              fontWeight: 600,
+                                              opacity: hoveredTaskId === task.id ? 1 : 0,
+                                              transition: 'opacity 0.2s',
+                                              pointerEvents: hoveredTaskId === task.id ? 'auto' : 'none'
+                                            }}
+                                            onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('pinkNumber'); setInlineEditForm({ pinkNumber: '', billed: false }); }}
+                                          >
+                                            + Add Pink Number
+                                          </span>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+
+                                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                                    <span>Duration: <b>{task.durationDays} days</b></span>
+                                    {task.plannedStartDate && (
+                                      <>
+                                        <span>•</span>
+                                        <span>Start: <b>{formatDateFriendly(task.plannedStartDate)}</b></span>
+                                        <span>•</span>
+                                        <span>End: <b>{formatDateFriendly(task.plannedEndDate)}</b></span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Integration Quick Sync Actions */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <span className={`badge badge-${
+                                  task.status === 'completed' ? 'success' : 
+                                  task.status === 'in_progress' ? 'primary' : 
+                                  task.status === 'on_hold' ? 'warning' : 'secondary'
+                                }`}>
+                                  {task.status.replace('_', ' ')}
+                                </span>
+
+                                <button 
+                                  className="btn btn-secondary btn-icon"
+                                  title="Sync task to Microsoft To-Do" aria-label="Sync task to Microsoft To-Do"
+                                  disabled={syncingTaskId === task.id}
+                                  onClick={() => handleQuickSync(task)}
+                                  style={{ color: task.o365TaskId ? 'var(--success)' : 'inherit' }}
+                                >
+                                  <RefreshCw size={14} className={syncingTaskId === task.id ? 'animate-spin' : ''} />
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        </div>
-
-                        {/* Integration Quick Sync Actions */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span className={`badge badge-${
-                            task.status === 'completed' ? 'success' : 
-                            task.status === 'in_progress' ? 'primary' : 
-                            task.status === 'on_hold' ? 'warning' : 'secondary'
-                          }`}>
-                            {task.status.replace('_', ' ')}
-                          </span>
-
-                          <button 
-                            className="btn btn-secondary btn-icon"
-                            title="Sync task to Microsoft To-Do"
-                            disabled={syncingTaskId === task.id}
-                            onClick={() => handleQuickSync(task)}
-                            style={{ color: task.o365TaskId ? 'var(--success)' : 'inherit' }}
-                          >
-                            <RefreshCw size={14} className={syncingTaskId === task.id ? 'animate-spin' : ''} />
-                          </button>
+                          ))}
                         </div>
                       </div>
                     );
@@ -588,7 +706,7 @@ export default function Dashboard({
 
                         <button 
                           className="btn btn-secondary btn-icon" 
-                          title="Open Task Board"
+                          title="Open Task Board" aria-label="Open Task Board"
                           onClick={() => onSelectProject(project.id)}
                           style={{ border: '1px solid var(--border-color)' }}
                         >
