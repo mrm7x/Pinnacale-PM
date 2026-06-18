@@ -88,7 +88,7 @@ const defaultO365Config: O365Config = {
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'projects' | 'settings'>(() => {
     const saved = localStorage.getItem('pinnacle_active_tab');
-    return (saved as 'dashboard' | 'projects' | 'settings') || 'dashboard';
+    return (saved as 'dashboard' | 'projects' | 'settings') || 'projects';
   });
 
   useEffect(() => {
@@ -893,7 +893,7 @@ export default function App() {
     setActiveUserId(userId);
     localStorage.setItem('pinnacle_session', sessionToken);
     localStorage.setItem('pinnacle_activeuser', userId);
-    setActiveTab('dashboard');
+    setActiveTab('projects');
     // Check if user needs password reset
     const consultant = consultants.find(c => c.id === userId);
     if (consultant && consultant.mustResetPassword) {

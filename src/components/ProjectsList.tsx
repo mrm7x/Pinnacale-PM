@@ -31,6 +31,7 @@ export default function ProjectsList({
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [phaseFilter, setPhaseFilter] = useState<string>('all');
   const [healthFilter, setHealthFilter] = useState<string>('all');
+  const [leadConsultantFilter, setLeadConsultantFilter] = useState<string>('all');
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   
@@ -64,6 +65,9 @@ export default function ProjectsList({
       if (healthFilter === 'on track' && !isGreen) match = false;
       if (healthFilter === 'at risk' && !isAmber) match = false;
       if (healthFilter === 'off track' && !isRed) match = false;
+    }
+    if (leadConsultantFilter !== 'all' && p.leadConsultantId !== leadConsultantFilter) {
+      match = false;
     }
     return match;
   });
@@ -201,7 +205,6 @@ export default function ProjectsList({
               onChange={setPhaseFilter}
               options={[
                 { label: 'All Phases', value: 'all' },
-                { label: 'All Phases', value: 'all' },
                 ...PHASE_ORDER.map(p => ({ label: p, value: p }))
               ]}
             />
@@ -216,6 +219,17 @@ export default function ProjectsList({
                 { label: 'On Track', value: 'on track' },
                 { label: 'At Risk', value: 'at risk' },
                 { label: 'Off Track', value: 'off track' }
+              ]}
+            />
+          </div>
+
+          <div style={{ minWidth: '180px', flex: '1 1 180px' }}>
+            <WinComboBox
+              value={leadConsultantFilter}
+              onChange={setLeadConsultantFilter}
+              options={[
+                { label: 'All Lead Consultants', value: 'all' },
+                ...consultants.map(c => ({ label: c.name, value: c.id }))
               ]}
             />
           </div>

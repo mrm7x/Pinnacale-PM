@@ -26,10 +26,10 @@ export default function GanttChart({ activeProject, tasks, consultants }: GanttC
     return Math.max(12, Math.ceil((maxEndHalfDay + 2) / 2));
   }, [maxEndHalfDay]);
 
-  const rowHeight = 44;
+  const rowHeight = 48;
   const headerHeight = 44;
-  const colWidth = 90; // width of one business day in pixels
-  const halfColWidth = colWidth / 2; // 45px for a half-day chunk
+  const colWidth = 80;
+  const halfColWidth = colWidth / 2; // 40px for a half-day chunk
 
   const timelineWidth = totalWorkingDays * colWidth;
   const timelineHeight = projectTasks.length * rowHeight;
@@ -85,7 +85,7 @@ export default function GanttChart({ activeProject, tasks, consultants }: GanttC
         <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', fontSize: '0.95rem' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
             <span style={{ width: '14px', height: '14px', borderRadius: '2px', backgroundColor: 'var(--text-secondary)' }} />
-            <span>Parent Task (Summary)</span>
+            <span>Parent Task</span>
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
             <span style={{ width: '14px', height: '14px', borderRadius: '2px', backgroundColor: 'var(--primary)' }} />
@@ -94,7 +94,7 @@ export default function GanttChart({ activeProject, tasks, consultants }: GanttC
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.92rem', color: 'var(--text-secondary)' }}>
           <Info size={15} />
-          <span>Timeline displays <b>business days only</b> (Sat & Sun excluded). Columns represent AM/PM blocks.</span>
+          <span>Business days only (excl. Sat &amp; Sun)</span>
         </div>
       </div>
 
@@ -102,7 +102,7 @@ export default function GanttChart({ activeProject, tasks, consultants }: GanttC
       <div 
         style={{ 
           display: 'grid', 
-          gridTemplateColumns: '260px 1fr', 
+          gridTemplateColumns: '280px 1fr', 
           border: '1px solid var(--border-color)',
           borderRadius: 'var(--radius-lg)',
           overflow: 'hidden',
@@ -121,18 +121,21 @@ export default function GanttChart({ activeProject, tasks, consultants }: GanttC
               display: 'flex',
               alignItems: 'center',
               padding: '0 1rem',
-              fontWeight: 'bold',
-              fontSize: '0.8rem',
-              color: 'var(--text-secondary)'
+              fontWeight: 700,
+              fontSize: '0.78rem',
+              color: 'var(--text-tertiary)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em'
             }}
           >
-            TASK DIRECTORY
+            Task Directory
           </div>
           
           {/* List Rows */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {projectTasks.map((task, idx) => {
               const isParent = tasks.some(t => t.parentId === task.id);
+              const assignedConsultant = consultants.find(c => c.id === task.assignedConsultantId);
               return (
                 <div 
                   key={task.id}
@@ -149,7 +152,7 @@ export default function GanttChart({ activeProject, tasks, consultants }: GanttC
                 >
                   <span
                     style={{
-                      fontSize: '0.95rem',
+                      fontSize: '0.9rem',
                       fontWeight: isParent ? 700 : 500,
                       color: isParent ? 'var(--text-primary)' : 'var(--text-secondary)',
                       whiteSpace: 'nowrap',
@@ -162,8 +165,8 @@ export default function GanttChart({ activeProject, tasks, consultants }: GanttC
                     {task.parentId && <span style={{ color: 'var(--text-tertiary)', marginRight: '4px' }}>└</span>}
                     {task.name}
                   </span>
-                  <span style={{ fontSize: '0.82rem', color: 'var(--text-tertiary)', paddingLeft: task.parentId ? '1.5rem' : '0' }}>
-                    {task.durationDays} days | {task.status.replace('_', ' ')}
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', paddingLeft: task.parentId ? '1.5rem' : '0', marginTop: '0.15rem' }}>
+                    {task.durationDays}d{assignedConsultant ? ` · ${assignedConsultant.name.split(' ')[0]}` : ''}
                   </span>
                 </div>
               );
@@ -193,8 +196,8 @@ export default function GanttChart({ activeProject, tasks, consultants }: GanttC
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '0.725rem',
-                  lineHeight: '1.2'
+                  fontSize: '0.7rem',
+                  lineHeight: '1.3'
                 }}
               >
                 <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{col.dayName}</span>
@@ -283,7 +286,6 @@ export default function GanttChart({ activeProject, tasks, consultants }: GanttC
                   const y1 = predTaskIdx * rowHeight + rowHeight / 2;
                   const x1 = ((predTask.endHalfDay || 0) + 1) * halfColWidth;
 
-                  // Orthogonal line: M x1 y1 L x1+12 y1 L x1+12 y2 L x2 y2
                   const intermediateX = x1 + 12;
                   const pathData = `M ${x1} ${y1} L ${intermediateX} ${y1} L ${intermediateX} ${y2} L ${x2} ${y2}`;
 
@@ -310,34 +312,44 @@ export default function GanttChart({ activeProject, tasks, consultants }: GanttC
                 
                 const x = startHalf * halfColWidth;
                 const w = (endHalf - startHalf + 1) * halfColWidth;
-                const y = idx * rowHeight + 11; // vertical center shift (rowHeight is 44, bar is 22)
-                const h = 22;
+                const y = idx * rowHeight + (rowHeight - 24) / 2; // center the 24px bar in 48px row
+                const h = 24;
 
                 const assignedConsultant = consultants.find(c => c.id === task.assignedConsultantId);
                 const barColor = isParent 
                   ? 'var(--text-secondary)' 
                   : (assignedConsultant?.avatarColor || 'var(--primary)');
 
+                // Only show text inside bar if bar is wide enough
+                const showBarText = !isParent && w >= 120;
+
                 return (
                   <g key={`group-${task.id}`}>
+                    {/* ClipPath for text inside bars */}
+                    {!isParent && (
+                      <defs>
+                        <clipPath id={`clip-${task.id}`}>
+                          <rect x={x} y={y} width={w} height={h} rx={4} ry={4} />
+                        </clipPath>
+                      </defs>
+                    )}
+
                     {/* Task Bar Rect */}
                     {isParent ? (
-                      // Parent tasks summary bar has bracket-like styling
                       <g>
                         <rect 
                           x={x} 
-                          y={y + 3} 
+                          y={y + 4} 
                           width={w} 
                           height={6} 
                           fill={barColor}
                           rx={1}
                         />
                         {/* Downward extensions at start and end */}
-                        <rect x={x} y={y + 3} width={3} height={12} fill={barColor} />
-                        <rect x={x + w - 3} y={y + 3} width={3} height={12} fill={barColor} />
+                        <rect x={x} y={y + 4} width={3} height={14} fill={barColor} />
+                        <rect x={x + w - 3} y={y + 4} width={3} height={14} fill={barColor} />
                       </g>
                     ) : (
-                      // Leaf task bar
                       <rect 
                         className="gantt-bar"
                         x={x}
@@ -351,17 +363,20 @@ export default function GanttChart({ activeProject, tasks, consultants }: GanttC
                       />
                     )}
 
-                    {/* Metadata text shown to the right of the task bar */}
-                    <text
-                      x={x + w + 8}
-                      y={y + 15}
-                      fill="var(--text-secondary)"
-                      fontSize="10.5px"
-                      fontFamily="var(--font-body)"
-                      pointerEvents="none"
-                    >
-                      {assignedConsultant?.name ? `${assignedConsultant.name} (${task.durationDays}d)` : `${task.durationDays}d`}
-                    </text>
+                    {/* Text inside the bar (clipped) */}
+                    {showBarText && (
+                      <text
+                        x={x + 8}
+                        y={y + h / 2 + 4}
+                        fill="white"
+                        fontSize="11px"
+                        fontFamily="var(--font-body)"
+                        pointerEvents="none"
+                        clipPath={`url(#clip-${task.id})`}
+                      >
+                        {task.name}
+                      </text>
+                    )}
                   </g>
                 );
               })}

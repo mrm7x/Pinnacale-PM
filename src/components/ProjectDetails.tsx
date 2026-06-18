@@ -12,7 +12,7 @@ import { WinComboBox } from './winui/WinComboBox';
 import { WinDatePicker } from './winui/WinDatePicker';
 import GanttChart from './GanttChart';
 import EditProjectModal from './EditProjectModal';
-import { formatDateFriendly } from './Dashboard';
+import { formatDateFriendly, formatDateTimeFriendly } from './Dashboard';
 import { resolvePhaseMeta, getProjectAccent } from '../utils/phases';
 
 interface ProjectDetailsProps {
@@ -147,6 +147,8 @@ export default function ProjectDetails({
   const [billedFilter, setBilledFilter] = useState<'all' | 'only' | 'hide'>('all');
   const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [commTypeFilter, setCommTypeFilter] = useState<string>('all');
+  const [commCreatorFilter, setCommCreatorFilter] = useState<string>('all');
 
   // Active Project Data
   const activeProject = projects.find(p => p.id === selectedProjectId) || null;
@@ -487,12 +489,12 @@ export default function ProjectDetails({
             style={{
               opacity: task.status === 'completed' ? 0.65 : 1,
               display: 'grid',
-              gridTemplateColumns: '1fr 90px 140px 150px 120px 100px',
+              gridTemplateColumns: '1fr 90px 130px 150px 110px 70px',
               alignItems: 'center',
-              padding: isTaskParent ? '0.85rem 1.5rem' : '0.7rem 1.5rem',
-              gap: '1.25rem',
+              padding: isTaskParent ? '0.75rem 1.25rem' : '0.6rem 1.25rem',
+              gap: '0.75rem',
               cursor: editMode ? 'pointer' : 'default',
-              minHeight: isTaskParent ? '52px' : '46px',
+              minHeight: isTaskParent ? '50px' : '44px',
               position: 'relative'
             }}
             onClick={() => { if (editMode) handleOpenEditTask(task); }}
@@ -638,8 +640,8 @@ export default function ProjectDetails({
                 <button type="button" className="btn btn-primary" style={{ padding: '0.15rem' }} onClick={(e) => { e.stopPropagation(); handleInlineSave(task.id); }}><Check size={14} /></button>
               </div>
             ) : (
-              <span onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('duration'); setInlineEditForm({ durationDays: task.durationDays }); }} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.84rem', justifyContent: 'center', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', backgroundColor: 'rgba(30, 52, 73, 0.08)', padding: '0.2rem 0.6rem', borderRadius: '12px', border: '1px solid rgba(30, 52, 73, 0.15)', cursor: 'pointer' }}>
-                <Clock size={12} style={{ color: '#e58a3e' }} /> {task.durationDays}d
+              <span onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('duration'); setInlineEditForm({ durationDays: task.durationDays }); }} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.85rem', justifyContent: 'center', color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', cursor: 'pointer' }}>
+                <Clock size={12} style={{ color: 'var(--text-tertiary)' }} /> {task.durationDays}d
               </span>
             )}
 
@@ -655,8 +657,8 @@ export default function ProjectDetails({
                 <button type="button" className="btn btn-primary" style={{ padding: '0.15rem' }} onClick={(e) => { e.stopPropagation(); handleInlineSave(task.id); }}><Check size={14} /></button>
               </div>
             ) : (
-              <span onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('startDate'); setInlineEditForm({ customStartDate: task.customStartDate || task.plannedStartDate }); }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', fontSize: '0.82rem', color: 'var(--text-primary)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', backgroundColor: 'rgba(229, 138, 62, 0.08)', padding: '0.2rem 0.6rem', borderRadius: '12px', border: '1px solid rgba(229, 138, 62, 0.2)', cursor: 'pointer' }}>
-                <Calendar size={12} style={{ color: '#1e3449' }} />
+              <span onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('startDate'); setInlineEditForm({ customStartDate: task.customStartDate || task.plannedStartDate }); }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', fontSize: '0.85rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', cursor: 'pointer' }}>
+                <Calendar size={12} style={{ color: 'var(--text-tertiary)' }} />
                 {task.plannedStartDate ? formatDateFriendly(task.plannedStartDate) : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}
               </span>
             )}
@@ -676,7 +678,7 @@ export default function ProjectDetails({
                 <button type="button" className="btn btn-primary" style={{ padding: '0.15rem' }} onClick={(e) => { e.stopPropagation(); handleInlineSave(task.id); }}><Check size={14} /></button>
               </div>
             ) : (
-              <div onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('assignee'); setInlineEditForm({ assignedConsultantId: task.assignedConsultantId }); }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', minWidth: 0, backgroundColor: 'var(--bg-tertiary)', padding: '0.2rem 0.6rem 0.2rem 0.2rem', borderRadius: '16px', border: '1px solid var(--border-color)', cursor: 'pointer' }}>
+              <div onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('assignee'); setInlineEditForm({ assignedConsultantId: task.assignedConsultantId }); }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', minWidth: 0, cursor: 'pointer' }}>
                 {assignedConsultant ? (
                   <>
                     <span
@@ -691,7 +693,7 @@ export default function ProjectDetails({
                     >
                       {assignedConsultant.name.split(' ').map(n => n[0]).join('')}
                     </span>
-                    <span style={{ fontSize: '0.84rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text-secondary)' }}>
+                    <span style={{ fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text-secondary)' }}>
                       {assignedConsultant.name.split(' ')[0]}
                     </span>
                   </>
@@ -721,7 +723,7 @@ export default function ProjectDetails({
               <span onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('status'); setInlineEditForm({ status: task.status }); }} className={`badge badge-${task.status === 'completed' ? 'success' :
                 task.status === 'in_progress' ? 'primary' :
                   task.status === 'on_hold' ? 'warning' : 'secondary'
-                }`} style={{ justifySelf: 'center', cursor: 'pointer' }}>
+                }`} style={{ justifySelf: 'center', cursor: 'pointer', fontSize: '0.85rem' }}>
                 {task.status.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
               </span>
             )}
@@ -1243,18 +1245,18 @@ export default function ProjectDetails({
                 No tasks created yet for this project. Click 'Add Task' to build your implementation checklist.
               </p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', minWidth: '750px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', minWidth: '700px' }}>
                 {/* Column Headers - matching grid */}
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '1fr 90px 140px 150px 120px 100px',
+                    gridTemplateColumns: '1fr 90px 130px 150px 110px 70px',
                     alignItems: 'center',
-                    padding: '0.7rem 1.5rem',
-                    gap: '1.25rem',
+                    padding: '0.6rem 1.25rem',
+                    gap: '0.75rem',
                     backgroundColor: `${getProjectAccent(activeProject)}1A`,
                     borderBottom: '1px solid var(--border-strong)',
-                    fontSize: '0.7rem',
+                    fontSize: '0.72rem',
                     fontWeight: 700,
                     color: 'var(--text-tertiary)',
                     textTransform: 'uppercase',
@@ -1442,9 +1444,54 @@ export default function ProjectDetails({
                 <button type="submit" className="btn btn-primary">Save Communication</button>
               </form>
            </div>
+
+           {/* Filters */}
+           <div style={{
+             display: 'flex',
+             gap: '1rem',
+             alignItems: 'center',
+             backgroundColor: 'var(--bg-secondary)',
+             padding: '0.65rem 1rem',
+             borderRadius: 'var(--radius-md)',
+             border: '1px solid var(--border-color)',
+             flexWrap: 'wrap'
+           }}>
+             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filters:</span>
+             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: '180px', flex: '1 1 180px' }}>
+               <span style={{ fontSize: '0.82rem', fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Type:</span>
+               <WinComboBox
+                 className="form-select"
+                 value={commTypeFilter}
+                 onChange={setCommTypeFilter}
+                 options={[
+                   { label: 'All Types', value: 'all' },
+                   { label: 'Teams call', value: 'Teams call' },
+                   { label: 'Email', value: 'email' },
+                   { label: 'In person meeting', value: 'in person meeting' }
+                 ]}
+               />
+             </div>
+             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: '200px', flex: '1 1 200px' }}>
+               <span style={{ fontSize: '0.82rem', fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>By:</span>
+               <WinComboBox
+                 className="form-select"
+                 value={commCreatorFilter}
+                 onChange={setCommCreatorFilter}
+                 options={[
+                   { label: 'All Consultants', value: 'all' },
+                   ...consultants.map(c => ({ label: c.name, value: c.id }))
+                 ]}
+               />
+             </div>
+           </div>
            
            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-             {communications.filter(c => c.projectId === activeProject.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map(c => (
+             {communications
+               .filter(c => c.projectId === activeProject.id)
+               .filter(c => commTypeFilter === 'all' || c.type === commTypeFilter)
+               .filter(c => commCreatorFilter === 'all' || c.creatorId === commCreatorFilter)
+               .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+               .map(c => (
                <div key={c.id} className="card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', borderLeft: `4px solid var(--primary)` }}>
                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                    <h4 style={{ margin: 0 }}>{c.subject}</h4>
@@ -1453,7 +1500,9 @@ export default function ProjectDetails({
                      <button className="btn btn-ghost" onClick={() => onDeleteCommunication(c.id)} style={{ color: 'var(--danger)', padding: '0.25rem' }}><Trash2 size={14}/></button>
                    </div>
                  </div>
-                 <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>By {consultants.find(cons => cons.id === c.creatorId)?.name} on {new Date(c.createdAt).toLocaleString()}</span>
+                 <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
+                   By {consultants.find(cons => cons.id === c.creatorId)?.name} on {formatDateTimeFriendly(c.createdAt)}
+                 </span>
                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{c.description}</p>
                </div>
              ))}
