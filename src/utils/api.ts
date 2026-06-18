@@ -27,9 +27,7 @@ function mapProjectFromDb(db: any): Project {
     status: db.status || 'new',
     phase: db.phase || null,
     isTemplate: !!db.is_template,
-    createdAt: db.created_at,
-    icon: db.icon || undefined,
-    colorTheme: db.color_theme || undefined
+    createdAt: db.created_at
   };
 }
 
@@ -57,9 +55,7 @@ function mapProjectToDb(p: Project) {
     status: p.status || 'new',
     phase: p.phase || null,
     is_template: !!p.isTemplate,
-    created_at: p.createdAt,
-    icon: p.icon || null,
-    color_theme: p.colorTheme || null
+    created_at: p.createdAt
   };
 }
 
