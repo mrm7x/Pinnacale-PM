@@ -326,9 +326,9 @@ export default function App() {
       if (!isSupabaseConfigured()) {
         localStorage.setItem('pinnacle_projects', JSON.stringify(newProjects));
       }
-    } catch (err) {
-      console.error(err);
-      addToast('Failed to save projects to database.', 'error');
+    } catch (err: any) {
+      console.error('Failed to save projects:', err);
+      addToast(`Failed to save projects: ${err?.message || err}`, 'error');
     }
   };
 
