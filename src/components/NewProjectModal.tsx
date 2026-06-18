@@ -166,6 +166,31 @@ export default function NewProjectModal({ onClose, onCreateProject, projectTempl
               </div>
             </div>
 
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="form-group">
+                <label className="form-label">Target Go-Live Date</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={newProject.targetGoLiveDate}
+                  onChange={(e) => setNewProject({ ...newProject, targetGoLiveDate: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Budget (Days)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  placeholder="e.g. 40"
+                  min={0}
+                  step={0.5}
+                  value={newProject.budgetDays}
+                  onChange={(e) => setNewProject({ ...newProject, budgetDays: parseFloat(e.target.value) || 0 })}
+                  required
+                />
+              </div>
+            </div>
+
             <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '0.5rem 0' }} />
             <h4 style={{ margin: 0 }}>Roles & Assignments</h4>
 

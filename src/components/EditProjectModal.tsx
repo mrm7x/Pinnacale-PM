@@ -24,7 +24,8 @@ export default function EditProjectModal({ onClose, onUpdateProject, project, co
     sharepointLink: project.sharepointLink || '',
     status: project.status || 'new',
     phase: project.phase || '',
-    budgetDays: project.budgetDays || 0
+    budgetDays: project.budgetDays || 0,
+    targetGoLiveDate: project.targetGoLiveDate || ''
   });
   const handleUpdateProjectSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -142,6 +143,31 @@ export default function EditProjectModal({ onClose, onUpdateProject, project, co
                   className="form-input"
                   value={editProject.startDate}
                   onChange={(e) => setEditProject({ ...editProject, startDate: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="form-group">
+                <label className="form-label">Target Go-Live Date</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={editProject.targetGoLiveDate}
+                  onChange={(e) => setEditProject({ ...editProject, targetGoLiveDate: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Budget (Days)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  placeholder="e.g. 40"
+                  min={0}
+                  step={0.5}
+                  value={editProject.budgetDays}
+                  onChange={(e) => setEditProject({ ...editProject, budgetDays: parseFloat(e.target.value) || 0 })}
                   required
                 />
               </div>
