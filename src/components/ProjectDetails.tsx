@@ -13,6 +13,7 @@ import { WinDatePicker } from './winui/WinDatePicker';
 import GanttChart from './GanttChart';
 import EditProjectModal from './EditProjectModal';
 import { formatDateFriendly } from './Dashboard';
+import { resolvePhaseMeta, getProjectAccent } from '../utils/phases';
 
 interface ProjectDetailsProps {
   projects: Project[];
@@ -50,19 +51,7 @@ const PROJECT_ICONS = [
   { name: 'Layout', Icon: Layout }
 ];
 
-const PHASE_COLORS: Record<string, { bg: string; text: string }> = {
-  'Discovery':      { bg: 'rgba(59, 130, 246, 0.12)', text: '#3b82f6' },
-  'Planning':       { bg: 'rgba(107, 114, 128, 0.12)', text: '#6b7280' },
-  'Implementation': { bg: 'rgba(139, 92, 246, 0.12)', text: '#8b5cf6' },
-  'Testing':        { bg: 'rgba(14, 165, 233, 0.12)', text: '#0ea5e9' },
-  'Hypercare':      { bg: 'rgba(16, 185, 129, 0.12)', text: '#10b981' },
-  'Support':        { bg: 'rgba(20, 184, 166, 0.12)', text: '#14b8a6' }
-};
 
-function getPhaseStyle(phase?: string | null): { bg: string; text: string; label: string } {
-  if (phase && PHASE_COLORS[phase]) return { ...PHASE_COLORS[phase], label: phase };
-  return { bg: 'rgba(107, 114, 128, 0.12)', text: '#6b7280', label: '—' };
-}
 
 function getRagStyle(rag?: string | null): { bg: string; text: string; label: string } {
   const r = (rag || 'green').toLowerCase();
@@ -948,14 +937,14 @@ export default function ProjectDetails({
              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
               {/* HERO: identity + status badges */}
-              <div className="card" style={{ padding: '2rem', borderTop: `6px solid ${activeProject.colorTheme || 'var(--primary)'}` }}>
+              <div className="card" style={{ padding: '2rem', borderTop: `6px solid ${getProjectAccent(activeProject)}` }}>
                 <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                   {(() => {
                     const matched = activeProject.icon ? PROJECT_ICONS.find(i => i.name === activeProject.icon) : null;
                     const IconComp = matched?.Icon || Folder;
                     // Resolve to a concrete hex so the gradient/alpha always renders.
                     // var(--primary) can't be used inside a gradient with a hex alpha suffix.
-                    const themeHex = activeProject.colorTheme || '#005fb8';
+                    const themeHex = getProjectAccent(activeProject);
                     return (
                       <div style={{
                         width: '72px', height: '72px', flexShrink: 0,
@@ -975,7 +964,7 @@ export default function ProjectDetails({
                         {activeProject.clientName}
                       </span>
                       {(() => {
-                        const ps = getPhaseStyle(activeProject.phase);
+                        const ps = resolvePhaseMeta(activeProject);
                         return (
                           <span style={{ fontSize: '0.85rem', padding: '0.3rem 0.75rem', borderRadius: 'var(--radius-sm)', backgroundColor: ps.bg, color: ps.text, fontWeight: 700 }}>
                             {ps.label}
@@ -1160,7 +1149,7 @@ export default function ProjectDetails({
                   {!editMode && <Pencil size={14} />}
                   {editMode ? 'View Mode' : 'Edit Mode'}
                 </button>
-                <button className="btn btn-primary" onClick={handleOpenCreateTask} style={{ backgroundColor: activeProject.colorTheme || 'var(--primary)', color: 'white', border: '1px solid rgba(0,0,0,0.1)' }}>
+                <button className="btn btn-primary" onClick={handleOpenCreateTask} style={{ backgroundColor: getProjectAccent(activeProject), color: 'white', border: '1px solid rgba(0,0,0,0.1)' }}>
                   <Plus size={16} /> Add Task
                 </button>
               </div>
@@ -1248,7 +1237,7 @@ export default function ProjectDetails({
           </div>
 
           {/* Task Tree Container */}
-          <div className="card" style={{ padding: 0, overflowX: 'auto', borderTop: `4px solid ${activeProject.colorTheme || 'var(--primary)'}` }}>
+          <div className="card" style={{ padding: 0, overflowX: 'auto', borderTop: `4px solid ${getProjectAccent(activeProject)}` }}>
             {projectTasks.length === 0 ? (
               <p style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '3rem' }}>
                 No tasks created yet for this project. Click 'Add Task' to build your implementation checklist.
@@ -1263,7 +1252,7 @@ export default function ProjectDetails({
                     alignItems: 'center',
                     padding: '0.7rem 1.5rem',
                     gap: '1.25rem',
-                    backgroundColor: activeProject.colorTheme ? `${activeProject.colorTheme}1A` : 'var(--bg-tertiary)',
+                    backgroundColor: `${getProjectAccent(activeProject)}1A`,
                     borderBottom: '1px solid var(--border-strong)',
                     fontSize: '0.7rem',
                     fontWeight: 700,

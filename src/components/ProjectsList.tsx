@@ -3,7 +3,7 @@ import type { Project, Consultant, Task } from '../types';
 import { formatDateFriendly } from './Dashboard';
 import { Plus, Search, Trash2, LayoutGrid, List, AlertCircle, Users, CheckCircle2, Filter } from 'lucide-react';
 import { WinComboBox } from './winui/WinComboBox';
-import { resolvePhaseMeta, resolvePhase, PHASE_ORDER } from '../utils/phases';
+import { resolvePhaseMeta, PHASE_ORDER } from '../utils/phases';
 
 interface ProjectsListProps {
   projects: Project[];

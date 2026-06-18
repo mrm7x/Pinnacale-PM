@@ -5,6 +5,7 @@ import {
   User, Calendar, RefreshCw, CheckCircle2, Circle, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { syncTaskToO365 } from '../utils/o365';
+import { getProjectAccent } from '../utils/phases';
 
 export function formatDateFriendly(dateStr?: string | null): string {
   if (!dateStr) return '—';
@@ -296,7 +297,7 @@ export default function Dashboard({
                           marginBottom: '0.75rem', 
                           paddingBottom: '0.5rem', 
                           borderBottom: '1px solid var(--border-color)',
-                          color: project?.colorTheme || 'var(--primary)'
+                          color: getProjectAccent(project)
                         }}>
                           {project?.name || 'Unknown Project'}
                           <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', fontWeight: 'normal', marginLeft: '0.5rem' }}>

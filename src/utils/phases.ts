@@ -1,4 +1,3 @@
-import type { Project } from '../types';
 
 // Canonical phase definitions: one solid accent color per phase.
 // This is the single source of truth for phase colors across the app.
@@ -31,15 +30,18 @@ const STATUS_FALLBACK: Record<string, string> = {
 
 export const PHASE_ORDER = ['Discovery', 'Planning', 'Implementation', 'Testing', 'Hypercare', 'Support'];
 
+type ProjectLike = { phase?: string | null; status?: string; colorTheme?: string | null } | undefined;
+
 /** Resolve the effective phase label for a project (explicit phase, or status-derived fallback). */
-export function resolvePhase(project: { phase?: string | null; status?: string }): string {
+export function resolvePhase(project: ProjectLike): string {
+  if (!project) return 'Planning';
   if (project.phase && PHASES[project.phase]) return project.phase;
   if (project.phase) return project.phase; // respect custom phase labels even if not in PHASES
   return STATUS_FALLBACK[project.status || ''] || 'Planning';
 }
 
 /** Resolve the metadata (accent/bg/text/label) for a project's effective phase. */
-export function resolvePhaseMeta(project: { phase?: string | null; status?: string }): PhaseMeta {
+export function resolvePhaseMeta(project: ProjectLike): PhaseMeta {
   const phase = resolvePhase(project);
   return PHASES[phase] || { accent: '#6b7280', bg: 'rgba(107, 114, 128, 0.12)', text: '#6b7280', label: phase };
 }
@@ -48,6 +50,6 @@ export function resolvePhaseMeta(project: { phase?: string | null; status?: stri
  * The accent color for a project. Linked to the project's phase so that every
  * phase has a consistent identity. Falls back to the app primary blue.
  */
-export function getProjectAccent(project: { phase?: string | null; status?: string; colorTheme?: string | null }): string {
+export function getProjectAccent(project: ProjectLike): string {
   return resolvePhaseMeta(project).accent;
 }

@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import type { Project, Consultant } from '../types';
 import { X } from 'lucide-react';
 import { WinComboBox } from './winui/WinComboBox';
-import { PHASES, PHASE_ORDER } from '../utils/phases';
+import { PHASES } from '../utils/phases';
 
 interface NewProjectModalProps {
   onClose: () => void;
