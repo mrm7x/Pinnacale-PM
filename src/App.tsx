@@ -1,21 +1,24 @@
 import { useState, useEffect } from 'react';
 import PasswordReset from './components/PasswordReset';
-import type { Project, Task, Consultant, O365Config } from './types';
+import type { Project, Task, Consultant, O365Config, Communication } from './types';
 import type { AccountInfo } from '@azure/msal-browser';
 import { getMsalInstance } from './utils/o365';
 import { calculateTaskSchedules } from './utils/scheduler';
 import { hashPassword } from './utils/auth';
 import { defaultTasks } from './defaultTasks';
 import Dashboard from './components/Dashboard';
-import ProjectView from './components/ProjectView';
-import GanttChart from './components/GanttChart';
+import ProjectDetails from './components/ProjectDetails';
+import ProjectsList from './components/ProjectsList';
 import Settings from './components/Settings';
 import Login from './components/Login';
 import Logo from './components/Logo';
 import CroppedLogo from './components/CroppedLogo';
-import { 
-  FolderKanban, LayoutDashboard, CalendarDays, Settings as SettingsIcon, 
-  Sun, Moon, ShieldCheck, X, LogOut, Menu, ChevronLeft, ChevronRight
+import NewProjectModal from './components/NewProjectModal';
+import { WinComboBox } from './components/winui/WinComboBox';
+import {
+  FolderKanban, LayoutDashboard, Settings as SettingsIcon, 
+  Sun, Moon, ShieldCheck, X, LogOut, Menu, ChevronLeft, ChevronRight,
+  ArrowLeft
 } from 'lucide-react';
 import { api } from './utils/api';
 import { isSupabaseConfigured, getSupabaseClient, createTemporarySupabaseClient } from './utils/supabase';
@@ -54,17 +57,20 @@ const defaultProjects: Project[] = [
       return d.toISOString().split('T')[0];
     })(),
     consultantIds: ['c1', 'c2'],
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    status: 'new'
   },
   {
     id: 'tmpl_sage_intacct',
     name: 'Sage Intacct Implementation',
     clientName: 'Template Reference',
     description: 'Generate a standardized, multi-stage project management structure for enterprise accounting software deployment.',
-    budgetDays: 25,
+    budgetDays: 45,
     startDate: new Date().toISOString().split('T')[0],
-    consultantIds: [],
+    targetGoLiveDate: '2024-12-01',
+    consultantIds: ['cons_1', 'cons_2'],
     createdAt: new Date().toISOString(),
+    status: 'new',
     isTemplate: true
   }
 ];
@@ -80,9 +86,9 @@ const defaultO365Config: O365Config = {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'projects' | 'gantt' | 'settings'>(() => {
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'projects' | 'settings'>(() => {
     const saved = localStorage.getItem('pinnacle_active_tab');
-    return (saved as 'dashboard' | 'projects' | 'gantt' | 'settings') || 'dashboard';
+    return (saved as 'dashboard' | 'projects' | 'settings') || 'dashboard';
   });
 
   useEffect(() => {
@@ -110,10 +116,14 @@ export default function App() {
   const [showPasswordReset, setShowPasswordReset] = useState<boolean>(false);
   const [resetUserId, setResetUserId] = useState<string>('');
   
+  // New Project Modal State
+  const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState<boolean>(false);
+  
   // Database States
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [consultants, setConsultants] = useState<Consultant[]>([]);
+  const [communications, setCommunications] = useState<Communication[]>([]);
   const [o365Config, setO365Config] = useState<O365Config>(defaultO365Config);
   const [microsoftAccount, setMicrosoftAccount] = useState<AccountInfo | null>(null);
 
@@ -132,7 +142,7 @@ export default function App() {
 
   // Migrate old sagepulse_ keys to pinnacle_ prefix (one-time)
   useEffect(() => {
-    const migrationKeys = ['projects', 'tasks', 'consultants', 'o365config', 'theme', 'activeuser', 'authenticated'];
+    const migrationKeys = ['projects', 'tasks', 'consultants', 'o365config', 'theme', 'activeuser'];
     let migrated = false;
     migrationKeys.forEach(key => {
       const oldVal = localStorage.getItem(`sagepulse_${key}`);
@@ -149,10 +159,11 @@ export default function App() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [loadedProjects, loadedTasks, loadedConsultants] = await Promise.all([
+        const [loadedProjects, loadedTasks, loadedConsultants, loadedCommunications] = await Promise.all([
           api.projects.getAll(),
           api.tasks.getAll(),
-          api.consultants.getAll()
+          api.consultants.getAll(),
+          api.communications.getAll()
         ]);
 
         if (loadedProjects.length === 0 && loadedConsultants.length === 0) {
@@ -182,6 +193,7 @@ export default function App() {
         } else {
           setProjects(loadedProjects);
           setTasks(loadedTasks);
+          setCommunications(loadedCommunications);
           
           // Apply fallback migrations to loaded consultants if needed
           let currentConsultants = loadedConsultants;
@@ -806,13 +818,15 @@ export default function App() {
     addToast('Database backup triggered successfully.', 'success');
   };
 
-  const handleImportData = (jsonData: string): boolean => {
+  const handleImportData = async (jsonData: string): Promise<boolean> => {
     try {
       const db = JSON.parse(jsonData);
       if (db.projects && db.tasks && db.consultants && db.o365Config) {
-        saveProjectsState(db.projects);
-        saveConsultantsState(db.consultants);
-        saveTasksState(db.tasks);
+        await Promise.all([
+          saveProjectsState(db.projects),
+          saveConsultantsState(db.consultants),
+          saveTasksState(db.tasks)
+        ]);
         handleUpdateO365Config(db.o365Config);
         return true;
       }
@@ -920,15 +934,50 @@ export default function App() {
           />
         );
       case 'projects':
+        if (!selectedProjectId) {
+          return (
+            <ProjectsList 
+              projects={projects} 
+              tasks={tasks}
+              consultants={consultants} 
+              onSelectProject={setSelectedProjectId}
+              onCreateProject={handleCreateProject}
+              onBulkUpdateProjects={(ids, updates) => {
+                const updatedProjects = projects.map(p => ids.includes(p.id) ? { ...p, ...updates } : p);
+                saveProjectsState(updatedProjects);
+              }}
+              onBulkDeleteProjects={(ids) => {
+                const updatedProjects = projects.filter(p => !ids.includes(p.id));
+                const updatedTasks = tasks.filter(t => !ids.includes(t.projectId));
+                setProjects(updatedProjects);
+                setTasks(updatedTasks);
+                if (isSupabaseConfigured()) {
+                  ids.forEach(id => {
+                    api.projects.delete(id).catch(err => console.error(err));
+                  });
+                  api.tasks.saveAll(updatedTasks).catch(err => console.error(err));
+                } else {
+                  localStorage.setItem('pinnacle_projects', JSON.stringify(updatedProjects));
+                  localStorage.setItem('pinnacle_tasks', JSON.stringify(updatedTasks));
+                }
+                if (selectedProjectId && ids.includes(selectedProjectId)) {
+                  setSelectedProjectId(null);
+                }
+              }}
+              onAddToast={addToast}
+              setIsNewProjectModalOpen={setIsNewProjectModalOpen}
+            />
+          );
+        }
         return (
-          <ProjectView 
+          <ProjectDetails 
             projects={filteredProjects}
             tasks={tasks}
             consultants={consultants}
+            communications={communications}
             o365Config={o365Config}
             selectedProjectId={selectedProjectId}
             onSelectProject={setSelectedProjectId}
-            onCreateProject={handleCreateProject}
             onUpdateProject={handleUpdateProject}
             onDeleteProject={handleDeleteProject}
             onCreateTask={handleCreateTask}
@@ -938,19 +987,21 @@ export default function App() {
             onBulkDeleteTasks={handleBulkDeleteTasks}
             onUpdateTaskAndSubtasks={handleUpdateTaskAndSubtasks}
             onAddToast={addToast}
-            projectTemplates={projectTemplates}
             onDuplicateProject={handleDuplicateProject}
             onSaveAsTemplate={handleSaveAsTemplate}
             activeUserId={activeUserId}
             onReorderTasks={handleReorderTasks}
-          />
-        );
-      case 'gantt':
-        return (
-          <GanttChart 
-            activeProject={filteredProjects.find(p => p.id === selectedProjectId) || null}
-            tasks={tasks}
-            consultants={consultants}
+            onSaveCommunication={async (comm) => {
+              const updatedComms = [comm, ...communications.filter(c => c.id !== comm.id)];
+              setCommunications(updatedComms);
+              await api.communications.save(comm);
+            }}
+            onDeleteCommunication={async (id) => {
+              const updatedComms = communications.filter(c => c.id !== id);
+              setCommunications(updatedComms);
+              await api.communications.delete(id);
+            }}
+            setIsNewProjectModalOpen={setIsNewProjectModalOpen}
           />
         );
       case 'settings':
@@ -1017,7 +1068,6 @@ export default function App() {
             userId={resetUserId}
             consultants={consultants}
             onPasswordReset={(newPass) => {
-              // Update consultant password and reset flag
               // Hash the new password before storing
               hashPassword(newPass).then(hash => {
                 const updatedConsultants = consultants.map(c =>
@@ -1162,45 +1212,52 @@ export default function App() {
                   <LayoutDashboard size={18} />
                   <span>Dashboard</span>
                 </li>
-                <li 
-                  className={`nav-item ${activeTab === 'projects' ? 'active' : ''}`}
-                  onClick={() => {
-                    setActiveTab('projects');
-                    setIsMobileMenuOpen(false);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
+                <li style={{ display: 'flex', flexDirection: 'column' }}>
+                  <div 
+                    className={`nav-item ${activeTab === 'projects' && !selectedProjectId ? 'active' : ''}`}
+                    onClick={() => {
+                      setSelectedProjectId(null);
                       setActiveTab('projects');
                       setIsMobileMenuOpen(false);
-                    }
-                  }}
-                  title="Projects"
-                  aria-label="Navigate to Projects"
-                  role="button"
-                  tabIndex={0}
-                >
-                  <FolderKanban size={18} />
-                  <span>Projects</span>
-                </li>
-                <li 
-                  className={`nav-item ${activeTab === 'gantt' ? 'active' : ''}`}
-                  onClick={() => {
-                    setActiveTab('gantt');
-                    setIsMobileMenuOpen(false);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      setActiveTab('gantt');
-                      setIsMobileMenuOpen(false);
-                    }
-                  }}
-                  title="Gantt Chart"
-                  aria-label="Navigate to Gantt Chart"
-                  role="button"
-                  tabIndex={0}
-                >
-                  <CalendarDays size={18} />
-                  <span>Gantt Chart</span>
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        setSelectedProjectId(null);
+                        setActiveTab('projects');
+                        setIsMobileMenuOpen(false);
+                      }
+                    }}
+                    title="Projects"
+                    aria-label="Navigate to Projects"
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <FolderKanban size={18} />
+                    <span>Projects</span>
+                  </div>
+                  
+                  {/* Tree children */}
+                  {!isSidebarCollapsed && (
+                    <ul style={{ listStyle: 'none', paddingLeft: '2.5rem', margin: '0.25rem 0', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                      {projects.filter(p => !p.isTemplate).slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 10).map(p => (
+                        <li 
+                          key={p.id}
+                          style={{
+                            fontSize: '0.8rem', cursor: 'pointer', color: selectedProjectId === p.id ? 'var(--primary)' : 'var(--text-secondary)',
+                            fontWeight: selectedProjectId === p.id ? 600 : 400,
+                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                          }}
+                          onClick={() => {
+                            setSelectedProjectId(p.id);
+                            setActiveTab('projects');
+                            setIsMobileMenuOpen(false);
+                          }}
+                        >
+                          {p.name}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               </ul>
             </nav>
@@ -1292,24 +1349,75 @@ export default function App() {
 
         {/* Main Panel Viewport */}
         <main className="main-content">
-          <header className="header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div className="page-title-section">
-              <h1 style={{ fontSize: '1.3rem', textTransform: 'capitalize', letterSpacing: '-0.02em' }}>
-                {activeTab}
-              </h1>
-              <span className="page-subtitle">
-                {activeTab === 'dashboard' && 'Aggregate metrics and project statuses'}
-                {activeTab === 'projects' && 'Build and organize hierarchical implementation tasks'}
-                {activeTab === 'gantt' && 'Chronological business day scheduler and dependency chart'}
-                {activeTab === 'settings' && 'Manage integration keys and consultant team details'}
-              </span>
+          <header className="header" style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between', 
+            flexWrap: 'wrap', 
+            gap: '1rem', 
+            position: 'relative',
+            ...(activeTab === 'projects' ? {
+              paddingBottom: '0',
+              marginBottom: '0',
+              borderBottom: 'none',
+              paddingTop: '1rem'
+            } : {
+              paddingBottom: '1rem',
+              borderBottom: '1px solid var(--border-color)',
+              marginBottom: '1.5rem'
+            })
+          }}>
+            <div className="page-title-section" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: '1rem', flex: 1 }}>
+              {activeTab === 'projects' && selectedProjectId ? (
+                <button className="btn btn-secondary btn-icon" onClick={() => setSelectedProjectId(null)} title="Back to Projects" style={{ flexShrink: 0, width: 'auto', padding: '0.5rem 1rem 0.5rem 0', display: 'flex', gap: '0.5rem', alignItems: 'center', background: 'transparent', border: 'none', boxShadow: 'none' }}>
+                  <ArrowLeft size={16} /> <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Back to Projects</span>
+                </button>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <h1 style={{ fontSize: '1.3rem', textTransform: 'capitalize', letterSpacing: '-0.02em', margin: 0 }}>
+                    {activeTab}
+                  </h1>
+                  <span className="page-subtitle" style={{ display: 'block', margin: 0, marginTop: '0.25rem' }}>
+                    {activeTab === 'dashboard' && 'Aggregate metrics and project statuses'}
+                    {activeTab === 'projects' && 'Build and organize hierarchical implementation tasks'}
+                    {activeTab === 'settings' && 'Manage integration keys and consultant team details'}
+                  </span>
+                </div>
+              )}
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '1rem', alignItems: 'center', position: 'relative', zIndex: 100 }}>
+              {activeTab === 'projects' && selectedProjectId && (
+                <div style={{ width: '300px' }}>
+                  <WinComboBox
+                    className="form-select"
+                    value={selectedProjectId}
+                    onChange={(val) => setSelectedProjectId(val)}
+                    options={[
+                      { label: '-- Select Project --', value: '' },
+                      ...projects.filter(p => !p.isTemplate).map(p => ({ label: `${p.name} (${p.clientName})`, value: p.id }))
+                    ]}
+                    enableSearch={true}
+                  />
+                </div>
+              )}
             </div>
           </header>
 
-          <div className="content-pane">
+          <div className="content-pane" style={{ paddingTop: activeTab === 'projects' ? '0.5rem' : '' }}>
             {renderContent()}
           </div>
         </main>
+
+        {/* New Project Modal */}
+        {isNewProjectModalOpen && (
+          <NewProjectModal
+            onClose={() => setIsNewProjectModalOpen(false)}
+            onCreateProject={handleCreateProject}
+            projectTemplates={projects.filter(p => p.isTemplate)}
+            consultants={consultants}
+          />
+        )}
 
         {/* Dynamic Toast Container */}
         <div className="toast-container">

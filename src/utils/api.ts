@@ -1,5 +1,5 @@
 import { getSupabaseClient, isSupabaseConfigured } from './supabase';
-import type { Project, Task, Consultant } from '../types';
+import type { Project, Task, Consultant, Communication } from '../types';
 
 // Helper translations: database (snake_case) <-> client (camelCase)
 
@@ -13,8 +13,23 @@ function mapProjectFromDb(db: any): Project {
     startDate: db.start_date,
     targetGoLiveDate: db.target_go_live_date || undefined,
     consultantIds: db.consultant_ids || [],
+    projectManagerId: db.project_manager_id,
+    leadConsultantId: db.lead_consultant_id,
+    customerId: db.customer_id,
+    projectResourceIds: db.project_resource_ids || [],
+    trelloLink: db.trello_link,
+    sharepointLink: db.sharepoint_link,
+    ragScope: db.rag_scope,
+    ragSchedule: db.rag_schedule,
+    ragCosts: db.rag_costs,
+    ragBenefits: db.rag_benefits,
+    ragOverall: db.rag_overall,
+    status: db.status || 'new',
+    phase: db.phase || null,
     isTemplate: !!db.is_template,
-    createdAt: db.created_at
+    createdAt: db.created_at,
+    icon: db.icon || undefined,
+    colorTheme: db.color_theme || undefined
   };
 }
 
@@ -28,8 +43,47 @@ function mapProjectToDb(p: Project) {
     start_date: p.startDate,
     target_go_live_date: p.targetGoLiveDate || '',
     consultant_ids: p.consultantIds,
+    project_manager_id: p.projectManagerId || null,
+    lead_consultant_id: p.leadConsultantId || null,
+    customer_id: p.customerId || null,
+    project_resource_ids: p.projectResourceIds || [],
+    trello_link: p.trelloLink || null,
+    sharepoint_link: p.sharepointLink || null,
+    rag_scope: p.ragScope || 'green',
+    rag_schedule: p.ragSchedule || 'green',
+    rag_costs: p.ragCosts || 'green',
+    rag_benefits: p.ragBenefits || 'green',
+    rag_overall: p.ragOverall || 'green',
+    status: p.status || 'new',
+    phase: p.phase || null,
     is_template: !!p.isTemplate,
-    created_at: p.createdAt
+    created_at: p.createdAt,
+    icon: p.icon || null,
+    color_theme: p.colorTheme || null
+  };
+}
+
+function mapCommunicationFromDb(db: any): Communication {
+  return {
+    id: db.id,
+    projectId: db.project_id,
+    subject: db.subject,
+    type: db.type,
+    description: db.description || '',
+    creatorId: db.creator_id,
+    createdAt: db.created_at
+  };
+}
+
+function mapCommunicationToDb(c: Communication) {
+  return {
+    id: c.id,
+    project_id: c.projectId,
+    subject: c.subject,
+    type: c.type,
+    description: c.description,
+    creator_id: c.creatorId,
+    created_at: c.createdAt
   };
 }
 
@@ -218,6 +272,34 @@ export const api = {
       if (isSupabaseConfigured()) {
         const client = getSupabaseClient() as any;
         const { error } = await client.from('consultants').delete().eq('id', id);
+        if (error) throw error;
+      }
+    }
+  },
+
+  communications: {
+    getAll: async (): Promise<Communication[]> => {
+      if (isSupabaseConfigured()) {
+        const client = getSupabaseClient() as any;
+        const { data, error } = await client.from('communications').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data || []).map(mapCommunicationFromDb);
+      } else {
+        const saved = localStorage.getItem('pinnacle_communications');
+        return saved ? JSON.parse(saved) : [];
+      }
+    },
+    save: async (communication: Communication): Promise<void> => {
+      if (isSupabaseConfigured()) {
+        const client = getSupabaseClient() as any;
+        const { error } = await client.from('communications').upsert(mapCommunicationToDb(communication));
+        if (error) throw error;
+      }
+    },
+    delete: async (id: string): Promise<void> => {
+      if (isSupabaseConfigured()) {
+        const client = getSupabaseClient() as any;
+        const { error } = await client.from('communications').delete().eq('id', id);
         if (error) throw error;
       }
     }

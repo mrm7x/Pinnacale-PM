@@ -17,11 +17,34 @@ export interface Project {
   budgetDays: number; // In days (e.g., 20.5)
   startDate: string; // YYYY-MM-DD
   targetGoLiveDate?: string; // YYYY-MM-DD
-  consultantIds: string[]; // List of consultant IDs assigned
+  consultantIds: string[]; // Keep for legacy / fallback
+  projectManagerId?: string | null;
+  leadConsultantId?: string | null;
+  customerId?: string | null;
+  projectResourceIds?: string[]; // New replacement for consultantIds
+  trelloLink?: string | null;
+  sharepointLink?: string | null;
+  ragScope?: string;
+  ragSchedule?: string;
+  ragCosts?: string;
+  ragBenefits?: string;
+  ragOverall?: string;
+  status: 'new' | 'in progress' | 'on hold' | 'completed' | 'cancelled';
+  phase?: string | null; // Human-readable delivery phase (e.g. 'Discovery', 'Implementation', 'Hypercare')
   createdAt: string;
   isTemplate?: boolean;
   icon?: string;
   colorTheme?: string;
+}
+
+export interface Communication {
+  id: string;
+  projectId: string;
+  subject: string;
+  type: 'Teams call' | 'email' | 'in person meeting';
+  description: string;
+  creatorId: string | null;
+  createdAt: string;
 }
 
 export interface Task {

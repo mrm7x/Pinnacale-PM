@@ -8,10 +8,13 @@ interface WinComboBoxProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  enableSearch?: boolean;
+  menuPosition?: 'bottom' | 'top';
 }
 
-export function WinComboBox({ value, onChange, options, placeholder = 'Select...', className = '', disabled = false }: WinComboBoxProps) {
+export function WinComboBox({ value, onChange, options, placeholder = 'Select...', className = '', disabled = false, enableSearch = false, menuPosition = 'bottom' }: WinComboBoxProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find(opt => opt.value === value);
@@ -26,7 +29,17 @@ export function WinComboBox({ value, onChange, options, placeholder = 'Select...
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (!isOpen) {
+      setSearchTerm('');
+    }
+  }, [isOpen]);
+
   const filteredClassName = className?.replace(/\b(form-select|form-input)\b/g, '').trim();
+
+  const filteredOptions = enableSearch && searchTerm
+    ? options.filter(opt => opt.label.toLowerCase().includes(searchTerm.toLowerCase()))
+    : options;
 
   return (
     <div 
@@ -61,7 +74,8 @@ export function WinComboBox({ value, onChange, options, placeholder = 'Select...
       {isOpen && (
         <div style={{
           position: 'absolute',
-          top: 'calc(100% + 4px)',
+          top: menuPosition === 'bottom' ? 'calc(100% + 4px)' : 'auto',
+          bottom: menuPosition === 'top' ? 'calc(100% + 4px)' : 'auto',
           left: 0,
           right: 0,
           backgroundColor: 'var(--bg-elevated)',
@@ -75,12 +89,36 @@ export function WinComboBox({ value, onChange, options, placeholder = 'Select...
           zIndex: 1000,
           padding: '0.25rem'
         }}>
-          {options.length === 0 ? (
-            <div style={{ padding: '0.5rem 1rem', color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>
-              No options available
-            </div>
-          ) : (
-            options.map((option) => (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {enableSearch && (
+              <div style={{ padding: '0.25rem 0.5rem 0.5rem 0.5rem', borderBottom: '1px solid var(--border-color)', marginBottom: '0.25rem' }}>
+                <input 
+                  type="text"
+                  autoFocus
+                  placeholder="Search..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.4rem 0.6rem',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--input-border)',
+                    backgroundColor: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.85rem',
+                    outline: 'none'
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+            )}
+            
+            {filteredOptions.length === 0 ? (
+              <div style={{ padding: '0.5rem 1rem', color: 'var(--text-tertiary)', fontSize: '0.9rem', textAlign: 'center' }}>
+                No options found
+              </div>
+            ) : (
+              filteredOptions.map((option) => (
               <div
                 key={option.value}
                 onClick={() => {
@@ -114,6 +152,7 @@ export function WinComboBox({ value, onChange, options, placeholder = 'Select...
               </div>
             ))
           )}
+          </div>
         </div>
       )}
     </div>

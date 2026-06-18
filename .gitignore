@@ -24,4 +24,9 @@ dist-ssr
 *.sw?
 .env
 *.env
-.env.* 
+.env.*
+.env.local
+
+# Local-only scripts and scratch files (never commit credentials or throwaway tooling)
+migrate.js
+scratch/

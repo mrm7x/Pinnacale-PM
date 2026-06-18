@@ -1,0 +1,550 @@
+import { useState } from 'react';
+import type { Project, Consultant, Task } from '../types';
+import { formatDateFriendly } from './Dashboard';
+import { Plus, Search, Trash2, LayoutGrid, List, AlertCircle, Users, CheckCircle2, Filter } from 'lucide-react';
+import { WinComboBox } from './winui/WinComboBox';
+import { resolvePhaseMeta, resolvePhase, PHASE_ORDER } from '../utils/phases';
+
+interface ProjectsListProps {
+  projects: Project[];
+  tasks: Task[];
+  consultants: Consultant[];
+  onSelectProject: (id: string) => void;
+  onCreateProject: (project: Omit<Project, 'id' | 'createdAt' | 'isTemplate'>) => void;
+  onBulkUpdateProjects: (ids: string[], updates: Partial<Project>) => void;
+  onBulkDeleteProjects: (ids: string[]) => void;
+  onAddToast: (msg: string, type: 'success' | 'error' | 'warning' | 'info') => void;
+  setIsNewProjectModalOpen: (val: boolean) => void;
+}
+
+export default function ProjectsList({
+  projects,
+  tasks,
+  consultants,
+  onSelectProject,
+  onBulkUpdateProjects,
+  onBulkDeleteProjects,
+  onAddToast,
+  setIsNewProjectModalOpen
+}: ProjectsListProps) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [phaseFilter, setPhaseFilter] = useState<string>('all');
+  const [healthFilter, setHealthFilter] = useState<string>('all');
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  
+  // Bulk Action States
+  const [bulkStatus, setBulkStatus] = useState<string>('');
+  const [bulkPM, setBulkPM] = useState<string>('');
+  const [bulkLead, setBulkLead] = useState<string>('');
+  const [bulkResource, setBulkResource] = useState<string>('');
+
+  const activeProjects = projects.filter(p => !p.isTemplate);
+
+  const filteredProjects = activeProjects.filter(p => {
+    let match = true;
+    if (searchTerm && !p.name.toLowerCase().includes(searchTerm.toLowerCase()) && !p.clientName.toLowerCase().includes(searchTerm.toLowerCase())) {
+      match = false;
+    }
+    if (statusFilter !== 'all' && p.status !== statusFilter) {
+      match = false;
+    }
+    if (phaseFilter !== 'all') {
+      // Match a project's explicit phase, or the status-derived fallback phase
+      const resolvedPhase = p.phase || getPhaseColors(p.phase, p.status).label;
+      if (resolvedPhase !== phaseFilter) match = false;
+    }
+    if (healthFilter !== 'all') {
+      const rag = (p.ragOverall || 'green').toLowerCase();
+      const isGreen = rag === 'green';
+      const isAmber = rag === 'amber';
+      const isRed = rag === 'red';
+
+      if (healthFilter === 'on track' && !isGreen) match = false;
+      if (healthFilter === 'at risk' && !isAmber) match = false;
+      if (healthFilter === 'off track' && !isRed) match = false;
+    }
+    return match;
+  });
+
+  // Calculate project metrics
+  const getProjectMetrics = (projectId: string, budgetDays: number) => {
+    const projectTasks = tasks.filter(t => t.projectId === projectId);
+    const completedTasks = projectTasks.filter(t => t.status === 'completed');
+    
+    const progress = projectTasks.length > 0 ? Math.round((completedTasks.length / projectTasks.length) * 100) : 0;
+    const daysUsed = completedTasks.reduce((acc, t) => acc + (t.durationDays || 0), 0);
+    const budgetPercentage = budgetDays > 0 ? Math.round((daysUsed / budgetDays) * 100) : 0;
+    
+    return { progress, daysUsed, budgetPercentage, taskCount: projectTasks.length };
+  };
+
+  const getHealthColors = (ragOverall?: string) => {
+    const rag = (ragOverall || 'green').toLowerCase();
+    if (rag === 'red') return { bg: 'rgba(239, 68, 68, 0.1)', text: '#ef4444', label: 'Off Track', dot: '#ef4444' };
+    if (rag === 'amber') return { bg: 'rgba(245, 158, 11, 0.1)', text: '#f59e0b', label: 'At Risk', dot: '#f59e0b' };
+    return { bg: 'rgba(16, 185, 129, 0.1)', text: '#10b981', label: 'On Track', dot: '#10b981' };
+  };
+
+  // Derive phase badge colors from the shared phase util.
+  const getPhaseColors = (phase: string | null | undefined, status: string) => {
+    const meta = resolvePhaseMeta({ phase, status });
+    return { bg: meta.bg, text: meta.text, label: meta.label };
+  };
+
+  const getStatusDotColor = (status: string) => {
+    switch(status) {
+      case 'new': return '#3b82f6';
+      case 'in progress': return '#8b5cf6';
+      case 'on hold': return '#f59e0b';
+      case 'completed': return '#10b981';
+      case 'cancelled': return '#ef4444';
+      default: return '#6b7280';
+    }
+  };
+
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedProjectIds(filteredProjects.map(p => p.id));
+    } else {
+      setSelectedProjectIds([]);
+    }
+  };
+
+  const handleSelectOne = (id: string) => {
+    setSelectedProjectIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const applyBulkStatus = () => {
+    if (!bulkStatus || selectedProjectIds.length === 0) return;
+    onBulkUpdateProjects(selectedProjectIds, { status: bulkStatus as Project['status'] });
+    setSelectedProjectIds([]);
+    setBulkStatus('');
+  };
+
+  const applyBulkPM = () => {
+    if (!bulkPM || selectedProjectIds.length === 0) return;
+    onBulkUpdateProjects(selectedProjectIds, { projectManagerId: bulkPM === 'unassigned' ? null : bulkPM });
+    setSelectedProjectIds([]);
+    setBulkPM('');
+  };
+
+  const applyBulkLead = () => {
+    if (!bulkLead || selectedProjectIds.length === 0) return;
+    onBulkUpdateProjects(selectedProjectIds, { leadConsultantId: bulkLead === 'unassigned' ? null : bulkLead });
+    setSelectedProjectIds([]);
+    setBulkLead('');
+  };
+
+  const applyBulkResource = () => {
+    if (!bulkResource || selectedProjectIds.length === 0) return;
+    const projectsToUpdate = activeProjects.filter(p => selectedProjectIds.includes(p.id));
+    
+    projectsToUpdate.forEach(p => {
+      const existing = p.projectResourceIds || [];
+      if (bulkResource !== 'unassigned' && !existing.includes(bulkResource)) {
+        onBulkUpdateProjects([p.id], { projectResourceIds: [...existing, bulkResource] });
+      }
+    });
+    setSelectedProjectIds([]);
+    setBulkResource('');
+    onAddToast(`Resource assigned to ${selectedProjectIds.length} projects`, 'success');
+  };
+
+  const calculateDaysRemaining = (goLiveDate?: string, startDate?: string) => {
+    const targetDateStr = goLiveDate || startDate;
+    if (!targetDateStr) return 0;
+    const targetDate = new Date(targetDateStr);
+    const today = new Date();
+    const diffTime = targetDate.getTime() - today.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      {/* Header Panel */}
+      <div className="card" style={{ padding: '1.1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', borderTop: '5px solid var(--primary)', borderRadius: 'var(--radius-md)', position: 'relative', zIndex: 20, overflow: 'visible' }}>
+        <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'center', flex: 1, minWidth: '320px', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: '1 1 240px', maxWidth: '320px' }}>
+            <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Search projects, clients..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              style={{ paddingLeft: '2.75rem', height: '40px', fontSize: '0.95rem' }}
+            />
+          </div>
+
+          <div style={{ minWidth: '180px', flex: '1 1 180px' }}>
+            <WinComboBox
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { label: 'All Status', value: 'all' },
+                { label: 'New', value: 'new' },
+                { label: 'In Progress', value: 'in progress' },
+                { label: 'On Hold', value: 'on hold' },
+                { label: 'Completed', value: 'completed' },
+                { label: 'Cancelled', value: 'cancelled' }
+              ]}
+            />
+          </div>
+
+          <div style={{ minWidth: '170px', flex: '1 1 170px' }}>
+            <WinComboBox
+              value={phaseFilter}
+              onChange={setPhaseFilter}
+              options={[
+                { label: 'All Phases', value: 'all' },
+                { label: 'All Phases', value: 'all' },
+                ...PHASE_ORDER.map(p => ({ label: p, value: p }))
+              ]}
+            />
+          </div>
+
+          <div style={{ minWidth: '170px', flex: '1 1 170px' }}>
+            <WinComboBox
+              value={healthFilter}
+              onChange={setHealthFilter}
+              options={[
+                { label: 'All Health', value: 'all' },
+                { label: 'On Track', value: 'on track' },
+                { label: 'At Risk', value: 'at risk' },
+                { label: 'Off Track', value: 'off track' }
+              ]}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ display: 'flex', backgroundColor: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', padding: '3px' }}>
+            <button
+              className={`btn ${viewMode === 'grid' ? 'btn-primary' : ''}`}
+              style={{ padding: '0.55rem', backgroundColor: viewMode === 'grid' ? 'var(--bg-elevated)' : 'transparent', color: viewMode === 'grid' ? 'var(--primary)' : 'var(--text-secondary)', border: 'none', boxShadow: viewMode === 'grid' ? 'var(--shadow-sm)' : 'none', minWidth: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              onClick={() => setViewMode('grid')}
+              title="Grid View"
+            >
+              <LayoutGrid size={18} />
+            </button>
+            <button
+              className={`btn ${viewMode === 'list' ? 'btn-primary' : ''}`}
+              style={{ padding: '0.55rem', backgroundColor: viewMode === 'list' ? 'var(--bg-elevated)' : 'transparent', color: viewMode === 'list' ? 'var(--primary)' : 'var(--text-secondary)', border: 'none', boxShadow: viewMode === 'list' ? 'var(--shadow-sm)' : 'none', minWidth: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              onClick={() => setViewMode('list')}
+              title="List View"
+            >
+              <List size={18} />
+            </button>
+          </div>
+
+          <button
+            className="btn btn-primary"
+            onClick={() => setIsNewProjectModalOpen(true)}
+            style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', height: '40px', fontSize: '0.95rem', fontWeight: 600 }}
+          >
+            <Plus size={18} /> New Project
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0 0.25rem' }}>
+        <Filter size={16} style={{ color: 'var(--text-tertiary)' }} />
+        <span style={{ fontSize: '0.95rem', color: 'var(--text-secondary)' }}>Showing <strong>{filteredProjects.length}</strong> of {activeProjects.length} projects</span>
+      </div>
+
+      {selectedProjectIds.length > 0 && (
+        <div className="card" style={{ padding: '1.1rem 1.5rem', backgroundColor: 'var(--primary-light)', border: '1px solid var(--primary)', display: 'flex', gap: '1.25rem', alignItems: 'center', flexWrap: 'wrap', position: 'relative', zIndex: 30, overflow: 'visible' }}>
+          <span style={{ fontWeight: 700, color: 'var(--primary-dark)', fontSize: '1rem' }}>
+            {selectedProjectIds.length} projects selected
+          </span>
+
+          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', borderLeft: '1px solid var(--primary)', paddingLeft: '1.25rem', minWidth: '220px', flex: '1 1 220px' }}>
+            <WinComboBox
+              value={bulkStatus}
+              onChange={(val) => { setBulkStatus(val); }}
+              options={[
+                { label: 'Change Status...', value: '' },
+                { label: 'New', value: 'new' },
+                { label: 'In Progress', value: 'in progress' },
+                { label: 'On Hold', value: 'on hold' },
+                { label: 'Completed', value: 'completed' },
+                { label: 'Cancelled', value: 'cancelled' }
+              ]}
+            />
+            <button className="btn btn-secondary" disabled={!bulkStatus} onClick={applyBulkStatus} style={{ padding: '0.5rem 0.85rem', fontSize: '0.9rem' }}>Apply</button>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', borderLeft: '1px solid var(--primary)', paddingLeft: '1.25rem', minWidth: '220px', flex: '1 1 220px' }}>
+            <WinComboBox
+              value={bulkPM}
+              onChange={(val) => { setBulkPM(val); }}
+              options={[
+                { label: 'Assign PM...', value: '' },
+                { label: 'Unassigned', value: 'unassigned' },
+                ...consultants.map(c => ({ label: c.name, value: c.id }))
+              ]}
+            />
+            <button className="btn btn-secondary" disabled={!bulkPM} onClick={applyBulkPM} style={{ padding: '0.5rem 0.85rem', fontSize: '0.9rem' }}>Apply</button>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', borderLeft: '1px solid var(--primary)', paddingLeft: '1.25rem', minWidth: '220px', flex: '1 1 220px' }}>
+            <WinComboBox
+              value={bulkLead}
+              onChange={(val) => { setBulkLead(val); }}
+              options={[
+                { label: 'Assign Lead...', value: '' },
+                { label: 'Unassigned', value: 'unassigned' },
+                ...consultants.map(c => ({ label: c.name, value: c.id }))
+              ]}
+            />
+            <button className="btn btn-secondary" disabled={!bulkLead} onClick={applyBulkLead} style={{ padding: '0.5rem 0.85rem', fontSize: '0.9rem' }}>Apply</button>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', borderLeft: '1px solid var(--primary)', paddingLeft: '1.25rem', minWidth: '220px', flex: '1 1 220px' }}>
+            <WinComboBox
+              value={bulkResource}
+              onChange={(val) => { setBulkResource(val); }}
+              options={[
+                { label: 'Add Resource...', value: '' },
+                ...consultants.map(c => ({ label: c.name, value: c.id }))
+              ]}
+            />
+            <button className="btn btn-secondary" disabled={!bulkResource} onClick={applyBulkResource} style={{ padding: '0.5rem 0.85rem', fontSize: '0.9rem' }}>Apply</button>
+          </div>
+
+          <button
+            className="btn btn-secondary"
+            style={{ color: 'var(--danger)', marginLeft: 'auto', padding: '0.5rem 0.85rem', fontSize: '0.9rem' }}
+            onClick={() => {
+              if (confirm(`Delete ${selectedProjectIds.length} selected projects?`)) {
+                onBulkDeleteProjects(selectedProjectIds);
+                setSelectedProjectIds([]);
+              }
+            }}
+          >
+            <Trash2 size={16} style={{ marginRight: '0.25rem' }} /> Delete
+          </button>
+        </div>
+      )}
+
+      {viewMode === 'grid' ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(460px, 1fr))', gap: '1.5rem' }}>
+          {filteredProjects.map(project => {
+            const metrics = getProjectMetrics(project.id, project.budgetDays);
+            const healthColors = getHealthColors(project.ragOverall);
+            const phaseColors = getPhaseColors(project.phase, project.status);
+            const projectCode = `PRJ-${project.id.substring(0, 5).toUpperCase()}`;
+            const daysRemaining = calculateDaysRemaining(project.targetGoLiveDate, project.startDate);
+            const risks = (project.ragOverall || '').toLowerCase() === 'red' ? 4 : (project.ragOverall || '').toLowerCase() === 'amber' ? 2 : 0;
+
+            return (
+              <div
+                key={project.id}
+                className="card"
+                style={{
+                  padding: '1.5rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1.25rem',
+                  cursor: 'pointer',
+                  borderTop: `5px solid ${getStatusDotColor(project.status)}`,
+                  transition: 'transform 0.2s, box-shadow 0.2s',
+                  position: 'relative'
+                }}
+                onClick={() => onSelectProject(project.id)}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-3px)';
+                  e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'none';
+                  e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+                }}
+              >
+                {/* Header */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-tertiary)', letterSpacing: '0.02em' }}>{projectCode}</span>
+                    <span style={{ fontSize: '0.8rem', padding: '0.2rem 0.7rem', borderRadius: '12px', backgroundColor: 'rgba(16, 185, 129, 0.12)', color: '#10b981', fontWeight: 700 }}>Active</span>
+                  </div>
+                  <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.01em', lineHeight: 1.25 }}>{project.name}</h3>
+                  <span style={{ fontSize: '0.95rem', color: 'var(--text-secondary)' }}>{project.clientName} · PM Software Implementation</span>
+                </div>
+
+                {/* Badges */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.85rem', padding: '0.3rem 0.85rem', borderRadius: 'var(--radius-sm)', backgroundColor: phaseColors.bg, color: phaseColors.text, fontWeight: 700 }}>
+                    {phaseColors.label}
+                  </span>
+                  <span style={{ fontSize: '0.85rem', padding: '0.3rem 0.85rem', borderRadius: 'var(--radius-sm)', backgroundColor: healthColors.bg, color: healthColors.text, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: healthColors.dot }} />
+                    {healthColors.label}
+                  </span>
+                </div>
+
+                {/* Progress Indicators */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1.25rem' }}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Delivery Progress</span>
+                    <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', backgroundColor: getStatusDotColor(project.status), width: `${metrics.progress}%`, transition: 'width 0.3s ease', borderRadius: '4px' }} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '56px', height: '56px', borderRadius: '50%', border: `3px solid ${getStatusDotColor(project.status)}`, fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)', flexShrink: 0 }}>
+                    {metrics.progress}%
+                  </div>
+                </div>
+
+                {/* Budget and Go-Live Info */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '0.85rem 1rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>Budget Used</span>
+                    <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>{metrics.daysUsed} Days</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>of {project.budgetDays} days · {metrics.budgetPercentage}%</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', textAlign: 'right' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>Go-Live Target</span>
+                    <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>{formatDateFriendly(project.targetGoLiveDate || project.startDate)}</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{daysRemaining >= 0 ? `${daysRemaining} days remaining` : `${Math.abs(daysRemaining)} days overdue`}</span>
+                  </div>
+                </div>
+
+                {/* Footer Icons */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem', marginTop: 'auto' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: 'var(--text-tertiary)', fontSize: '0.9rem', fontWeight: 500 }}>
+                    <CheckCircle2 size={16} /> {metrics.taskCount} tasks
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: 'var(--text-tertiary)', fontSize: '0.9rem', fontWeight: 500 }}>
+                    <AlertCircle size={16} /> {risks} risks
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: 'var(--text-tertiary)', fontSize: '0.9rem', fontWeight: 500 }}>
+                    <Users size={16} /> {1 + (project.projectResourceIds?.length || 0) + (project.leadConsultantId ? 1 : 0)} team
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {filteredProjects.length === 0 && (
+             <div style={{ gridColumn: '1 / -1', padding: '4rem', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '1.05rem' }}>
+               No projects found matching your criteria.
+             </div>
+          )}
+        </div>
+      ) : (
+        <div className="card" style={{ overflowX: 'auto', borderTop: '5px solid var(--primary)' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid var(--border-strong)', textAlign: 'left', backgroundColor: 'var(--bg-tertiary)', fontSize: '0.85rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                <th style={{ padding: '1.1rem 0.6rem 1.1rem 1.5rem', width: '48px' }}>
+                  <input
+                    type="checkbox"
+                    className="win-checkbox"
+                    checked={selectedProjectIds.length === filteredProjects.length && filteredProjects.length > 0}
+                    onChange={handleSelectAll}
+                  />
+                </th>
+                <th style={{ padding: '1.1rem' }}>Project</th>
+                <th style={{ padding: '1.1rem' }}>Industry</th>
+                <th style={{ padding: '1.1rem' }}>Phase</th>
+                <th style={{ padding: '1.1rem' }}>Health</th>
+                <th style={{ padding: '1.1rem', width: '180px' }}>Progress</th>
+                <th style={{ padding: '1.1rem' }}>Budget</th>
+                <th style={{ padding: '1.1rem' }}>Go-Live</th>
+                <th style={{ padding: '1.1rem' }}>PM</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredProjects.map(project => {
+                const pm = consultants.find(c => c.id === project.projectManagerId);
+                const metrics = getProjectMetrics(project.id, project.budgetDays);
+                const healthColors = getHealthColors(project.ragOverall);
+                const phaseColors = getPhaseColors(project.phase, project.status);
+                const projectCode = `PRJ-${project.id.substring(0, 5).toUpperCase()}`;
+
+                return (
+                  <tr
+                    key={project.id}
+                    style={{ borderBottom: '1px solid var(--border-color)', cursor: 'pointer', transition: 'background-color 0.15s' }}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'}
+                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                    onClick={() => onSelectProject(project.id)}
+                  >
+                    <td style={{ padding: '1.1rem 0.6rem 1.1rem 1.5rem' }} onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        className="win-checkbox"
+                        checked={selectedProjectIds.includes(project.id)}
+                        onChange={() => handleSelectOne(project.id)}
+                      />
+                    </td>
+                    <td style={{ padding: '1.1rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: getStatusDotColor(project.status), flexShrink: 0 }} />
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', fontWeight: 700 }}>{projectCode}</span>
+                          <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '1rem' }}>{project.name}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td style={{ padding: '1.1rem', fontSize: '0.95rem', color: 'var(--text-secondary)' }}>{project.clientName}</td>
+                    <td style={{ padding: '1.1rem' }}>
+                      <span style={{ fontSize: '0.85rem', padding: '0.3rem 0.85rem', borderRadius: '12px', backgroundColor: phaseColors.bg, color: phaseColors.text, fontWeight: 700, border: `1px solid ${phaseColors.text}30` }}>
+                        {phaseColors.label}
+                      </span>
+                    </td>
+                    <td style={{ padding: '1.1rem' }}>
+                      <span style={{ fontSize: '0.85rem', padding: '0.3rem 0.85rem', borderRadius: '12px', backgroundColor: healthColors.bg, color: healthColors.text, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem', width: 'fit-content' }}>
+                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: healthColors.dot }} />
+                        {healthColors.label}
+                      </span>
+                    </td>
+                    <td style={{ padding: '1.1rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        <div style={{ width: '90px', height: '8px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', backgroundColor: getStatusDotColor(project.status), width: `${metrics.progress}%`, borderRadius: '4px' }} />
+                        </div>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-secondary)' }}>{metrics.progress}%</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '1.1rem' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{metrics.daysUsed} d</span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>/ {project.budgetDays} d</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '1.1rem', fontSize: '0.95rem', color: 'var(--text-secondary)' }}>
+                      {formatDateFriendly(project.targetGoLiveDate || project.startDate)}
+                    </td>
+                    <td style={{ padding: '1.1rem', fontSize: '0.95rem' }}>
+                      {pm ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                          <span style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: pm.avatarColor, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>
+                            {pm.name.charAt(0)}
+                          </span>
+                          <span style={{ color: 'var(--text-secondary)' }}>{pm.name.split(' ')[0]} {pm.name.split(' ')[1]?.[0] || ''}</span>
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Unassigned</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {filteredProjects.length === 0 && (
+                <tr>
+                  <td colSpan={9} style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '1.05rem' }}>
+                    No projects found matching your criteria.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}

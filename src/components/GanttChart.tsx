@@ -82,18 +82,18 @@ export default function GanttChart({ activeProject, tasks, consultants }: GanttC
           padding: '0.75rem 1rem'
         }}
       >
-        <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center', fontSize: '0.85rem' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            <span style={{ width: '12px', height: '12px', borderRadius: '2px', backgroundColor: 'var(--text-secondary)' }} />
+        <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', fontSize: '0.95rem' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+            <span style={{ width: '14px', height: '14px', borderRadius: '2px', backgroundColor: 'var(--text-secondary)' }} />
             <span>Parent Task (Summary)</span>
           </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            <span style={{ width: '12px', height: '12px', borderRadius: '2px', backgroundColor: 'var(--primary)' }} />
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+            <span style={{ width: '14px', height: '14px', borderRadius: '2px', backgroundColor: 'var(--primary)' }} />
             <span>Consultant Tasks</span>
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.825rem', color: 'var(--text-secondary)' }}>
-          <Info size={14} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.92rem', color: 'var(--text-secondary)' }}>
+          <Info size={15} />
           <span>Timeline displays <b>business days only</b> (Sat & Sun excluded). Columns represent AM/PM blocks.</span>
         </div>
       </div>
@@ -147,10 +147,10 @@ export default function GanttChart({ activeProject, tasks, consultants }: GanttC
                     position: 'relative'
                   }}
                 >
-                  <span 
-                    style={{ 
-                      fontSize: '0.85rem', 
-                      fontWeight: isParent ? 600 : 400,
+                  <span
+                    style={{
+                      fontSize: '0.95rem',
+                      fontWeight: isParent ? 700 : 500,
                       color: isParent ? 'var(--text-primary)' : 'var(--text-secondary)',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
@@ -162,7 +162,7 @@ export default function GanttChart({ activeProject, tasks, consultants }: GanttC
                     {task.parentId && <span style={{ color: 'var(--text-tertiary)', marginRight: '4px' }}>└</span>}
                     {task.name}
                   </span>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', paddingLeft: task.parentId ? '1.5rem' : '0' }}>
+                  <span style={{ fontSize: '0.82rem', color: 'var(--text-tertiary)', paddingLeft: task.parentId ? '1.5rem' : '0' }}>
                     {task.durationDays} days | {task.status.replace('_', ' ')}
                   </span>
                 </div>

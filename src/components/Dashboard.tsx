@@ -168,21 +168,21 @@ export default function Dashboard({
   return (
     <div>
       {/* Dashboard Toggle — pill tab bar */}
-      <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '2rem', backgroundColor: 'var(--bg-secondary)', padding: '0.3rem', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border-color)', width: 'fit-content' }}>
+      <div style={{ display: 'flex', gap: '0.3rem', marginBottom: '2rem', backgroundColor: 'var(--bg-secondary)', padding: '0.35rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)', width: 'fit-content' }}>
         {([
-          { id: 'team', icon: <Users size={15} />, label: 'Team Overview' },
-          { id: 'projects', icon: <FolderKanban size={15} />, label: 'Projects' },
-          { id: 'calendar', icon: <Calendar size={15} />, label: 'Calendar' },
-          ...(isConsultant ? [{ id: 'personal', icon: <User size={15} />, label: 'My Agenda' }] : [])
+          { id: 'team', icon: <Users size={17} />, label: 'Team Overview' },
+          { id: 'projects', icon: <FolderKanban size={17} />, label: 'Projects' },
+          { id: 'calendar', icon: <Calendar size={17} />, label: 'Calendar' },
+          ...(isConsultant ? [{ id: 'personal', icon: <User size={17} />, label: 'My Agenda' }] : [])
         ] as { id: string; icon: React.ReactNode; label: string }[]).map(tab => (
           <button
             key={tab.id}
             onClick={() => setDashboardMode(tab.id as typeof dashboardMode)}
             style={{
-              display: 'flex', alignItems: 'center', gap: '0.4rem',
-              padding: '0.45rem 1rem',
-              borderRadius: 'var(--radius-lg)',
-              fontSize: '0.85rem',
+              display: 'flex', alignItems: 'center', gap: '0.45rem',
+              padding: '0.55rem 1.1rem',
+              borderRadius: 'var(--radius-md)',
+              fontSize: '0.95rem',
               fontWeight: 600,
               cursor: 'pointer',
               border: 'none',
@@ -202,16 +202,17 @@ export default function Dashboard({
         <div>
           <div style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <div style={{
-              width: '52px', height: '52px', borderRadius: 'var(--radius-lg)',
+              width: '60px', height: '60px', borderRadius: 'var(--radius-lg)',
               backgroundColor: activeUser.avatarColor || 'var(--primary)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'white', fontWeight: 700, fontSize: '1.1rem', flexShrink: 0
+              color: 'white', fontWeight: 700, fontSize: '1.25rem', flexShrink: 0,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
             }}>
               {activeUser.name.split(' ').map(n => n[0]).join('')}
             </div>
             <div>
-              <h2 style={{ fontSize: '1.35rem', letterSpacing: '-0.01em' }}>Welcome back, {activeUser.name.split(' ')[0]}!</h2>
-              <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', marginTop: '0.1rem' }}>
+              <h2 style={{ fontSize: '1.6rem', letterSpacing: '-0.01em', margin: 0 }}>Welcome back, {activeUser.name.split(' ')[0]}!</h2>
+              <p style={{ color: 'var(--text-tertiary)', fontSize: '1rem', marginTop: '0.2rem' }}>
                 {activeUser.role} · Here's your project overview
               </p>
             </div>
@@ -335,12 +336,12 @@ export default function Dashboard({
                                   {task.status === 'completed' ? <CheckCircle2 size={20} /> : <Circle size={20} />}
                                 </div>
 
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                    <span 
-                                      style={{ 
-                                        fontWeight: 600, 
-                                        fontSize: '0.925rem',
+                                    <span
+                                      style={{
+                                        fontWeight: 600,
+                                        fontSize: '1.05rem',
                                         textDecoration: task.status === 'completed' ? 'line-through' : 'none'
                                       }}
                                     >
@@ -407,7 +408,7 @@ export default function Dashboard({
                                     )}
                                   </div>
 
-                                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', fontSize: '0.88rem', color: 'var(--text-tertiary)' }}>
                                     <span>Duration: <b>{task.durationDays} days</b></span>
                                     {task.plannedStartDate && (
                                       <>
@@ -540,13 +541,13 @@ export default function Dashboard({
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                           <div>
-                            <h4 style={{ fontWeight: 600, fontSize: '1rem' }}>{project.name}</h4>
-                            <span style={{ fontSize: '0.825rem', color: 'var(--text-tertiary)' }}>Client: {project.clientName}</span>
+                            <h4 style={{ fontWeight: 700, fontSize: '1.1rem' }}>{project.name}</h4>
+                            <span style={{ fontSize: '0.92rem', color: 'var(--text-tertiary)' }}>Client: {project.clientName}</span>
                           </div>
                           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                             {isOverBudget && (
-                              <span className="badge badge-danger" style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
-                                <AlertTriangle size={12} /> Over Budget
+                              <span className="badge badge-danger" style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+                                <AlertTriangle size={13} /> Over Budget
                               </span>
                             )}
                             <span className="badge badge-primary">{pct}% Complete</span>
@@ -555,18 +556,19 @@ export default function Dashboard({
 
                         {/* Progress details */}
                         <div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.825rem', marginBottom: '0.25rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.92rem', marginBottom: '0.35rem' }}>
                             <span style={{ color: 'var(--text-secondary)' }}>Budget Allocation: {projectAllocated} / {project.budgetDays} days</span>
-                            <span style={{ fontWeight: 'bold' }}>{Math.round((projectAllocated / project.budgetDays) * 100)}%</span>
+                            <span style={{ fontWeight: 700 }}>{Math.round((projectAllocated / project.budgetDays) * 100)}%</span>
                           </div>
-                          <div style={{ height: '6px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '9999px', overflow: 'hidden' }}>
-                            <div 
-                              style={{ 
-                                height: '100%', 
-                                backgroundColor: isOverBudget ? 'var(--danger)' : 'var(--accent)', 
+                          <div style={{ height: '8px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden' }}>
+                            <div
+                              style={{
+                                height: '100%',
+                                backgroundColor: isOverBudget ? 'var(--danger)' : 'var(--accent)',
                                 width: `${Math.min(100, (projectAllocated / project.budgetDays) * 100)}%`,
-                                transition: 'width 0.3s ease'
-                              }} 
+                                transition: 'width 0.3s ease',
+                                borderRadius: '4px'
+                              }}
                             />
                           </div>
                         </div>
@@ -592,31 +594,32 @@ export default function Dashboard({
                     const isOverloaded = c.totalDays > 10;
                     
                     return (
-                      <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0' }}>
-                        <div 
-                          style={{ 
-                            width: '40px', 
-                            height: '40px', 
-                            borderRadius: '50%', 
-                            backgroundColor: c.avatarColor || 'var(--primary)', 
+                      <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.6rem 0' }}>
+                        <div
+                          style={{
+                            width: '44px',
+                            height: '44px',
+                            borderRadius: '50%',
+                            backgroundColor: c.avatarColor || 'var(--primary)',
                             color: 'white',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             fontWeight: 'bold',
-                            fontSize: '0.9rem'
+                            fontSize: '0.95rem',
+                            flexShrink: 0
                           }}
                         >
                           {c.name.split(' ').map(n => n[0]).join('')}
                         </div>
                         <div style={{ flex: 1 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontWeight: 500, fontSize: '0.9rem' }}>{c.name}</span>
-                            <span style={{ fontSize: '0.825rem', fontWeight: 600, color: isOverloaded ? 'var(--danger)' : 'var(--text-secondary)' }}>
+                            <span style={{ fontWeight: 600, fontSize: '1rem' }}>{c.name}</span>
+                            <span style={{ fontSize: '0.92rem', fontWeight: 700, color: isOverloaded ? 'var(--danger)' : 'var(--text-secondary)' }}>
                               {c.totalDays} days
                             </span>
                           </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.15rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.2rem' }}>
                             <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{c.role}</span>
                             <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{c.taskCount} tasks</span>
                           </div>

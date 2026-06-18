@@ -32,13 +32,13 @@ export default function PasswordReset({ userId, consultants, onPasswordReset, on
 
   return (
     <div className="modal-overlay">
-      <div className="modal-card" style={{ maxWidth: '380px', padding: '1.5rem', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xl)' }}>
-        <div className="modal-header" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-          <Lock size={20} />
-          <h3 style={{ margin: 0, fontWeight: 600 }}>Reset Password for {displayName}</h3>
+      <div className="modal-card" style={{ maxWidth: '420px', padding: '2rem', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-xl)' }}>
+        <div className="modal-header" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem' }}>
+          <Lock size={22} />
+          <h3 style={{ margin: 0, fontWeight: 700, fontSize: '1.25rem' }}>Reset Password for {displayName}</h3>
         </div>
         {error && (
-          <div style={{ color: 'var(--danger)', marginBottom: '0.75rem' }}>{error}</div>
+          <div style={{ color: 'var(--danger)', marginBottom: '0.75rem', fontSize: '0.95rem', fontWeight: 600 }}>{error}</div>
         )}
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <input

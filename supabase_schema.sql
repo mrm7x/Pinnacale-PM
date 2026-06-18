@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS consultants (
     email TEXT UNIQUE NOT NULL,
     role TEXT NOT NULL DEFAULT 'Consultant',
     avatar_color TEXT NOT NULL DEFAULT '#0d9488',
-    tier TEXT NOT NULL DEFAULT 'consultant', -- 'admin' | 'project_manager' | 'consultant' | 'read_only'
+    tier TEXT NOT NULL DEFAULT 'normal', -- 'superuser' | 'admin' | 'normal' (must match client-side Consultant.tier union)
     password_hash TEXT, -- Fallback plaintext hash when Supabase Auth is inactive
     must_reset_password BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -22,9 +22,11 @@ CREATE TABLE IF NOT EXISTS consultants (
 -- Enable Row Level Security (RLS)
 ALTER TABLE consultants ENABLE ROW LEVEL SECURITY;
 
--- Create policies (Simplest: Allow all authenticated operations, or full public read/write if anon key used)
+-- Create policies. NOTE: WITH USING(true)/CHECK(true) these are intentionally
+-- permissive (full public read AND write). Tighten to auth.role() = 'authenticated'
+-- if you need to restrict writes to signed-in users.
 CREATE POLICY "Allow read access for anyone" ON consultants FOR SELECT USING (true);
-CREATE POLICY "Allow write access for authenticated users" ON consultants FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow full write access" ON consultants FOR ALL USING (true) WITH CHECK (true);
 
 --------------------------------------------------------------------------------
 -- 2. PROJECTS TABLE
@@ -38,7 +40,22 @@ CREATE TABLE IF NOT EXISTS projects (
     start_date TEXT NOT NULL, -- Format YYYY-MM-DD
     target_go_live_date TEXT NOT NULL, -- Format YYYY-MM-DD
     consultant_ids TEXT[] NOT NULL DEFAULT '{}', -- Array of consultant IDs
+    project_manager_id TEXT REFERENCES consultants(id),
+    lead_consultant_id TEXT REFERENCES consultants(id),
+    customer_id TEXT REFERENCES consultants(id),
+    project_resource_ids TEXT[] NOT NULL DEFAULT '{}',
+    trello_link TEXT,
+    sharepoint_link TEXT,
+    rag_scope TEXT DEFAULT 'green',
+    rag_schedule TEXT DEFAULT 'green',
+    rag_costs TEXT DEFAULT 'green',
+    rag_benefits TEXT DEFAULT 'green',
+    rag_overall TEXT DEFAULT 'green',
+    status TEXT NOT NULL DEFAULT 'new', -- 'new', 'in progress', 'on hold', 'completed', 'cancelled'
+    phase TEXT, -- Human-readable delivery phase (e.g. 'Discovery', 'Implementation', 'Hypercare')
     is_template BOOLEAN NOT NULL DEFAULT false,
+    icon TEXT,
+    color_theme TEXT,
     created_at TEXT NOT NULL DEFAULT (to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -47,7 +64,7 @@ CREATE TABLE IF NOT EXISTS projects (
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow read access for anyone" ON projects FOR SELECT USING (true);
-CREATE POLICY "Allow write access for authenticated users" ON projects FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow full write access" ON projects FOR ALL USING (true) WITH CHECK (true);
 
 --------------------------------------------------------------------------------
 -- 3. TASKS TABLE
@@ -79,21 +96,40 @@ CREATE TABLE IF NOT EXISTS tasks (
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow read access for anyone" ON tasks FOR SELECT USING (true);
-CREATE POLICY "Allow write access for authenticated users" ON tasks FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow full write access" ON tasks FOR ALL USING (true) WITH CHECK (true);
 
 --------------------------------------------------------------------------------
--- 4. INITIAL SEED DATA
+-- 4. COMMUNICATIONS TABLE
+--------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS communications (
+    id TEXT PRIMARY KEY,
+    project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+    subject TEXT NOT NULL,
+    type TEXT NOT NULL, -- 'Teams call', 'email', 'in person meeting'
+    description TEXT,
+    creator_id TEXT REFERENCES consultants(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Enable RLS
+ALTER TABLE communications ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow read access for anyone" ON communications FOR SELECT USING (true);
+CREATE POLICY "Allow full write access" ON communications FOR ALL USING (true) WITH CHECK (true);
+
+--------------------------------------------------------------------------------
+-- 5. INITIAL SEED DATA
 --------------------------------------------------------------------------------
 
 -- Seed default consultants (Note: admin email is customized to mohammad.jenabi@gmail.com)
 INSERT INTO consultants (id, name, email, role, avatar_color, tier, password_hash, must_reset_password)
-VALUES 
-  ('admin', 'System Administrator', 'mohammad.jenabi@gmail.com', 'Administrator', '#2d4a65', 'admin', '6ee4a469cd4e91053847f5d3fcb61dbcc91e8f0ef10be7748da4c4a1ba382d17', false),
-  ('c1', 'Sarah Jenkins', 'sarah.jenkins@pinnacle.com', 'Lead Consultant', '#0d9488', 'consultant', '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8', true),
-  ('c2', 'Alex Rivera', 'alex.rivera@pinnacle.com', 'Technical Architect', '#6366f1', 'consultant', '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8', true),
-  ('c3', 'Marcus Brody', 'marcus.brody@pinnacle.com', 'Project Manager', '#f59e0b', 'project_manager', '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8', true),
-  ('c4', 'David Vance', 'david.vance@pinnacle.com', 'Executive Sponsor (Read Only)', '#ef4444', 'read_only', '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8', true)
-ON CONFLICT (email) DO UPDATE 
+VALUES
+  ('admin', 'System Administrator', 'mohammad.jenabi@gmail.com', 'Manager', '#2d4a65', 'superuser', '6ee4a469cd4e91053847f5d3fcb61dbcc91e8f0ef10be7748da4c4a1ba382d17', false),
+  ('c1', 'Sarah Jenkins', 'sarah.jenkins@pinnacle.com', 'Lead Consultant', '#0d9488', 'normal', '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8', true),
+  ('c2', 'Alex Rivera', 'alex.rivera@pinnacle.com', 'Consultant', '#6366f1', 'normal', '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8', true),
+  ('c3', 'Marcus Brody', 'marcus.brody@pinnacle.com', 'Project Manager', '#f59e0b', 'normal', '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8', true),
+  ('c4', 'David Vance', 'david.vance@pinnacle.com', 'Read only', '#ef4444', 'normal', '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8', true)
+ON CONFLICT (email) DO UPDATE
 SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_hash = EXCLUDED.password_hash;
 
 -- Seed default project (Horizon Logistics implementation)

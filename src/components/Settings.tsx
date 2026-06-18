@@ -22,7 +22,7 @@ interface SettingsProps {
   onUpdateConsultant: (consultant: Consultant) => void;
   onUpdateO365Config: (config: O365Config) => void;
   onMicrosoftLoginSuccess: (account: AccountInfo | null) => void;
-  onImportData: (jsonData: string) => boolean;
+  onImportData: (jsonData: string) => Promise<boolean>;
   onExportData: () => void;
   onResetData: () => void;
   onAddToast: (msg: string, type: 'success' | 'error' | 'warning' | 'info') => void;
@@ -312,9 +312,9 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
     }
   };
 
-  const handleImportSubmit = (e: React.FormEvent) => {
+  const handleImportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const success = onImportData(importJson);
+    const success = await onImportData(importJson);
     if (success) {
       onAddToast('Database imported successfully!', 'success');
       setImportJson('');
@@ -359,13 +359,13 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
                 {currentUser.name.split(' ').map(n => n[0]).join('')}
               </div>
               <div style={{ flex: 1, minWidth: '200px' }}>
-                <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>{currentUser.name}</h4>
-                <p style={{ margin: '0.25rem 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{currentUser.email}</p>
-                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                  <span className="badge badge-secondary" style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}>
+                <h4 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>{currentUser.name}</h4>
+                <p style={{ margin: '0.3rem 0', color: 'var(--text-secondary)', fontSize: '0.95rem' }}>{currentUser.email}</p>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem', flexWrap: 'wrap' }}>
+                  <span className="badge badge-secondary">
                     Role: {currentUser.role}
                   </span>
-                  <span className={`badge badge-${currentUser.tier === 'superuser' ? 'primary' : currentUser.tier === 'admin' ? 'warning' : 'secondary'}`} style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}>
+                  <span className={`badge badge-${currentUser.tier === 'superuser' ? 'primary' : currentUser.tier === 'admin' ? 'warning' : 'secondary'}`}>
                     Access: {currentUser.tier === 'superuser' ? 'Super User' : currentUser.tier === 'admin' ? 'Admin' : 'Normal User'}
                   </span>
                 </div>
@@ -572,48 +572,49 @@ SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_h
 
             {/* Consultants Directory List */}
             <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
-              <h4 style={{ fontSize: '0.9rem', marginBottom: '0.75rem', color: 'var(--text-secondary)' }}>Consultants Directory</h4>
+              <h4 style={{ fontSize: '1rem', marginBottom: '0.85rem', color: 'var(--text-secondary)', fontWeight: 700 }}>Consultants Directory</h4>
               {consultants.length === 0 ? (
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>No consultants registered.</span>
+                <span style={{ fontSize: '0.95rem', color: 'var(--text-tertiary)' }}>No consultants registered.</span>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {consultants.map(c => {
                     const tierLabel = c.tier === 'superuser' ? 'Super User' : c.tier === 'admin' ? 'Admin' : 'Normal User';
                     return (
-                      <div 
-                        key={c.id} 
-                        style={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
+                      <div
+                        key={c.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
                           justifyContent: 'space-between',
                           border: '1px solid var(--border-color)',
-                          padding: '0.75rem',
+                          padding: '0.85rem 1rem',
                           borderRadius: 'var(--radius-md)',
                           backgroundColor: 'var(--bg-primary)'
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                          <div 
-                            style={{ 
-                              width: '32px', 
-                              height: '32px', 
-                              borderRadius: '50%', 
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                          <div
+                            style={{
+                              width: '40px',
+                              height: '40px',
+                              borderRadius: '50%',
                               backgroundColor: c.avatarColor,
                               color: 'white',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
                               fontWeight: 'bold',
-                              fontSize: '0.8rem'
+                              fontSize: '0.9rem',
+                              flexShrink: 0
                             }}
                           >
                             {c.name.split(' ').map(n => n[0]).join('')}
                           </div>
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontWeight: 500, fontSize: '0.875rem' }}>{c.name}</span>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{c.role} | {c.email}</span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                            <span style={{ fontWeight: 600, fontSize: '1rem' }}>{c.name}</span>
+                            <span style={{ fontSize: '0.88rem', color: 'var(--text-tertiary)' }}>{c.role} | {c.email}</span>
                             <span className={`badge badge-${c.tier === 'superuser' ? 'primary' : c.tier === 'admin' ? 'warning' : 'secondary'}`}
-                              style={{ alignSelf: 'flex-start', marginTop: '0.25rem', fontSize: '0.65rem', padding: '0.1rem 0.35rem' }}>
+                              style={{ alignSelf: 'flex-start', marginTop: '0.2rem' }}>
                               {tierLabel}
                             </span>
                           </div>

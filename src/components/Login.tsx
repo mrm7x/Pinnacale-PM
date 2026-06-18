@@ -302,19 +302,19 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
                   <label style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.35rem',
-                    fontSize: '0.82rem',
+                    gap: '0.4rem',
+                    fontSize: '0.95rem',
                     fontWeight: 600,
                     color: 'var(--text-secondary)',
                     marginBottom: '0.5rem',
                     letterSpacing: '0.01em'
                   }}>
-                    <User size={13} /> Email Address
+                    <User size={15} /> Email Address
                   </label>
                   <input
                     type="email"
                     className="form-input"
-                    style={{ fontSize: '0.9rem', padding: '0.75rem 1rem' }}
+                    style={{ fontSize: '1rem', padding: '0.8rem 1rem' }}
                     placeholder="email@example.com"
                     value={resetEmail}
                     onChange={e => setResetEmail(e.target.value)}
@@ -407,19 +407,19 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
               <label style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '0.35rem',
-                fontSize: '0.82rem',
+                gap: '0.4rem',
+                fontSize: '0.95rem',
                 fontWeight: 600,
                 color: 'var(--text-secondary)',
                 marginBottom: '0.5rem',
                 letterSpacing: '0.01em'
               }}>
-                <User size={13} /> Username or Email
+                <User size={15} /> Username or Email
               </label>
               <input
                 type="text"
                 className="form-input"
-                style={{ fontSize: '0.9rem', padding: '0.75rem 1rem' }}
+                style={{ fontSize: '1rem', padding: '0.8rem 1rem' }}
                 placeholder="admin or email address"
                 value={username}
                 onChange={e => setUsername(e.target.value)}
@@ -434,13 +434,13 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
                 <label style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.35rem',
-                  fontSize: '0.82rem',
+                  gap: '0.4rem',
+                  fontSize: '0.95rem',
                   fontWeight: 600,
                   color: 'var(--text-secondary)',
                   letterSpacing: '0.01em'
                 }}>
-                  <KeyRound size={13} /> Password
+                  <KeyRound size={15} /> Password
                 </label>
                 <button
                   type="button"
@@ -450,7 +450,7 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
                     setResetEmail('');
                     setSuccessMessage(null);
                   }}
-                  style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: 0 }}
+                  style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', padding: 0 }}
                 >
                   Forgot Password?
                 </button>
@@ -458,7 +458,7 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
               <input
                 type="password"
                 className="form-input"
-                style={{ fontSize: '0.9rem', padding: '0.75rem 1rem' }}
+                style={{ fontSize: '1rem', padding: '0.8rem 1rem' }}
                 placeholder="••••••••"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
@@ -472,8 +472,8 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
               className="btn btn-primary"
               style={{
                 width: '100%',
-                padding: '0.85rem',
-                fontSize: '0.92rem',
+                padding: '0.9rem',
+                fontSize: '1rem',
                 marginTop: '0.5rem',
                 borderRadius: 'var(--radius-md)',
                 display: 'flex',
@@ -483,7 +483,7 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
               }}
               disabled={isLoading}
             >
-              {isLoading ? 'Signing in…' : <><span>Sign In</span><ArrowRight size={15} /></>}
+              {isLoading ? 'Signing in…' : <><span>Sign In</span><ArrowRight size={17} /></>}
             </button>
           </form>
         </div>

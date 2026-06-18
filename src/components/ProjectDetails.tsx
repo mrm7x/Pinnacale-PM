@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
-import type { Project, Task, Consultant, O365Config } from '../types';
-import { canCreateProject, canEditProject, canCreateTask, canEditTask, canDeleteTask } from '../utils/permissions';
+import type { Project, Task, Consultant, O365Config, Communication } from '../types';
+import { canEditProject, canCreateTask, canEditTask, canDeleteTask } from '../utils/permissions';
 import {
   Plus, Calendar, Trash2, Edit2, ChevronDown, ChevronRight, ChevronUp,
   RefreshCw, MailCheck, User, X, Clock, FolderKanban, Pencil,
@@ -10,40 +10,18 @@ import {
 import { syncTaskToO365, createOutlookCalendarEvent } from '../utils/o365';
 import { WinComboBox } from './winui/WinComboBox';
 import { WinDatePicker } from './winui/WinDatePicker';
+import GanttChart from './GanttChart';
+import EditProjectModal from './EditProjectModal';
+import { formatDateFriendly } from './Dashboard';
 
-export function formatDateFriendly(dateStr?: string | null): string {
-  if (!dateStr) return '—';
-  const parts = dateStr.split('-');
-  if (parts.length !== 3) return dateStr;
-  const monthIndex = parseInt(parts[1]) - 1;
-  const day = parseInt(parts[2]);
-
-  const months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-
-  const getOrdinalSuffix = (d: number) => {
-    if (d > 3 && d < 21) return 'th';
-    switch (d % 10) {
-      case 1: return "st";
-      case 2: return "nd";
-      case 3: return "rd";
-      default: return "th";
-    }
-  };
-
-  return `${day}${getOrdinalSuffix(day)} of ${months[monthIndex]}`;
-}
-
-interface ProjectViewProps {
+interface ProjectDetailsProps {
   projects: Project[];
   tasks: Task[];
   consultants: Consultant[];
+  communications: Communication[];
   o365Config: O365Config;
   selectedProjectId: string | null;
   onSelectProject: (id: string | null) => void;
-  onCreateProject: (project: Omit<Project, 'id' | 'createdAt' | 'isTemplate'>, templateId?: string) => void;
   onUpdateProject: (project: Project) => void;
   onDeleteProject: (id: string) => void;
   onCreateTask: (task: Omit<Task, 'id'>) => void;
@@ -53,14 +31,15 @@ interface ProjectViewProps {
   onBulkDeleteTasks: (ids: string[]) => void;
   onUpdateTaskAndSubtasks: (task: Task, subtaskIds: string[], subtaskUpdates: Partial<Task>) => void;
   onAddToast: (msg: string, type: 'success' | 'error' | 'warning' | 'info') => void;
-  projectTemplates: Project[];
   onDuplicateProject: (projectId: string, config: { name: string; clientName: string; startDate: string; copyAssignments: boolean }) => void;
   onSaveAsTemplate: (projectId: string, templateName: string) => void;
   activeUserId: string;
   onReorderTasks: (updates: { id: string; sortOrder: number }[]) => void;
+  onSaveCommunication: (comm: Communication) => Promise<void>;
+  onDeleteCommunication: (id: string) => Promise<void>;
+  setIsNewProjectModalOpen: (val: boolean) => void;
 }
 
-const PROJECT_COLORS = ['#D32F2F', '#C2185B', '#7B1FA2', '#303F9F', '#0288D1', '#00796B', '#388E3C', '#E64A19'];
 
 const PROJECT_ICONS = [
   { name: 'Folder', Icon: Folder },
@@ -71,14 +50,35 @@ const PROJECT_ICONS = [
   { name: 'Layout', Icon: Layout }
 ];
 
-export default function ProjectView({
+const PHASE_COLORS: Record<string, { bg: string; text: string }> = {
+  'Discovery':      { bg: 'rgba(59, 130, 246, 0.12)', text: '#3b82f6' },
+  'Planning':       { bg: 'rgba(107, 114, 128, 0.12)', text: '#6b7280' },
+  'Implementation': { bg: 'rgba(139, 92, 246, 0.12)', text: '#8b5cf6' },
+  'Testing':        { bg: 'rgba(14, 165, 233, 0.12)', text: '#0ea5e9' },
+  'Hypercare':      { bg: 'rgba(16, 185, 129, 0.12)', text: '#10b981' },
+  'Support':        { bg: 'rgba(20, 184, 166, 0.12)', text: '#14b8a6' }
+};
+
+function getPhaseStyle(phase?: string | null): { bg: string; text: string; label: string } {
+  if (phase && PHASE_COLORS[phase]) return { ...PHASE_COLORS[phase], label: phase };
+  return { bg: 'rgba(107, 114, 128, 0.12)', text: '#6b7280', label: '—' };
+}
+
+function getRagStyle(rag?: string | null): { bg: string; text: string; label: string } {
+  const r = (rag || 'green').toLowerCase();
+  if (r === 'red') return { bg: 'rgba(239, 68, 68, 0.12)', text: '#ef4444', label: 'Off Track' };
+  if (r === 'amber') return { bg: 'rgba(245, 158, 11, 0.12)', text: '#f59e0b', label: 'At Risk' };
+  return { bg: 'rgba(16, 185, 129, 0.12)', text: '#10b981', label: 'On Track' };
+}
+
+export default function ProjectDetails({
   projects,
   tasks,
   consultants,
+  communications,
   o365Config,
   selectedProjectId,
   onSelectProject,
-  onCreateProject,
   onUpdateProject,
   onDeleteProject,
   onCreateTask,
@@ -88,30 +88,27 @@ export default function ProjectView({
   onBulkDeleteTasks,
   onUpdateTaskAndSubtasks,
   onAddToast,
-  projectTemplates,
   onDuplicateProject,
   onSaveAsTemplate,
   activeUserId,
-  onReorderTasks
-}: ProjectViewProps) {
+  onReorderTasks,
+  onSaveCommunication,
+  onDeleteCommunication,
+  setIsNewProjectModalOpen
+}: ProjectDetailsProps) {
   const activeConsultant = consultants.find(c => c.id === activeUserId);
   const activeRole = activeConsultant?.role || 'Read only';
 
-  const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
+  const [activeProjectTab, setActiveProjectTab] = useState<'overview' | 'tasks' | 'gantt' | 'rag' | 'communications'>('overview');
   const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
   const [isTemplateSaveModalOpen, setIsTemplateSaveModalOpen] = useState(false);
-  const [selectedTemplateId, setSelectedTemplateId] = useState('');
 
   const [duplicateForm, setDuplicateForm] = useState({ name: '', clientName: '', startDate: '', copyAssignments: true });
   const [templateForm, setTemplateForm] = useState({ name: '' });
 
-  // Form States
-  const [newProject, setNewProject] = useState({ name: '', clientName: '', description: '', budgetDays: 10, startDate: new Date().toISOString().split('T')[0], targetGoLiveDate: '', consultantIds: [] as string[], icon: 'Folder', colorTheme: '#0288D1' });
-  const [editProjectForm, setEditProjectForm] = useState({ id: '', name: '', clientName: '', description: '', budgetDays: 10, startDate: '', targetGoLiveDate: '', consultantIds: [] as string[], icon: 'Folder', colorTheme: '#0288D1' });
-  
   const [inlineEditingTaskId, setInlineEditingTaskId] = useState<string | null>(null);
   const [inlineEditField, setInlineEditField] = useState<'duration' | 'startDate' | 'assignee' | 'status' | 'pinkNumber' | null>(null);
   const [inlineEditForm, setInlineEditForm] = useState<Partial<Task>>({});
@@ -154,7 +151,7 @@ export default function ProjectView({
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
   const [syncingTaskId, setSyncingTaskId] = useState<string | null>(null);
   const [schedulingEvent, setSchedulingEvent] = useState(false);
-  const [editMode, setEditMode] = useState(false);
+  const [editMode, setEditMode] = useState(true);
   const [applyToSubtasks, setApplyToSubtasks] = useState(false);
 
   const [hideCompleted, setHideCompleted] = useState(false);
@@ -186,33 +183,7 @@ export default function ProjectView({
     setExpandedTasks(prev => ({ ...prev, [taskId]: !prev[taskId] }));
   };
 
-  // Handle Project Submits
-  const handleCreateProjectSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!newProject.name || !newProject.clientName) return;
-    onCreateProject(newProject, selectedTemplateId || undefined);
-    setIsNewProjectModalOpen(false);
-    setNewProject({ name: '', clientName: '', description: '', budgetDays: 10, startDate: new Date().toISOString().split('T')[0], targetGoLiveDate: '', consultantIds: [], icon: 'Folder', colorTheme: '#0288D1' });
-    setSelectedTemplateId('');
-  };
 
-  const handleEditProjectSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!activeProject || !editProjectForm.name || !editProjectForm.clientName) return;
-
-    onUpdateProject({
-      ...activeProject,
-      name: editProjectForm.name,
-      clientName: editProjectForm.clientName,
-      description: editProjectForm.description,
-      budgetDays: parseFloat(editProjectForm.budgetDays.toString()) || 0,
-      startDate: editProjectForm.startDate,
-      targetGoLiveDate: editProjectForm.targetGoLiveDate || undefined,
-      icon: editProjectForm.icon,
-      colorTheme: editProjectForm.colorTheme
-    });
-    setIsEditProjectModalOpen(false);
-  };
 
   const handleDuplicateSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -237,6 +208,23 @@ export default function ProjectView({
       durationDays: 1.0,
       assignedConsultantId: consultants[0]?.id || '',
       parentId: '',
+      predecessorIds: [],
+      status: 'not_started',
+      pinkNumber: '',
+      billed: false,
+      customStartDate: ''
+    });
+    setIsTaskModalOpen(true);
+  };
+
+  const handleAddSubtask = (parentTask: Task) => {
+    setEditingTask(null);
+    setTaskForm({
+      name: '',
+      description: '',
+      durationDays: 1.0,
+      assignedConsultantId: consultants[0]?.id || '',
+      parentId: parentTask.id,
       predecessorIds: [],
       status: 'not_started',
       pinkNumber: '',
@@ -287,7 +275,7 @@ export default function ProjectView({
       projectId: selectedProjectId,
       name: taskForm.name,
       description: taskForm.description,
-      durationDays: parseFloat(taskForm.durationDays.toString()),
+      durationDays: taskForm.durationDays,
       assignedConsultantId: taskForm.assignedConsultantId || null,
       parentId: taskForm.parentId || null,
       predecessorIds: taskForm.predecessorIds,
@@ -774,9 +762,16 @@ export default function ProjectView({
                       </button>
                     </>
                   )}
-                  <button className="btn btn-secondary btn-icon" onClick={() => handleOpenEditTask(task)} style={{ padding: '0.25rem' }}>
-                    <Edit2 size={13} />
-                  </button>
+                  {canCreateTask(activeRole) && (
+                    <button className="btn btn-secondary btn-icon" onClick={(e) => { e.stopPropagation(); handleAddSubtask(task); }} title="Add Subtask" style={{ padding: '0.25rem' }}>
+                      <Plus size={13} />
+                    </button>
+                  )}
+                  {!editMode && (
+                    <button className="btn btn-secondary btn-icon" onClick={(e) => { e.stopPropagation(); handleOpenEditTask(task); }} title="Edit Task" style={{ padding: '0.25rem' }}>
+                      <Edit2 size={13} />
+                    </button>
+                  )}
                 </>
               )}
               {canDeleteTask(activeRole) && (
@@ -854,215 +849,316 @@ export default function ProjectView({
 
   return (
     <div>
-      {/* Project Selector Header */}
-      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        <WinComboBox
-          className="form-select"
-          value={selectedProjectId || ''}
-          onChange={(val) => onSelectProject(val || null)}
-          options={[
-            { label: '-- Select Project --', value: '' },
-            ...projects.map(p => ({ label: `${p.name} (${p.clientName})`, value: p.id }))
-          ]}
-        />
 
-        {canCreateProject(activeRole) && (
-          <button className="btn btn-primary" onClick={() => setIsNewProjectModalOpen(true)} style={{ whiteSpace: 'nowrap' }}>
-            <Plus size={16} /> New Project
-          </button>
-        )}
-
-        {activeProject && canEditProject(activeRole) && (
-          <div style={{ display: 'flex', gap: '0.35rem', marginLeft: 'auto' }}>
-            <button
-              className="btn btn-ghost"
-              onClick={() => {
-                setDuplicateForm({
-                  name: `${activeProject.name} (Copy)`,
-                  clientName: activeProject.clientName,
-                  startDate: activeProject.startDate,
-                  copyAssignments: true
-                });
-                setIsDuplicateModalOpen(true);
-              }}
-              title="Duplicate Project"
-            >
-              <RefreshCw size={14} /> Duplicate
-            </button>
-            <button
-              className="btn btn-ghost"
-              onClick={() => {
-                setTemplateForm({ name: `${activeProject.name} Template` });
-                setIsTemplateSaveModalOpen(true);
-              }}
-              title="Save as Template"
-            >
-              <FolderKanban size={14} /> Template
-            </button>
-            <button
-              className="btn btn-ghost"
-              onClick={() => {
-                setEditProjectForm({
-                  id: activeProject.id,
-                  name: activeProject.name,
-                  clientName: activeProject.clientName,
-                  description: activeProject.description || '',
-                  budgetDays: activeProject.budgetDays,
-                  startDate: activeProject.startDate,
-                  targetGoLiveDate: activeProject.targetGoLiveDate || '',
-                  consultantIds: activeProject.consultantIds,
-                  icon: activeProject.icon || 'Folder',
-                  colorTheme: activeProject.colorTheme || '#0288D1'
-                });
-                setIsEditProjectModalOpen(true);
-              }}
-              title="Amend Project"
-            >
-              <Edit2 size={14} /> Amend
-            </button>
-            <button
-              className="btn btn-ghost"
-              style={{ color: 'var(--danger)' }}
-              onClick={() => {
-                if (confirm(`Are you sure you want to delete project "${activeProject.name}" and all its tasks?`)) {
-                  onDeleteProject(activeProject.id);
-                  onSelectProject(null);
-                  onAddToast('Project deleted successfully.', 'warning');
-                }
-              }}
-              title="Delete Project"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-        )}
-      </div>
 
       {activeProject ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {/* Project Header Card */}
-          <div className="card" style={{ padding: '1.5rem', borderTop: `4px solid ${activeProject.colorTheme || 'var(--primary)'}` }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
-              {/* Left Side: General Project Info */}
-              <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'flex-start' }}>
-                {activeProject.icon && PROJECT_ICONS.find(i => i.name === activeProject.icon) && (() => {
-                  const IconComp = PROJECT_ICONS.find(i => i.name === activeProject.icon)!.Icon;
-                  return (
-                    <div style={{
-                      width: '64px', height: '64px', flexShrink: 0,
-                      borderRadius: 'var(--radius-lg)',
-                      backgroundColor: activeProject.colorTheme || 'var(--bg-secondary)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: 'rgba(0,0,0,0.6)',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
-                      marginTop: '0.25rem'
-                    }}>
-                      <IconComp size={32} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+
+          {/* Tabs Navigation & Actions */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', gap: '0.3rem', backgroundColor: 'var(--bg-secondary)', padding: '0.35rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)', width: 'fit-content', flexWrap: 'wrap' }}>
+              {([
+                { id: 'overview', label: 'Overview' },
+                { id: 'tasks', label: 'Task List' },
+                { id: 'gantt', label: 'Gantt' },
+                { id: 'rag', label: 'RAG Status' },
+                { id: 'communications', label: 'Communications' }
+              ] as const).map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveProjectTab(tab.id as any)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.45rem',
+                    padding: '0.5rem 1.05rem',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: '0.95rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    border: 'none',
+                    transition: 'all 0.15s ease',
+                    backgroundColor: activeProjectTab === tab.id ? 'var(--primary)' : 'transparent',
+                    color: activeProjectTab === tab.id ? 'white' : 'var(--text-secondary)',
+                    boxShadow: activeProjectTab === tab.id ? '0 1px 4px rgba(45,74,101,0.25)' : 'none',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {canEditProject(activeRole) && (
+              <div style={{ display: 'flex', gap: '0.4rem', paddingBottom: '0.25rem' }}>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    setDuplicateForm({
+                      name: `${activeProject.name} (Copy)`,
+                      clientName: activeProject.clientName,
+                      startDate: activeProject.startDate,
+                      copyAssignments: true
+                    });
+                    setIsDuplicateModalOpen(true);
+                  }}
+                  title="Duplicate Project"
+                  style={{ padding: '0.5rem 0.85rem', fontSize: '0.9rem' }}
+                >
+                  <RefreshCw size={15} /> Duplicate
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    setTemplateForm({ name: `${activeProject.name} Template` });
+                    setIsTemplateSaveModalOpen(true);
+                  }}
+                  title="Save as Template"
+                  style={{ padding: '0.5rem 0.85rem', fontSize: '0.9rem' }}
+                >
+                  <FolderKanban size={15} /> Template
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    setIsEditProjectModalOpen(true);
+                  }}
+                  title="Amend Project"
+                  style={{ padding: '0.5rem 0.85rem', fontSize: '0.9rem' }}
+                >
+                  <Edit2 size={15} /> Amend
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  style={{ color: 'var(--danger)', padding: '0.5rem 0.85rem', fontSize: '0.9rem' }}
+                  onClick={() => {
+                    if (confirm(`Are you sure you want to delete project "${activeProject.name}" and all its tasks?`)) {
+                      onDeleteProject(activeProject.id);
+                      onSelectProject(null);
+                      onAddToast('Project deleted successfully.', 'warning');
+                    }
+                  }}
+                  title="Delete Project"
+                >
+                  <Trash2 size={15} /> Delete
+                </button>
+              </div>
+            )}
+          </div>
+
+          {activeProjectTab === 'overview' && (
+             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+              {/* HERO: identity + status badges */}
+              <div className="card" style={{ padding: '2rem', borderTop: `6px solid ${activeProject.colorTheme || 'var(--primary)'}` }}>
+                <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  {(() => {
+                    const matched = activeProject.icon ? PROJECT_ICONS.find(i => i.name === activeProject.icon) : null;
+                    const IconComp = matched?.Icon || Folder;
+                    // Resolve to a concrete hex so the gradient/alpha always renders.
+                    // var(--primary) can't be used inside a gradient with a hex alpha suffix.
+                    const themeHex = activeProject.colorTheme || '#005fb8';
+                    return (
+                      <div style={{
+                        width: '72px', height: '72px', flexShrink: 0,
+                        borderRadius: 'var(--radius-lg)',
+                        background: `linear-gradient(135deg, ${themeHex} 0%, ${themeHex}CC 100%)`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: 'white',
+                        boxShadow: '0 6px 18px rgba(0,0,0,0.12)'
+                      }}>
+                        <IconComp size={36} />
+                      </div>
+                    );
+                  })()}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', flex: 1, minWidth: '260px' }}>
+                    <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span className="badge badge-primary" style={{ fontSize: '0.85rem', padding: '0.3rem 0.75rem', fontWeight: 700 }}>
+                        {activeProject.clientName}
+                      </span>
+                      {(() => {
+                        const ps = getPhaseStyle(activeProject.phase);
+                        return (
+                          <span style={{ fontSize: '0.85rem', padding: '0.3rem 0.75rem', borderRadius: 'var(--radius-sm)', backgroundColor: ps.bg, color: ps.text, fontWeight: 700 }}>
+                            {ps.label}
+                          </span>
+                        );
+                      })()}
+                      {(() => {
+                        const rs = getRagStyle(activeProject.ragOverall);
+                        return (
+                          <span style={{ fontSize: '0.85rem', padding: '0.3rem 0.75rem', borderRadius: 'var(--radius-sm)', backgroundColor: rs.bg, color: rs.text, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: rs.text }} />
+                            {rs.label}
+                          </span>
+                        );
+                      })()}
                     </div>
-                  );
-                })()}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <span className="badge badge-primary" style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem', fontWeight: 600 }}>
-                      Client: {activeProject.clientName}
-                    </span>
+                    <h2 style={{ fontSize: '1.85rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+                      {activeProject.name}
+                    </h2>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '1rem', lineHeight: '1.5', margin: 0 }}>
+                      {activeProject.description || 'No description provided.'}
+                    </p>
                   </div>
-                  <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-                    {activeProject.name}
-                  </h2>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', lineHeight: '1.45', margin: 0 }}>
-                    {activeProject.description || 'No description provided.'}
-                  </p>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
-                  <span style={{ fontSize: '0.75rem', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', padding: '0.25rem 0.6rem', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-secondary)' }}>
-                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--primary)' }}></span>
-                    Start: <b>{formatDateFriendly(activeProject.startDate)}</b>
+                </div>
+
+                {/* Timeline pills */}
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
+                  <span style={{ fontSize: '0.9rem', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', padding: '0.45rem 0.85rem', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary)' }} />
+                    Start: <b style={{ color: 'var(--text-primary)' }}>{formatDateFriendly(activeProject.startDate)}</b>
                   </span>
                   {activeProject.targetGoLiveDate && (
-                    <span style={{ fontSize: '0.75rem', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', padding: '0.25rem 0.6rem', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-secondary)' }}>
-                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--accent)' }}></span>
-                      Target Go-Live: <b>{formatDateFriendly(activeProject.targetGoLiveDate)}</b>
+                    <span style={{ fontSize: '0.9rem', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', padding: '0.45rem 0.85rem', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)' }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--accent)' }} />
+                      Target Go-Live: <b style={{ color: 'var(--text-primary)' }}>{formatDateFriendly(activeProject.targetGoLiveDate)}</b>
                     </span>
                   )}
                 </div>
+              </div>
+
+              {/* KPI CARDS */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+                <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Time Budget</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
+                    <span style={{ fontSize: '1.9rem', fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{totalAllocatedDuration.toFixed(1)}</span>
+                    <span style={{ fontSize: '0.95rem', color: 'var(--text-tertiary)' }}>of {activeProject.budgetDays.toFixed(1)}d</span>
+                  </div>
+                  {isOverBudget ? (
+                    <span className="badge badge-danger" style={{ fontSize: '0.8rem', padding: '0.25rem 0.6rem', marginTop: '0.25rem', width: 'fit-content' }}>
+                      Over by {(totalAllocatedDuration - activeProject.budgetDays).toFixed(1)}d
+                    </span>
+                  ) : (
+                    <span className="badge badge-success" style={{ fontSize: '0.8rem', padding: '0.25rem 0.6rem', marginTop: '0.25rem', width: 'fit-content' }}>
+                      {(activeProject.budgetDays - totalAllocatedDuration).toFixed(1)}d remaining
+                    </span>
+                  )}
+                </div>
+
+                <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Task Completion</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
+                    <span style={{ fontSize: '1.9rem', fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{completedPercentage}%</span>
+                    <span style={{ fontSize: '0.95rem', color: 'var(--text-tertiary)' }}>{completedLeafTasks}/{totalLeafTasks}</span>
+                  </div>
+                  <div style={{ height: '8px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden', marginTop: '0.25rem' }}>
+                    <div style={{ height: '100%', width: `${completedPercentage}%`, backgroundColor: 'var(--primary)', borderRadius: '4px', transition: 'width 0.3s ease' }} />
+                  </div>
+                </div>
+
+                <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Billed Progress</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
+                    <span style={{ fontSize: '1.9rem', fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{billedPercentage}%</span>
+                    <span style={{ fontSize: '0.95rem', color: 'var(--text-tertiary)' }}>{totalBilledTasks}/{totalLeafTasks}</span>
+                  </div>
+                  <div style={{ height: '8px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden', marginTop: '0.25rem' }}>
+                    <div style={{ height: '100%', width: `${billedPercentage}%`, backgroundColor: 'var(--success)', borderRadius: '4px', transition: 'width 0.3s ease' }} />
+                  </div>
                 </div>
               </div>
 
-              {/* Right Side: Smart summary table */}
-              <div style={{
-                backgroundColor: 'var(--bg-secondary)',
-                border: '1px solid var(--border-color)',
-                borderRadius: 'var(--radius-md)',
-                overflow: 'hidden'
-              }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border-strong)' }}>
-                      <th style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', fontSize: '0.68rem', letterSpacing: '0.05em' }}>Summary Metric</th>
-                      <th style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', fontSize: '0.68rem', letterSpacing: '0.05em', textAlign: 'right' }}>Target / Total</th>
-                      <th style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', fontSize: '0.68rem', letterSpacing: '0.05em', textAlign: 'right' }}>Scheduled / Done</th>
-                      <th style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', fontSize: '0.68rem', letterSpacing: '0.05em', textAlign: 'right' }}>Status / Progress</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                      <td style={{ padding: '0.6rem 0.75rem', fontWeight: 500, color: 'var(--text-primary)' }}>Time Budget</td>
-                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{activeProject.budgetDays.toFixed(1)}d</td>
-                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{totalAllocatedDuration.toFixed(1)}d</td>
-                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right' }}>
-                        {isOverBudget ? (
-                          <span className="badge badge-danger" style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}>
-                            Over by {(totalAllocatedDuration - activeProject.budgetDays).toFixed(1)}d
+              {/* ROLES & LINKS */}
+              <div className="card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+                <div>
+                  <h3 style={{ fontSize: '1.25rem', margin: '0 0 1.25rem 0', color: 'var(--text-primary)' }}>Roles & Assignments</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+                    {([
+                      { label: 'Project Manager', id: activeProject.projectManagerId },
+                      { label: 'Lead Consultant', id: activeProject.leadConsultantId },
+                      { label: 'Customer', id: activeProject.customerId }
+                    ] as const).map(role => {
+                      const person = role.id ? consultants.find(c => c.id === role.id) : null;
+                      return (
+                        <div key={role.label} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'var(--bg-tertiary)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)' }}>
+                          <div style={{ width: '38px', height: '38px', borderRadius: '50%', backgroundColor: person?.avatarColor || 'var(--bg-secondary)', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '0.85rem', flexShrink: 0 }}>
+                            {person ? person.name.split(' ').map(n => n[0]).join('') : <User size={16} />}
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                            <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>{role.label}</span>
+                            <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {person ? person.name : 'Unassigned'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Resources */}
+                  <div style={{ marginTop: '1rem' }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Resources</span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
+                      {(activeProject.projectResourceIds || []).map(rid => {
+                        const person = consultants.find(c => c.id === rid);
+                        return (
+                          <span key={rid} style={{ fontSize: '0.9rem', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', padding: '0.35rem 0.75rem', borderRadius: '16px', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: person?.avatarColor || 'var(--text-tertiary)' }} />
+                            {person?.name || rid}
                           </span>
-                        ) : (
-                          <span className="badge badge-success" style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}>
-                            {(activeProject.budgetDays - totalAllocatedDuration).toFixed(1)}d left
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                      <td style={{ padding: '0.6rem 0.75rem', fontWeight: 500, color: 'var(--text-primary)' }}>Task Completion</td>
-                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{totalLeafTasks} tasks</td>
-                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{completedLeafTasks} done</td>
-                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right' }}>
-                        <span className={`badge ${completedPercentage === 100 ? 'badge-success' : 'badge-primary'}`} style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}>
-                          {completedPercentage}%
+                        );
+                      })}
+                      {(!activeProject.projectResourceIds || activeProject.projectResourceIds.length === 0) && <span style={{ fontSize: '0.9rem', color: 'var(--text-tertiary)' }}>No resources assigned</span>}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 style={{ fontSize: '1.25rem', margin: '0 0 1.25rem 0', color: 'var(--text-primary)' }}>Quick Links</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
+                    {/* Trello */}
+                    <a href={activeProject.trelloLink || undefined} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', backgroundColor: 'var(--bg-tertiary)', padding: '0.85rem 1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', textDecoration: 'none', opacity: activeProject.trelloLink ? 1 : 0.6, cursor: activeProject.trelloLink ? 'pointer' : 'default' }}>
+                      <svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="#0052CC" style={{ flexShrink: 0 }}>
+                        <title>Trello</title>
+                        <path d="M21.147 0H2.853A2.86 2.86 0 000 2.853v18.294A2.86 2.86 0 002.853 24h18.294A2.86 2.86 0 0024 21.147V2.853A2.86 2.86 0 0021.147 0zM10.74 16.326c0 .54-.429.98-1.002.98H4.673a.987.987 0 01-.98-.98V4.674c0-.54.428-.98.98-.98h5.065c.573 0 1.002.44 1.002.98v11.652zm9.567-5.592c0 .54-.429.98-1.002.98h-5.065a.987.987 0 01-.98-.98V4.674c0-.54.428-.98.98-.98h5.065c.573 0 1.002.44 1.002.98v6.06z"/>
+                      </svg>
+                      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>Trello</span>
+                        <span style={{ fontSize: '0.9rem', color: activeProject.trelloLink ? 'var(--primary)' : 'var(--text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {activeProject.trelloLink ? activeProject.trelloLink.replace(/^https?:\/\//, '') : 'Not set'}
                         </span>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: '0.6rem 0.75rem', fontWeight: 500, color: 'var(--text-primary)' }}>Billed Progress</td>
-                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{totalLeafTasks} tasks</td>
-                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{totalBilledTasks} billed</td>
-                      <td style={{ padding: '0.6rem 0.75rem', textAlign: 'right' }}>
-                        <span className="badge badge-success" style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}>
-                          {billedPercentage}%
+                      </div>
+                    </a>
+                    {/* SharePoint */}
+                    <a href={activeProject.sharepointLink || undefined} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', backgroundColor: 'var(--bg-tertiary)', padding: '0.85rem 1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', textDecoration: 'none', opacity: activeProject.sharepointLink ? 1 : 0.6, cursor: activeProject.sharepointLink ? 'pointer' : 'default' }}>
+                      <svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="28" height="28" style={{ flexShrink: 0 }}>
+                        <title>Microsoft SharePoint</title>
+                        <rect x="2" y="4" width="20" height="16" rx="2.5" fill="#0078D4"/>
+                        <path d="M6.5 8.5h7v2h-7zM6.5 12h7v2h-7zM6.5 15.5h4.5v1.5H6.5z" fill="#fff"/>
+                        <circle cx="16.5" cy="14.5" r="3" fill="none" stroke="#fff" strokeWidth="1.4"/>
+                        <text x="16.5" y="15.8" textAnchor="middle" fontSize="3.2" fontWeight="700" fill="#fff" fontFamily="Segoe UI, Arial, sans-serif">S</text>
+                      </svg>
+                      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>SharePoint</span>
+                        <span style={{ fontSize: '0.9rem', color: activeProject.sharepointLink ? 'var(--primary)' : 'var(--text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {activeProject.sharepointLink ? activeProject.sharepointLink.replace(/^https?:\/\//, '') : 'Not set'}
                         </span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                      </div>
+                    </a>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
+          {activeProjectTab === 'tasks' && (
+             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {/* Tasks Operations Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: '1.2rem' }}>Implementation Tasks</h3>
+            <h3 style={{ fontSize: '1.3rem', fontWeight: 700 }}>Implementation Tasks</h3>
             {canCreateTask(activeRole) && (
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 <button
-                  className={`btn ${editMode ? 'btn-accent' : 'btn-secondary'}`}
+                  className={`btn ${editMode ? 'btn-secondary' : 'btn-accent'}`}
                   onClick={() => {
                     setEditMode(!editMode);
                     setSelectedTaskIds([]);
                   }}
-                  title={editMode ? 'Exit edit mode' : 'Enter edit mode — click any task to edit'}
+                  title={editMode ? 'Switch to view mode' : 'Enter edit mode - click any task to edit'}
                   style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}
                 >
-                  <Pencil size={14} />
-                  {editMode ? 'Exit Edit Mode' : 'Edit Mode'}
+                  {!editMode && <Pencil size={14} />}
+                  {editMode ? 'View Mode' : 'Edit Mode'}
                 </button>
                 <button className="btn btn-primary" onClick={handleOpenCreateTask} style={{ backgroundColor: activeProject.colorTheme || 'var(--primary)', color: 'white', border: '1px solid rgba(0,0,0,0.1)' }}>
                   <Plus size={16} /> Add Task
@@ -1200,6 +1296,186 @@ export default function ProjectView({
             )}
           </div>
         </div>
+      )}
+
+      {activeProjectTab === 'gantt' && (
+        <div style={{ overflow: 'hidden' }}>
+          <GanttChart activeProject={activeProject} tasks={tasks} consultants={consultants} />
+        </div>
+      )}
+
+      {activeProjectTab === 'rag' && (
+        (() => {
+          const RAG_META: Record<string, { varName: string; color: string; label: string }> = {
+            green: { varName: 'success', color: '#10b981', label: 'On Track' },
+            amber: { varName: 'warning', color: '#f59e0b', label: 'At Risk' },
+            red: { varName: 'danger', color: '#ef4444', label: 'Off Track' }
+          };
+          const ragValue = (v?: string) => (v || 'green').toLowerCase();
+          const overallVal = ragValue(activeProject.ragOverall);
+          const overallMeta = RAG_META[overallVal] || RAG_META.green;
+          const categories = [
+            { key: 'ragScope', label: 'Scope', desc: 'Are deliverables meeting agreed requirements?' },
+            { key: 'ragSchedule', label: 'Schedule', desc: 'Is the project on track against milestones?' },
+            { key: 'ragCosts', label: 'Costs', desc: 'Is spend within the approved budget?' },
+            { key: 'ragBenefits', label: 'Benefits', desc: 'Will the expected business value be realised?' },
+            { key: 'ragOverall', label: 'Overall', desc: 'Consolidated health rating for this project.' }
+          ] as const;
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              {/* Summary hero */}
+              <div className="card" style={{
+                padding: '2rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1.75rem',
+                borderTop: `5px solid ${overallMeta.color}`,
+                flexWrap: 'wrap'
+              }}>
+                <div style={{
+                  width: '76px', height: '76px', borderRadius: '50%',
+                  backgroundColor: `${overallMeta.color}20`,
+                  border: `3px solid ${overallMeta.color}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: overallMeta.color, boxShadow: `0 0 12px ${overallMeta.color}` }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', flex: 1, minWidth: '240px' }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Overall Project Health</span>
+                  <span style={{ fontSize: '1.85rem', fontWeight: 800, color: overallMeta.color, letterSpacing: '-0.01em' }}>{overallMeta.label}</span>
+                  <span style={{ fontSize: '0.95rem', color: 'var(--text-secondary)' }}>
+                    {overallVal === 'green' && 'This project is progressing well and meeting its targets.'}
+                    {overallVal === 'amber' && 'This project has some risks that require attention.'}
+                    {overallVal === 'red' && 'This project is off track and needs immediate intervention.'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Category cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.25rem' }}>
+                {categories.map(cat => {
+                  const key = cat.key as keyof Project;
+                  const current = ragValue(activeProject[key] as string);
+                  return (
+                    <div key={cat.key} className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{cat.label}</span>
+                        {(() => {
+                          const meta = RAG_META[current] || RAG_META.green;
+                          return (
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, padding: '0.25rem 0.7rem', borderRadius: 'var(--radius-sm)', backgroundColor: `${meta.color}1f`, color: meta.color, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: meta.color }} />
+                              {meta.label}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                      <span style={{ fontSize: '0.9rem', color: 'var(--text-tertiary)', lineHeight: 1.4 }}>{cat.desc}</span>
+                      {/* Traffic-light selector */}
+                      <div style={{ display: 'flex', gap: '0.6rem', marginTop: 'auto' }}>
+                        {(['green', 'amber', 'red'] as const).map(status => {
+                          const meta = RAG_META[status];
+                          const isSelected = current === status;
+                          return (
+                            <button
+                              key={status}
+                              onClick={() => onUpdateProject({ ...activeProject, [key]: status })}
+                              title={meta.label}
+                              style={{
+                                flex: 1,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem',
+                                padding: '0.6rem 0.5rem',
+                                borderRadius: 'var(--radius-sm)',
+                                border: isSelected ? 'none' : '1px solid var(--border-color)',
+                                backgroundColor: isSelected ? meta.color : 'transparent',
+                                color: isSelected ? 'white' : 'var(--text-secondary)',
+                                cursor: 'pointer',
+                                fontSize: '0.88rem',
+                                fontWeight: 700,
+                                transition: 'all 0.15s ease',
+                                textTransform: 'capitalize'
+                              }}
+                            >
+                              <span style={{
+                                width: '10px', height: '10px', borderRadius: '50%',
+                                backgroundColor: isSelected ? 'white' : meta.color,
+                                border: isSelected ? 'none' : `1px solid ${meta.color}`
+                              }} />
+                              {status}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()
+      )}
+
+      {activeProjectTab === 'communications' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+           <div className="card" style={{ padding: '1.5rem' }}>
+              <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.3rem', fontWeight: 700 }}>New Communication</h3>
+              <form onSubmit={e => {
+                e.preventDefault();
+                const form = e.target as HTMLFormElement;
+                const subject = (form.elements.namedItem('subject') as HTMLInputElement).value;
+                const type = (form.elements.namedItem('type') as HTMLSelectElement).value as any;
+                const description = (form.elements.namedItem('description') as HTMLTextAreaElement).value;
+                if (!subject || !type) return;
+                onSaveCommunication({
+                  id: `comm-${Math.random().toString(36).substring(2, 11)}`,
+                  projectId: activeProject.id,
+                  subject,
+                  type,
+                  description,
+                  creatorId: activeUserId,
+                  createdAt: new Date().toISOString()
+                });
+                form.reset();
+                onAddToast('Communication saved', 'success');
+              }}>
+                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                  <input name="subject" className="form-input" placeholder="Subject" required style={{ flex: 2 }} />
+                  <select name="type" className="form-select" required style={{ flex: 1 }}>
+                    <option value="">Select Type...</option>
+                    <option value="Teams call">Teams call</option>
+                    <option value="email">Email</option>
+                    <option value="in person meeting">In person meeting</option>
+                  </select>
+                </div>
+                <textarea name="description" className="form-textarea" placeholder="Description" rows={3} style={{ marginBottom: '1rem' }}></textarea>
+                <button type="submit" className="btn btn-primary">Save Communication</button>
+              </form>
+           </div>
+           
+           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+             {communications.filter(c => c.projectId === activeProject.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map(c => (
+               <div key={c.id} className="card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', borderLeft: `4px solid var(--primary)` }}>
+                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                   <h4 style={{ margin: 0 }}>{c.subject}</h4>
+                   <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                     <span className="badge badge-secondary">{c.type}</span>
+                     <button className="btn btn-ghost" onClick={() => onDeleteCommunication(c.id)} style={{ color: 'var(--danger)', padding: '0.25rem' }}><Trash2 size={14}/></button>
+                   </div>
+                 </div>
+                 <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>By {consultants.find(cons => cons.id === c.creatorId)?.name} on {new Date(c.createdAt).toLocaleString()}</span>
+                 <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{c.description}</p>
+               </div>
+             ))}
+             {communications.filter(c => c.projectId === activeProject.id).length === 0 && (
+               <p style={{ textAlign: 'center', color: 'var(--text-tertiary)' }}>No communications found.</p>
+             )}
+           </div>
+        </div>
+      )}
+
+      </div>
       ) : (
         <div className="card" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
           <FolderKanban size={48} style={{ color: 'var(--text-tertiary)', marginBottom: '1rem' }} />
@@ -1213,284 +1489,15 @@ export default function ProjectView({
         </div>
       )}
 
-      {/* CREATE PROJECT MODAL */}
-      {isNewProjectModalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-container">
-            <div className="modal-header">
-              <h3>Create Sage Intacct Project</h3>
-              <button className="btn btn-secondary btn-icon" onClick={() => setIsNewProjectModalOpen(false)}>
-                <X size={18} />
-              </button>
-            </div>
-            <form onSubmit={handleCreateProjectSubmit}>
-              <div className="modal-body">
-                <div className="form-group">
-                  <label className="form-label">Base on Template (Optional)</label>
-                  <WinComboBox
-                    className="form-select"
-                    value={selectedTemplateId}
-                    onChange={(val) => setSelectedTemplateId(val)}
-                    options={[
-                      { label: '-- Start from Scratch (No Template) --', value: '' },
-                      ...projectTemplates.map(t => ({ label: t.name, value: t.id }))
-                    ]}
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="form-field-1" className="form-label">Project Name</label>
-                  <input id="form-field-1"
-                    type="text"
-                    className="form-input"
-                    placeholder="e.g. Sage Intacct Core Phase 1"
-                    value={newProject.name}
-                    onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="form-field-2" className="form-label">Client Name</label>
-                  <input id="form-field-2"
-                    type="text"
-                    className="form-input"
-                    placeholder="e.g. Acme Corp"
-                    value={newProject.clientName}
-                    onChange={(e) => setNewProject({ ...newProject, clientName: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="form-field-3" className="form-label">Description</label>
-                  <textarea id="form-field-3"
-                    className="form-textarea"
-                    placeholder="Describe the scope of implementation..."
-                    value={newProject.description}
-                    onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Project Theme</label>
-                  <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-                    <div style={{ flex: 1, minWidth: '200px' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginBottom: '0.5rem', display: 'block' }}>Icon</span>
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        {PROJECT_ICONS.map(pi => {
-                          const isSelected = newProject.icon === pi.name;
-                          return (
-                            <button
-                              key={pi.name}
-                              type="button"
-                              onClick={() => setNewProject({ ...newProject, icon: pi.name })}
-                              style={{
-                                width: '32px', height: '32px', borderRadius: 'var(--radius-md)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                backgroundColor: isSelected ? 'var(--primary)' : 'var(--bg-secondary)',
-                                color: isSelected ? 'white' : 'var(--text-secondary)',
-                                border: isSelected ? 'none' : '1px solid var(--border-color)',
-                                cursor: 'pointer', transition: 'all 0.1s'
-                              }}
-                            >
-                              <pi.Icon size={16} />
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <div style={{ flex: 1, minWidth: '200px' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginBottom: '0.5rem', display: 'block' }}>Color</span>
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        {PROJECT_COLORS.map(c => {
-                          const isSelected = newProject.colorTheme === c;
-                          return (
-                            <button
-                              key={c}
-                              type="button"
-                              onClick={() => setNewProject({ ...newProject, colorTheme: c })}
-                              style={{
-                                width: '32px', height: '32px', borderRadius: '50%',
-                                backgroundColor: c,
-                                border: isSelected ? '2px solid var(--primary)' : '1px solid rgba(0,0,0,0.1)',
-                                cursor: 'pointer', transition: 'transform 0.1s',
-                                transform: isSelected ? 'scale(1.15)' : 'scale(1)',
-                                boxShadow: isSelected ? '0 0 0 2px var(--bg-primary) inset' : 'none'
-                              }}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="grid-cols-12" style={{ alignItems: 'end' }}>
-                  <div className="form-group col-span-4">
-                    <label htmlFor="form-field-4" className="form-label">Budget (Days)</label>
-                    <input id="form-field-4"
-                      type="number"
-                      step="0.5"
-                      min="0.5"
-                      className="form-input"
-                      value={newProject.budgetDays}
-                      onChange={(e) => setNewProject({ ...newProject, budgetDays: parseFloat(e.target.value) || 0 })}
-                      required
-                    />
-                  </div>
-                  <div className="form-group col-span-4">
-                    <label className="form-label">Project Start Date</label>
-                    <WinDatePicker 
-                      value={newProject.startDate}
-                      onChange={(value) => setNewProject({ ...newProject, startDate: value })}
-                    />
-                  </div>
-                  <div className="form-group col-span-4">
-                    <label className="form-label">Go Live Date</label>
-                    <WinDatePicker 
-                      value={newProject.targetGoLiveDate}
-                      onChange={(value) => setNewProject({ ...newProject, targetGoLiveDate: value })}
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setIsNewProjectModalOpen(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Create Project</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* AMEND PROJECT MODAL */}
-      {isEditProjectModalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-container">
-            <div className="modal-header">
-              <h3>Amend Project Details</h3>
-              <button className="btn btn-secondary btn-icon" onClick={() => setIsEditProjectModalOpen(false)}>
-                <X size={18} />
-              </button>
-            </div>
-            <form onSubmit={handleEditProjectSubmit}>
-              <div className="modal-body">
-                <div className="form-group">
-                  <label htmlFor="form-field-5" className="form-label">Project Name</label>
-                  <input id="form-field-5"
-                    type="text"
-                    className="form-input"
-                    placeholder="e.g. Sage Intacct Core Phase 1"
-                    value={editProjectForm.name}
-                    onChange={(e) => setEditProjectForm({ ...editProjectForm, name: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="form-field-6" className="form-label">Client Name</label>
-                  <input id="form-field-6"
-                    type="text"
-                    className="form-input"
-                    placeholder="e.g. Acme Corp"
-                    value={editProjectForm.clientName}
-                    onChange={(e) => setEditProjectForm({ ...editProjectForm, clientName: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="form-field-7" className="form-label">Description</label>
-                  <textarea id="form-field-7"
-                    className="form-textarea"
-                    placeholder="Describe the scope of implementation..."
-                    value={editProjectForm.description}
-                    onChange={(e) => setEditProjectForm({ ...editProjectForm, description: e.target.value })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Project Theme</label>
-                  <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-                    <div style={{ flex: 1, minWidth: '200px' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginBottom: '0.5rem', display: 'block' }}>Icon</span>
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        {PROJECT_ICONS.map(pi => {
-                          const isSelected = editProjectForm.icon === pi.name;
-                          return (
-                            <button
-                              key={pi.name}
-                              type="button"
-                              onClick={() => setEditProjectForm({ ...editProjectForm, icon: pi.name })}
-                              style={{
-                                width: '32px', height: '32px', borderRadius: 'var(--radius-md)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                backgroundColor: isSelected ? 'var(--primary)' : 'var(--bg-secondary)',
-                                color: isSelected ? 'white' : 'var(--text-secondary)',
-                                border: isSelected ? 'none' : '1px solid var(--border-color)',
-                                cursor: 'pointer', transition: 'all 0.1s'
-                              }}
-                            >
-                              <pi.Icon size={16} />
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <div style={{ flex: 1, minWidth: '200px' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginBottom: '0.5rem', display: 'block' }}>Color</span>
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        {PROJECT_COLORS.map(c => {
-                          const isSelected = editProjectForm.colorTheme === c;
-                          return (
-                            <button
-                              key={c}
-                              type="button"
-                              onClick={() => setEditProjectForm({ ...editProjectForm, colorTheme: c })}
-                              style={{
-                                width: '32px', height: '32px', borderRadius: '50%',
-                                backgroundColor: c,
-                                border: isSelected ? '2px solid var(--primary)' : '1px solid rgba(0,0,0,0.1)',
-                                cursor: 'pointer', transition: 'transform 0.1s',
-                                transform: isSelected ? 'scale(1.15)' : 'scale(1)',
-                                boxShadow: isSelected ? '0 0 0 2px var(--bg-primary) inset' : 'none'
-                              }}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="grid-cols-12" style={{ alignItems: 'end' }}>
-                  <div className="form-group col-span-4">
-                    <label htmlFor="form-field-8" className="form-label">Budget (Days)</label>
-                    <input id="form-field-8"
-                      type="number"
-                      step="0.5"
-                      min="0.5"
-                      className="form-input"
-                      value={editProjectForm.budgetDays}
-                      onChange={(e) => setEditProjectForm({ ...editProjectForm, budgetDays: parseFloat(e.target.value) || 0 })}
-                      required
-                    />
-                  </div>
-                  <div className="form-group col-span-4">
-                    <label className="form-label">Project Start Date</label>
-                    <WinDatePicker 
-                      value={editProjectForm.startDate}
-                      onChange={(value) => setEditProjectForm({ ...editProjectForm, startDate: value })}
-                    />
-                  </div>
-                  <div className="form-group col-span-4">
-                    <label className="form-label">Go Live Date</label>
-                    <WinDatePicker 
-                      value={editProjectForm.targetGoLiveDate}
-                      onChange={(value) => setEditProjectForm({ ...editProjectForm, targetGoLiveDate: value })}
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setIsEditProjectModalOpen(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Save Changes</button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {isEditProjectModalOpen && activeProject && (
+        <EditProjectModal
+          project={activeProject}
+          consultants={consultants}
+          onUpdateProject={onUpdateProject}
+          onClose={() => setIsEditProjectModalOpen(false)}
+        />
       )}
 
       {/* CREATE/EDIT TASK MODAL */}
@@ -1963,12 +1970,13 @@ export default function ProjectView({
                 onChange={(val) => {
                   if (val) handleBulkStatusChange(val as Task['status']);
                 }}
+                menuPosition="top"
                 options={[
                   { label: 'Change Status...', value: '' },
                   { label: 'Not Started', value: 'not_started' },
                   { label: 'In Progress', value: 'in_progress' },
                   { label: 'Completed', value: 'completed' },
-                  { label: 'Blocked', value: 'blocked' }
+                  { label: 'On Hold', value: 'on_hold' }
                 ]}
               />
             </div>
@@ -1982,6 +1990,7 @@ export default function ProjectView({
                 onChange={(val) => {
                   if (val) handleBulkAssigneeChange(val);
                 }}
+                menuPosition="top"
                 options={[
                   { label: 'Change Assignee...', value: '' },
                   { label: 'Unassigned', value: 'unassigned' },
@@ -1999,6 +2008,7 @@ export default function ProjectView({
                 onChange={(val) => {
                   if (val) handleBulkBillingChange(val === 'billed');
                 }}
+                menuPosition="top"
                 options={[
                   { label: 'Change Billing...', value: '' },
                   { label: 'Mark as Billed', value: 'billed' },
