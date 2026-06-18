@@ -25,7 +25,6 @@ function mapProjectFromDb(db: any): Project {
     ragBenefits: db.rag_benefits,
     ragOverall: db.rag_overall,
     status: db.status || 'new',
-    phase: db.phase || null,
     isTemplate: !!db.is_template,
     createdAt: db.created_at
   };
@@ -53,7 +52,6 @@ function mapProjectToDb(p: Project) {
     rag_benefits: p.ragBenefits || 'green',
     rag_overall: p.ragOverall || 'green',
     status: p.status || 'new',
-    phase: p.phase || null,
     is_template: !!p.isTemplate,
     created_at: p.createdAt
   };
