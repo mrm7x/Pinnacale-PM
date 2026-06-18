@@ -309,14 +309,15 @@ export default function App() {
   const projectTemplates = projects.filter(p => p.isTemplate);
 
   // Safety: reset selected project if user switches and the project is no longer visible
+  // Only check after projects have loaded (non-empty) to avoid resetting on refresh
   useEffect(() => {
-    if (selectedProjectId && activeUserId !== 'admin') {
+    if (selectedProjectId && activeUserId !== 'admin' && projects.length > 0) {
       const isVisible = filteredProjects.some(p => p.id === selectedProjectId);
       if (!isVisible) {
         setSelectedProjectId(filteredProjects[0]?.id || null);
       }
     }
-  }, [activeUserId, filteredProjects, selectedProjectId]);
+  }, [activeUserId, filteredProjects, selectedProjectId, projects.length]);
 
   // Save database states helper
   const saveProjectsState = async (newProjects: Project[]) => {
@@ -893,7 +894,10 @@ export default function App() {
     setActiveUserId(userId);
     localStorage.setItem('pinnacle_session', sessionToken);
     localStorage.setItem('pinnacle_activeuser', userId);
-    setActiveTab('projects');
+    // Only set tab if no saved preference (preserves last-visited page on refresh)
+    if (!localStorage.getItem('pinnacle_active_tab')) {
+      setActiveTab('projects');
+    }
     // Check if user needs password reset
     const consultant = consultants.find(c => c.id === userId);
     if (consultant && consultant.mustResetPassword) {
