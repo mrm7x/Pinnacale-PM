@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 interface WinComboBoxProps {
@@ -15,7 +16,9 @@ interface WinComboBoxProps {
 export function WinComboBox({ value, onChange, options, placeholder = 'Select...', className = '', disabled = false, enableSearch = false, menuPosition = 'bottom' }: WinComboBoxProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find(opt => opt.value === value);
 
@@ -32,8 +35,70 @@ export function WinComboBox({ value, onChange, options, placeholder = 'Select...
   useEffect(() => {
     if (!isOpen) {
       setSearchTerm('');
+      return;
     }
-  }, [isOpen]);
+    // Position the portal menu relative to the trigger button
+    const trigger = containerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const style: React.CSSProperties = {
+      position: 'fixed',
+      zIndex: 10000,
+      left: `${rect.left}px`,
+      minWidth: `${rect.width}px`,
+      backgroundColor: 'var(--bg-elevated)',
+      border: '1px solid var(--border-color)',
+      borderRadius: 'var(--radius-md)',
+      boxShadow: 'var(--shadow-md)',
+      backdropFilter: 'blur(40px) saturate(150%)',
+      WebkitBackdropFilter: 'blur(40px) saturate(150%)',
+      maxHeight: '250px',
+      overflowY: 'auto',
+      padding: '0.25rem'
+    };
+
+    if (menuPosition === 'bottom') {
+      // Check if there's room below, otherwise flip
+      const spaceBelow = window.innerHeight - rect.bottom;
+      if (spaceBelow < 260 && rect.top > spaceBelow) {
+        style.bottom = `${window.innerHeight - rect.top + 4}px`;
+      } else {
+        style.top = `${rect.bottom + 4}px`;
+      }
+    } else {
+      const spaceAbove = rect.top;
+      if (spaceAbove < 260 && (window.innerHeight - rect.bottom) > spaceAbove) {
+        style.top = `${rect.bottom + 4}px`;
+      } else {
+        style.bottom = `${window.innerHeight - rect.top + 4}px`;
+      }
+    }
+    setMenuStyle(style);
+  }, [isOpen, menuPosition]);
+
+  // Keep menu in view on scroll / resize
+  useEffect(() => {
+    if (!isOpen) return;
+    const update = () => {
+      const trigger = containerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      setMenuStyle(prev => ({
+        ...prev,
+        left: `${rect.left}px`,
+        minWidth: `${rect.width}px`,
+        ...(menuPosition === 'bottom'
+          ? (prev.top !== undefined ? { top: `${rect.bottom + 4}px` } : { bottom: `${window.innerHeight - rect.top + 4}px` })
+          : (prev.bottom !== undefined ? { bottom: `${window.innerHeight - rect.top + 4}px` } : { top: `${rect.bottom + 4}px` }))
+      }));
+    };
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [isOpen, menuPosition]);
 
   const filteredClassName = className?.replace(/\b(form-select|form-input)\b/g, '').trim();
 
@@ -70,25 +135,9 @@ export function WinComboBox({ value, onChange, options, placeholder = 'Select...
         {isOpen ? <ChevronUp size={16} style={{ opacity: 0.6 }} /> : <ChevronDown size={16} style={{ opacity: 0.6 }} />}
       </div>
 
-      {/* Flyout Menu */}
-      {isOpen && (
-        <div style={{
-          position: 'absolute',
-          top: menuPosition === 'bottom' ? 'calc(100% + 4px)' : 'auto',
-          bottom: menuPosition === 'top' ? 'calc(100% + 4px)' : 'auto',
-          left: 0,
-          right: 0,
-          backgroundColor: 'var(--bg-elevated)',
-          border: '1px solid var(--border-color)',
-          borderRadius: 'var(--radius-md)',
-          boxShadow: 'var(--shadow-md)',
-          backdropFilter: 'blur(40px) saturate(150%)',
-          WebkitBackdropFilter: 'blur(40px) saturate(150%)',
-          maxHeight: '250px',
-          overflowY: 'auto',
-          zIndex: 1000,
-          padding: '0.25rem'
-        }}>
+      {/* Flyout Menu — portaled to body to escape all clipping containers */}
+      {isOpen && createPortal(
+        <div ref={menuRef} style={menuStyle}>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {enableSearch && (
               <div style={{ padding: '0.25rem 0.5rem 0.5rem 0.5rem', borderBottom: '1px solid var(--border-color)', marginBottom: '0.25rem' }}>
@@ -151,9 +200,10 @@ export function WinComboBox({ value, onChange, options, placeholder = 'Select...
                 {option.label}
               </div>
             ))
-          )}
+            )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

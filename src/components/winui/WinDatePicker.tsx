@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 
 interface WinDatePickerProps {
@@ -10,6 +11,7 @@ interface WinDatePickerProps {
 
 export function WinDatePicker({ value, onChange, className = '', disabled = false }: WinDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
   
   // Track currently viewed month in the calendar
@@ -26,6 +28,56 @@ export function WinDatePicker({ value, onChange, className = '', disabled = fals
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const trigger = containerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const style: React.CSSProperties = {
+      position: 'fixed',
+      zIndex: 10000,
+      left: `${rect.left}px`,
+      width: '280px',
+      backgroundColor: 'var(--bg-elevated)',
+      border: '1px solid var(--border-color)',
+      borderRadius: 'var(--radius-md)',
+      boxShadow: 'var(--shadow-md)',
+      backdropFilter: 'blur(40px) saturate(150%)',
+      WebkitBackdropFilter: 'blur(40px) saturate(150%)',
+      padding: '1rem'
+    };
+    const spaceBelow = window.innerHeight - rect.bottom;
+    if (spaceBelow < 300 && rect.top > spaceBelow) {
+      style.bottom = `${window.innerHeight - rect.top + 4}px`;
+    } else {
+      style.top = `${rect.bottom + 4}px`;
+    }
+    setMenuStyle(style);
+  }, [isOpen]);
+
+  // Keep menu in view on scroll / resize
+  useEffect(() => {
+    if (!isOpen) return;
+    const update = () => {
+      const trigger = containerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      setMenuStyle(prev => ({
+        ...prev,
+        left: `${rect.left}px`,
+        ...(prev.top !== undefined
+          ? { top: `${rect.bottom + 4}px` }
+          : { bottom: `${window.innerHeight - rect.top + 4}px` })
+      }));
+    };
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [isOpen]);
 
   const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
   const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
@@ -99,20 +151,7 @@ export function WinDatePicker({ value, onChange, className = '', disabled = fals
     }
 
     return (
-      <div style={{
-        position: 'absolute',
-        top: 'calc(100% + 4px)',
-        left: 0,
-        backgroundColor: 'var(--bg-elevated)',
-        border: '1px solid var(--border-color)',
-        borderRadius: 'var(--radius-md)',
-        boxShadow: 'var(--shadow-md)',
-        backdropFilter: 'blur(40px) saturate(150%)',
-        WebkitBackdropFilter: 'blur(40px) saturate(150%)',
-        width: '280px',
-        padding: '1rem',
-        zIndex: 1000
-      }}>
+      <div style={menuStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
           <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>
             {viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
@@ -162,7 +201,7 @@ export function WinDatePicker({ value, onChange, className = '', disabled = fals
         <CalendarIcon size={16} style={{ opacity: 0.6 }} />
       </div>
 
-      {isOpen && renderCalendar()}
+      {isOpen && createPortal(renderCalendar(), document.body)}
     </div>
   );
 }

@@ -1319,10 +1319,10 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
 /* ---- Toolbar ---- */
 .tv2-toolbar {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 0.75rem;
+  position: relative;
+  z-index: 10;
 }
 .tv2-toolbar-left { display: flex; align-items: center; gap: 0.75rem; }
 .tv2-title { font-size: 1.3rem; font-weight: 700; margin: 0; color: var(--text-primary); }
@@ -1332,7 +1332,8 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
