@@ -1621,7 +1621,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
 
 /* ---- Tree table ---- */
 .tv2-table { padding: 0 !important; overflow: hidden; }
-.tv2-table-scroll { overflow-x: auto; min-width: 720px; }
+.tv2-table-scroll { overflow-x: auto; min-width: 0; }
 
 .tv2-empty { padding: 3rem 2rem; text-align: center; color: var(--text-tertiary); }
 
@@ -1629,7 +1629,11 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
 .tv2-head,
 .tv2-row {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) 150px 110px 120px 140px 130px;
+  /* Name | Assignee | Dur | Start | Due | Progress | Status.
+     Multiple flexible (fr) tracks spread slack across the row on wide screens
+     instead of pooling it all in the name column (which left a big centre gap). */
+  grid-template-columns:
+    minmax(240px, 1.7fr) minmax(140px, 1fr) 90px 120px 120px minmax(150px, 1.5fr) minmax(120px, 1fr);
   align-items: center;
   gap: 0.5rem;
 }
@@ -1647,6 +1651,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
 .tv2-head .tv2-cell-assignee,
 .tv2-head .tv2-cell-duration,
 .tv2-head .tv2-cell-start,
+.tv2-head .tv2-cell-due,
 .tv2-head .tv2-cell-progress,
 .tv2-head .tv2-cell-status { text-align: center; }
 .tv2-head-check { display: inline-flex; margin-right: 0.5rem; }
@@ -1771,9 +1776,11 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
 
 /* Generic cell buttons (assignee / duration / status) */
 .tv2-cell { display: flex; align-items: center; min-width: 0; }
-.tv2-cell-assignee, .tv2-cell-duration, .tv2-cell-start, .tv2-cell-progress, .tv2-cell-status {
+.tv2-cell-assignee, .tv2-cell-duration, .tv2-cell-start, .tv2-cell-due, .tv2-cell-progress, .tv2-cell-status {
   justify-content: center;
 }
+/* Progress fills its (flexible) column so the row reads as a full-width table. */
+.tv2-cell-progress { gap: 0.5rem; }
 .tv2-cell-btn {
   border: 1px solid transparent;
   background: transparent;
@@ -1820,10 +1827,15 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
   white-space: nowrap;
 }
 .tv2-readonly svg { color: var(--text-tertiary); }
+.tv2-readonly-overdue { color: var(--danger); font-weight: 600; }
+.tv2-readonly-overdue svg { color: var(--danger); }
 .tv2-dash { color: var(--text-tertiary); }
 
 .tv2-progress-mini {
-  width: 64px;
+  flex: 1;
+  width: auto;
+  min-width: 48px;
+  max-width: 180px;
   height: 6px;
   background-color: var(--bg-tertiary);
   border-radius: 3px;
@@ -2185,11 +2197,19 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
 }
 
 /* ---- Responsive: stack columns on small screens ---- */
+@media (max-width: 1100px) {
+  /* Drop the Due column: 6 cells remain (name, assignee, dur, start, progress, status). */
+  .tv2-head, .tv2-row {
+    grid-template-columns: minmax(220px, 1.5fr) minmax(130px, 1fr) 90px 120px minmax(130px, 1.3fr) minmax(110px, 0.9fr);
+  }
+  .tv2-cell-due { display: none; }
+}
 @media (max-width: 900px) {
+  /* Drop Due + Progress: 5 cells remain (name, assignee, dur, start, status). */
   .tv2-head, .tv2-row {
     grid-template-columns: 1fr 110px 90px 110px 120px;
   }
-  .tv2-cell-progress { display: none; }
+  .tv2-cell-progress, .tv2-cell-due { display: none; }
 }
 
 /* ===========================================================================

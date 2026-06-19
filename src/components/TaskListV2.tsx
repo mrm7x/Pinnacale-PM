@@ -608,6 +608,14 @@ export default function TaskListV2({
               </span>
             </div>
 
+            {/* Due date (read-only in the row; editable in the modal) */}
+            <div className="tv2-cell tv2-cell-due">
+              <span className={`tv2-readonly ${isOverdue ? 'tv2-readonly-overdue' : ''}`} title={isOverdue ? 'Overdue' : undefined}>
+                <Calendar size={12} />
+                {task.dueDate ? formatDateFriendly(task.dueDate) : <span className="tv2-dash">—</span>}
+              </span>
+            </div>
+
             {/* Progress (mini bar) */}
             <div className="tv2-cell tv2-cell-progress" title={`${prog}% complete${taskIsParent ? ' (weighted rollup)' : ''}`}>
               <div className="tv2-progress-mini">
@@ -823,6 +831,7 @@ export default function TaskListV2({
                 <div className="tv2-cell tv2-cell-assignee">Assignee</div>
                 <div className="tv2-cell tv2-cell-duration">Dur.</div>
                 <div className="tv2-cell tv2-cell-start">Start</div>
+                <div className="tv2-cell tv2-cell-due">Due</div>
                 <div className="tv2-cell tv2-cell-progress">Progress</div>
                 <div className="tv2-cell tv2-cell-status">Status</div>
               </div>
