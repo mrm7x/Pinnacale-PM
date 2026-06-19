@@ -909,11 +909,11 @@ export default function ProjectDetails({
           </div>
 
           {activeProjectTab === 'overview' && (
-             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
 
-              {/* HERO: identity + status badges */}
-              <div className="card" style={{ padding: '2rem', borderTop: `6px solid ${getProjectAccent(activeProject)}` }}>
-                <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              {/* HERO: identity + status badges + quick-link icons */}
+              <div className="card" style={{ padding: '1.5rem', borderTop: `5px solid ${getProjectAccent(activeProject)}` }}>
+                <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'flex-start' }}>
                   {(() => {
                     const matched = activeProject.icon ? PROJECT_ICONS.find(i => i.name === activeProject.icon) : null;
                     const IconComp = matched?.Icon || Folder;
@@ -922,26 +922,26 @@ export default function ProjectDetails({
                     const themeHex = getProjectAccent(activeProject);
                     return (
                       <div style={{
-                        width: '72px', height: '72px', flexShrink: 0,
+                        width: '56px', height: '56px', flexShrink: 0,
                         borderRadius: 'var(--radius-lg)',
                         background: `linear-gradient(135deg, ${themeHex} 0%, ${themeHex}CC 100%)`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         color: 'white',
-                        boxShadow: '0 6px 18px rgba(0,0,0,0.12)'
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.12)'
                       }}>
-                        <IconComp size={36} />
+                        <IconComp size={28} />
                       </div>
                     );
                   })()}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', flex: 1, minWidth: '260px' }}>
-                    <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                      <span className="badge badge-primary" style={{ fontSize: '0.85rem', padding: '0.3rem 0.75rem', fontWeight: 700 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span className="badge badge-primary" style={{ fontSize: '0.8rem', padding: '0.25rem 0.65rem', fontWeight: 700 }}>
                         {activeProject.clientName}
                       </span>
                       {(() => {
                         const ps = resolvePhaseMeta(activeProject);
                         return (
-                          <span style={{ fontSize: '0.85rem', padding: '0.3rem 0.75rem', borderRadius: 'var(--radius-sm)', backgroundColor: ps.bg, color: ps.text, fontWeight: 700 }}>
+                          <span style={{ fontSize: '0.8rem', padding: '0.25rem 0.65rem', borderRadius: 'var(--radius-sm)', backgroundColor: ps.bg, color: ps.text, fontWeight: 700 }}>
                             {ps.label}
                           </span>
                         );
@@ -949,30 +949,102 @@ export default function ProjectDetails({
                       {(() => {
                         const rs = getRagStyle(activeProject.ragOverall);
                         return (
-                          <span style={{ fontSize: '0.85rem', padding: '0.3rem 0.75rem', borderRadius: 'var(--radius-sm)', backgroundColor: rs.bg, color: rs.text, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <span style={{ fontSize: '0.8rem', padding: '0.25rem 0.65rem', borderRadius: 'var(--radius-sm)', backgroundColor: rs.bg, color: rs.text, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
                             <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: rs.text }} />
                             {rs.label}
                           </span>
                         );
                       })()}
                     </div>
-                    <h2 style={{ fontSize: '1.85rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+                    <h2 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
                       {activeProject.name}
                     </h2>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '1rem', lineHeight: '1.5', margin: 0 }}>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem', lineHeight: '1.45', margin: 0 }}>
                       {activeProject.description || 'No description provided.'}
                     </p>
                   </div>
+
+                  {/* Quick-link icon buttons (navigate, not display) */}
+                  {(() => {
+                    const TrelloIcon = (
+                      <svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="26" height="26" fill="#0052CC">
+                        <title>Trello</title>
+                        <path d="M21.147 0H2.853A2.86 2.86 0 000 2.853v18.294A2.86 2.86 0 002.853 24h18.294A2.86 2.86 0 0024 21.147V2.853A2.86 2.86 0 0021.147 0zM10.74 16.326c0 .54-.429.98-1.002.98H4.673a.987.987 0 01-.98-.98V4.674c0-.54.428-.98.98-.98h5.065c.573 0 1.002.44 1.002.98v11.652zm9.567-5.592c0 .54-.429.98-1.002.98h-5.065a.987.987 0 01-.98-.98V4.674c0-.54.428-.98.98-.98h5.065c.573 0 1.002.44 1.002.98v6.06z"/>
+                      </svg>
+                    );
+                    const SharePointIcon = (
+                      <svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="26" height="26">
+                        <title>Microsoft SharePoint</title>
+                        <rect x="2" y="4" width="20" height="16" rx="2.5" fill="#0078D4"/>
+                        <path d="M6.5 8.5h7v2h-7zM6.5 12h7v2h-7zM6.5 15.5h4.5v1.5H6.5z" fill="#fff"/>
+                        <circle cx="16.5" cy="14.5" r="3" fill="none" stroke="#fff" strokeWidth="1.4"/>
+                        <text x="16.5" y="15.8" textAnchor="middle" fontSize="3.2" fontWeight="700" fill="#fff" fontFamily="Segoe UI, Arial, sans-serif">S</text>
+                      </svg>
+                    );
+                    // Sage's real favicon (loaded at runtime); falls back to the green "S" badge if it can't load.
+                    const SageIcon = (
+                      <span style={{ position: 'relative', width: '26px', height: '26px', display: 'inline-block', flexShrink: 0 }}>
+                        <svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="26" height="26" style={{ position: 'absolute', inset: 0 }}>
+                          <title>Sage</title>
+                          <rect x="1" y="1" width="22" height="22" rx="5" fill="#00D639"/>
+                          <text x="12" y="16.6" textAnchor="middle" fontSize="13" fontWeight="800" fill="#fff" fontFamily="Segoe UI, Arial, sans-serif">S</text>
+                        </svg>
+                        <img
+                          src="https://www.google.com/s2/favicons?domain=sage.com&sz=64"
+                          alt="Sage"
+                          width={26}
+                          height={26}
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          style={{ position: 'absolute', inset: 0, width: '26px', height: '26px', borderRadius: '5px', objectFit: 'contain' }}
+                        />
+                      </span>
+                    );
+                    const links = [
+                      { key: 'trello', label: 'Trello', url: activeProject.trelloLink, icon: TrelloIcon },
+                      { key: 'sharepoint', label: 'SharePoint', url: activeProject.sharepointLink, icon: SharePointIcon },
+                      { key: 'sage', label: 'Sage CRM', url: activeProject.sageCrmLink, icon: SageIcon }
+                    ];
+                    return (
+                      <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        {links.map(l => (
+                          <a
+                            key={l.key}
+                            href={l.url || undefined}
+                            target="_blank"
+                            rel="noreferrer"
+                            title={l.url ? `Open ${l.label}` : `${l.label} — not set`}
+                            onMouseEnter={(e) => { if (l.url) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 10px rgba(0,0,0,0.12)'; } }}
+                            onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
+                            style={{
+                              width: '48px', height: '48px', flexShrink: 0,
+                              borderRadius: 'var(--radius-md)',
+                              border: '1px solid var(--border-color)',
+                              backgroundColor: 'var(--bg-tertiary)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              textDecoration: 'none',
+                              transition: 'transform 0.12s ease, box-shadow 0.12s ease',
+                              opacity: l.url ? 1 : 0.35,
+                              cursor: l.url ? 'pointer' : 'not-allowed',
+                              pointerEvents: l.url ? 'auto' : 'none',
+                              filter: l.url ? 'none' : 'grayscale(1)'
+                            }}
+                          >
+                            {l.icon}
+                          </a>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Timeline pills */}
-                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
-                  <span style={{ fontSize: '0.9rem', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', padding: '0.45rem 0.85rem', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)' }}>
+                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
+                  <span style={{ fontSize: '0.85rem', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', padding: '0.4rem 0.75rem', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)' }}>
                     <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary)' }} />
                     Start: <b style={{ color: 'var(--text-primary)' }}>{formatDateFriendly(activeProject.startDate)}</b>
                   </span>
                   {activeProject.targetGoLiveDate && (
-                    <span style={{ fontSize: '0.9rem', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', padding: '0.45rem 0.85rem', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)' }}>
+                    <span style={{ fontSize: '0.85rem', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', padding: '0.4rem 0.75rem', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)' }}>
                       <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--accent)' }} />
                       Target Go-Live: <b style={{ color: 'var(--text-primary)' }}>{formatDateFriendly(activeProject.targetGoLiveDate)}</b>
                     </span>
@@ -980,42 +1052,55 @@ export default function ProjectDetails({
                 </div>
               </div>
 
-              {/* KPI CARDS */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
-                <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Time Budget</span>
+              {/* KPI CARDS — compact */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '1rem' }}>
+                <div className="card" style={{ padding: '1.1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Time Budget</span>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
-                    <span style={{ fontSize: '1.9rem', fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{totalAllocatedDuration.toFixed(1)}</span>
-                    <span style={{ fontSize: '0.95rem', color: 'var(--text-tertiary)' }}>of {activeProject.budgetDays.toFixed(1)}d</span>
+                    <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{totalAllocatedDuration.toFixed(1)}</span>
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>of {activeProject.budgetDays.toFixed(1)}d</span>
                   </div>
                   {isOverBudget ? (
-                    <span className="badge badge-danger" style={{ fontSize: '0.8rem', padding: '0.25rem 0.6rem', marginTop: '0.25rem', width: 'fit-content' }}>
+                    <span className="badge badge-danger" style={{ fontSize: '0.75rem', padding: '0.2rem 0.55rem', width: 'fit-content' }}>
                       Over by {(totalAllocatedDuration - activeProject.budgetDays).toFixed(1)}d
                     </span>
                   ) : (
-                    <span className="badge badge-success" style={{ fontSize: '0.8rem', padding: '0.25rem 0.6rem', marginTop: '0.25rem', width: 'fit-content' }}>
+                    <span className="badge badge-success" style={{ fontSize: '0.75rem', padding: '0.2rem 0.55rem', width: 'fit-content' }}>
                       {(activeProject.budgetDays - totalAllocatedDuration).toFixed(1)}d remaining
                     </span>
                   )}
                 </div>
 
-                <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Task Completion</span>
+                <div className="card" style={{ padding: '1.1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Task Completion</span>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
-                    <span style={{ fontSize: '1.9rem', fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{completedPercentage}%</span>
-                    <span style={{ fontSize: '0.95rem', color: 'var(--text-tertiary)' }}>{completedLeafTasks}/{totalLeafTasks}</span>
+                    <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{completedPercentage}%</span>
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>{completedLeafTasks}/{totalLeafTasks}</span>
                   </div>
-                  <div style={{ height: '8px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden', marginTop: '0.25rem' }}>
+                  <div style={{ height: '7px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden', marginTop: '0.2rem' }}>
                     <div style={{ height: '100%', width: `${completedPercentage}%`, backgroundColor: 'var(--primary)', borderRadius: '4px', transition: 'width 0.3s ease' }} />
                   </div>
                 </div>
+
+                <div className="card" style={{ padding: '1.1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Open Tasks</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
+                    <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{totalLeafTasks - completedLeafTasks}</span>
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>of {totalLeafTasks} remaining</span>
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                    {completedLeafTasks} completed
+                  </span>
+                </div>
               </div>
 
-              {/* ROLES & LINKS */}
-              <div className="card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
-                <div>
-                  <h3 style={{ fontSize: '1.25rem', margin: '0 0 1.25rem 0', color: 'var(--text-primary)' }}>Roles & Assignments</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+              {/* BOTTOM: Roles & Resources + Project Health side-by-side */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: '1rem', alignItems: 'stretch' }}>
+
+                {/* ROLES & RESOURCES */}
+                <div className="card" style={{ padding: '1.5rem' }}>
+                  <h3 style={{ fontSize: '1.1rem', margin: '0 0 1rem 0', color: 'var(--text-primary)' }}>Roles & Assignments</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.6rem' }}>
                     {([
                       { label: 'Project Manager', id: activeProject.projectManagerId },
                       { label: 'Lead Consultant', id: activeProject.leadConsultantId },
@@ -1023,13 +1108,13 @@ export default function ProjectDetails({
                     ] as const).map(role => {
                       const person = role.id ? consultants.find(c => c.id === role.id) : null;
                       return (
-                        <div key={role.label} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'var(--bg-tertiary)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)' }}>
-                          <div style={{ width: '38px', height: '38px', borderRadius: '50%', backgroundColor: person?.avatarColor || 'var(--bg-secondary)', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '0.85rem', flexShrink: 0 }}>
-                            {person ? person.name.split(' ').map(n => n[0]).join('') : <User size={16} />}
+                        <div key={role.label} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'var(--bg-tertiary)', padding: '0.6rem 0.85rem', borderRadius: 'var(--radius-md)' }}>
+                          <div style={{ width: '34px', height: '34px', borderRadius: '50%', backgroundColor: person?.avatarColor || 'var(--bg-secondary)', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '0.8rem', flexShrink: 0 }}>
+                            {person ? person.name.split(' ').map(n => n[0]).join('') : <User size={15} />}
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                            <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>{role.label}</span>
-                            <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <span style={{ fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>{role.label}</span>
+                            <span style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {person ? person.name : 'Unassigned'}
                             </span>
                           </div>
@@ -1040,54 +1125,69 @@ export default function ProjectDetails({
 
                   {/* Resources */}
                   <div style={{ marginTop: '1rem' }}>
-                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Resources</span>
+                    <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Resources</span>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
                       {(activeProject.projectResourceIds || []).map(rid => {
                         const person = consultants.find(c => c.id === rid);
                         return (
-                          <span key={rid} style={{ fontSize: '0.9rem', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', padding: '0.35rem 0.75rem', borderRadius: '16px', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <span key={rid} style={{ fontSize: '0.88rem', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', padding: '0.3rem 0.7rem', borderRadius: '16px', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
                             <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: person?.avatarColor || 'var(--text-tertiary)' }} />
                             {person?.name || rid}
                           </span>
                         );
                       })}
-                      {(!activeProject.projectResourceIds || activeProject.projectResourceIds.length === 0) && <span style={{ fontSize: '0.9rem', color: 'var(--text-tertiary)' }}>No resources assigned</span>}
+                      {(!activeProject.projectResourceIds || activeProject.projectResourceIds.length === 0) && <span style={{ fontSize: '0.88rem', color: 'var(--text-tertiary)' }}>No resources assigned</span>}
                     </div>
                   </div>
                 </div>
 
-                <div>
-                  <h3 style={{ fontSize: '1.25rem', margin: '0 0 1.25rem 0', color: 'var(--text-primary)' }}>Quick Links</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
-                    {/* Trello */}
-                    <a href={activeProject.trelloLink || undefined} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', backgroundColor: 'var(--bg-tertiary)', padding: '0.85rem 1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', textDecoration: 'none', opacity: activeProject.trelloLink ? 1 : 0.6, cursor: activeProject.trelloLink ? 'pointer' : 'default' }}>
-                      <svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="#0052CC" style={{ flexShrink: 0 }}>
-                        <title>Trello</title>
-                        <path d="M21.147 0H2.853A2.86 2.86 0 000 2.853v18.294A2.86 2.86 0 002.853 24h18.294A2.86 2.86 0 0024 21.147V2.853A2.86 2.86 0 0021.147 0zM10.74 16.326c0 .54-.429.98-1.002.98H4.673a.987.987 0 01-.98-.98V4.674c0-.54.428-.98.98-.98h5.065c.573 0 1.002.44 1.002.98v11.652zm9.567-5.592c0 .54-.429.98-1.002.98h-5.065a.987.987 0 01-.98-.98V4.674c0-.54.428-.98.98-.98h5.065c.573 0 1.002.44 1.002.98v6.06z"/>
-                      </svg>
-                      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>Trello</span>
-                        <span style={{ fontSize: '0.9rem', color: activeProject.trelloLink ? 'var(--primary)' : 'var(--text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {activeProject.trelloLink ? activeProject.trelloLink.replace(/^https?:\/\//, '') : 'Not set'}
-                        </span>
+                {/* PROJECT HEALTH (RAG) */}
+                <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                    <h3 style={{ fontSize: '1.1rem', margin: 0, color: 'var(--text-primary)' }}>Project Health</h3>
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => setActiveProjectTab('rag')}
+                      style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
+                      title="Open RAG Status tab"
+                    >
+                      Manage RAG →
+                    </button>
+                  </div>
+
+                  {/* Overall banner */}
+                  {(() => {
+                    const rs = getRagStyle(activeProject.ragOverall);
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.85rem 1rem', borderRadius: 'var(--radius-md)', backgroundColor: rs.bg, border: `1px solid ${rs.text}33`, marginBottom: '0.85rem' }}>
+                        <span style={{ width: '16px', height: '16px', borderRadius: '50%', backgroundColor: rs.text, boxShadow: `0 0 8px ${rs.text}`, flexShrink: 0 }} />
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Overall</span>
+                          <span style={{ fontSize: '1.1rem', fontWeight: 800, color: rs.text }}>{rs.label}</span>
+                        </div>
                       </div>
-                    </a>
-                    {/* SharePoint */}
-                    <a href={activeProject.sharepointLink || undefined} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', backgroundColor: 'var(--bg-tertiary)', padding: '0.85rem 1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', textDecoration: 'none', opacity: activeProject.sharepointLink ? 1 : 0.6, cursor: activeProject.sharepointLink ? 'pointer' : 'default' }}>
-                      <svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="28" height="28" style={{ flexShrink: 0 }}>
-                        <title>Microsoft SharePoint</title>
-                        <rect x="2" y="4" width="20" height="16" rx="2.5" fill="#0078D4"/>
-                        <path d="M6.5 8.5h7v2h-7zM6.5 12h7v2h-7zM6.5 15.5h4.5v1.5H6.5z" fill="#fff"/>
-                        <circle cx="16.5" cy="14.5" r="3" fill="none" stroke="#fff" strokeWidth="1.4"/>
-                        <text x="16.5" y="15.8" textAnchor="middle" fontSize="3.2" fontWeight="700" fill="#fff" fontFamily="Segoe UI, Arial, sans-serif">S</text>
-                      </svg>
-                      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>SharePoint</span>
-                        <span style={{ fontSize: '0.9rem', color: activeProject.sharepointLink ? 'var(--primary)' : 'var(--text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {activeProject.sharepointLink ? activeProject.sharepointLink.replace(/^https?:\/\//, '') : 'Not set'}
-                        </span>
-                      </div>
-                    </a>
+                    );
+                  })()}
+
+                  {/* Sub-categories */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.55rem' }}>
+                    {([
+                      { key: 'ragScope', label: 'Scope' },
+                      { key: 'ragSchedule', label: 'Schedule' },
+                      { key: 'ragCosts', label: 'Costs' },
+                      { key: 'ragBenefits', label: 'Benefits' }
+                    ] as const).map(cat => {
+                      const rs = getRagStyle(activeProject[cat.key as keyof Project] as string);
+                      return (
+                        <div key={cat.key} style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.55rem 0.7rem', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)' }}>
+                          <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: rs.text, flexShrink: 0 }} />
+                          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{cat.label}</span>
+                            <span style={{ fontSize: '0.72rem', color: rs.text, fontWeight: 700 }}>{rs.label}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>

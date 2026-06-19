@@ -44,7 +44,16 @@ const STATUS_LABEL: Record<Task['status'], string> = {
 
 const ZOOM_LEVELS = [48, 64, 80, 100, 120];
 const ROW_HEIGHT = 44;
-const HEADER_HEIGHT = 52;
+const MONTH_BAND_HEIGHT = 22;
+const DAY_HEAD_HEIGHT = 42;
+const HEADER_HEIGHT = MONTH_BAND_HEIGHT + DAY_HEAD_HEIGHT;
+
+const STATUS_COLOR: Record<Task['status'], string> = {
+  not_started: 'var(--text-tertiary)',
+  in_progress: 'var(--primary)',
+  on_hold: 'var(--warning)',
+  completed: 'var(--success)'
+};
 
 export default function GanttChart({
   activeProject,
@@ -107,6 +116,23 @@ export default function GanttChart({
     }
     return cols;
   }, [activeProject, totalWorkingDays]);
+
+  // Group day columns into month bands for a top orientation strip.
+  const monthBands = useMemo(() => {
+    const bands: { key: string; label: string; count: number }[] = [];
+    let cur: { key: string; label: string; count: number } | null = null;
+    columns.forEach(col => {
+      const d = parseDate(col.dateStr);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      if (!cur || cur.key !== key) {
+        cur = { key, label: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }), count: 1 };
+        bands.push(cur);
+      } else {
+        cur.count++;
+      }
+    });
+    return bands;
+  }, [columns]);
 
   // Today's vertical line position (in half-day units from project start).
   const todayHalf = useMemo(() => {
@@ -274,16 +300,25 @@ export default function GanttChart({
           {projectTasks.map((task, idx) => {
             const parent = isParent(task.id);
             const depth = parentDepth(task, projectTasks);
+            const assigned = consultants.find(c => c.id === task.assignedConsultantId);
             return (
               <div key={task.id}
-                className={`g2-left-row ${parent ? 'g2-left-parent' : ''} ${idx % 2 ? 'g2-stripe' : ''}`}
+                className={`g2-left-row ${parent ? 'g2-left-parent' : ''} ${idx % 2 ? 'g2-stripe' : ''} ${popoverTaskId === task.id ? 'g2-left-selected' : ''}`}
                 style={{ height: ROW_HEIGHT, paddingLeft: `${0.5 + depth * 0.9}rem` }}
                 onClick={() => setPopoverTaskId(task.id)}
               >
+                {!parent && (
+                  <span className="g2-left-status" title={STATUS_LABEL[task.status]} style={{ backgroundColor: STATUS_COLOR[task.status] }} />
+                )}
                 <span className="g2-left-name" title={task.name}>
                   {parent && <span className="g2-left-bracket">▸</span>}
                   {task.name}
                 </span>
+                {!parent && (
+                  assigned
+                    ? <span className="g2-avatar-mini g2-left-avatar" style={{ backgroundColor: assigned.avatarColor || '#1e3449' }} title={assigned.name}>{initials(assigned.name)}</span>
+                    : <span className="g2-avatar-mini g2-left-avatar g2-left-avatar-empty" title="Unassigned"><User size={10} /></span>
+                )}
               </div>
             );
           })}
@@ -292,14 +327,23 @@ export default function GanttChart({
         {/* Scrollable timeline */}
         <div className={`g2-scroll ${isPanning ? 'g2-scroll-panning' : ''}`} ref={scrollRef} onMouseDown={onPanStart}>
           <div style={{ width: timelineWidth, position: 'relative' }}>
-            {/* Header */}
-            <div className="g2-head" style={{ height: HEADER_HEIGHT }}>
-              {columns.map(col => (
-                <div key={col.index} className={`g2-head-col ${col.isWeekend ? 'g2-weekend-head' : ''} ${col.isToday ? 'g2-today-head' : ''}`} style={{ width: colWidth }}>
-                  <span className="g2-head-day">{col.dayName}</span>
-                  <span className="g2-head-date">{col.dateLabel}</span>
-                </div>
-              ))}
+            {/* Header: month band + day columns */}
+            <div className="g2-head-wrap" style={{ height: HEADER_HEIGHT }}>
+              <div className="g2-month-band" style={{ height: MONTH_BAND_HEIGHT }}>
+                {monthBands.map(band => (
+                  <div key={band.key} className="g2-month-cell" style={{ width: band.count * colWidth }}>
+                    <span className="g2-month-label">{band.label}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="g2-head" style={{ height: DAY_HEAD_HEIGHT }}>
+                {columns.map(col => (
+                  <div key={col.index} className={`g2-head-col ${col.isWeekend ? 'g2-weekend-head' : ''} ${col.isToday ? 'g2-today-head' : ''}`} style={{ width: colWidth }}>
+                    <span className="g2-head-day">{col.dayName}</span>
+                    <span className="g2-head-date">{col.dateLabel}</span>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Body */}
@@ -389,6 +433,10 @@ export default function GanttChart({
                   >
                     {/* Progress fill overlay */}
                     <span className="g2-bar-progress" style={{ width: `${prog}%` }} />
+                    {/* Assignee avatar */}
+                    {assigned && w >= 40 && (
+                      <span className="g2-bar-avatar" title={assigned.name}>{initials(assigned.name)}</span>
+                    )}
                     {/* In-bar label */}
                     {w >= 90 && <span className="g2-bar-label">{task.name}</span>}
                     {/* Resize handle */}
