@@ -3,7 +3,8 @@ import type { Project, Task, Consultant } from '../types';
 import { canCreateTask, canEditTask, canDeleteTask } from '../utils/permissions';
 import {
   Plus, ChevronDown, ChevronRight, X, Clock, Calendar, Trash2,
-  Link2, AlertTriangle, ListChecks, Filter, GripVertical, CornerDownRight
+  Link2, AlertTriangle, ListChecks, Filter, GripVertical, CornerDownRight,
+  Columns3, List
 } from 'lucide-react';
 import { WinComboBox } from './winui/WinComboBox';
 import { WinDatePicker } from './winui/WinDatePicker';
@@ -43,8 +44,16 @@ interface TaskListV2Props {
 
 type StatusFilter = 'all' | 'not_started' | 'in_progress' | 'on_hold' | 'completed';
 type OwnerFilter = 'all' | 'pinnacle' | 'customer' | 'shared';
+type TaskViewMode = 'list' | 'kanban';
+type KanbanGroupMode = 'status' | 'parent' | 'assignee';
 
 type TaskOwner = 'Pinnacle' | 'Customer' | 'Pinnacle/Customer';
+
+interface KanbanColumn {
+  id: string;
+  label: string;
+  tasks: Task[];
+}
 
 const STATUS_OPTIONS: { label: string; value: Task['status'] }[] = [
   { label: 'Not Started', value: 'not_started' },
@@ -125,10 +134,13 @@ export default function TaskListV2({
   const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [onlyMine, setOnlyMine] = useState(false);
+  const [viewMode, setViewMode] = useState<TaskViewMode>('list');
+  const [kanbanGroupMode, setKanbanGroupMode] = useState<KanbanGroupMode>('status');
 
   // Drag-and-drop
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ type: 'before' | 'after' | 'into'; id: string } | null>(null);
+  const [kanbanDragId, setKanbanDragId] = useState<string | null>(null);
 
   // Reset ephemeral state when the project changes.
   useEffect(() => {
@@ -138,6 +150,7 @@ export default function TaskListV2({
     setInlineEdit(null);
     setDragId(null);
     setDropTarget(null);
+    setKanbanDragId(null);
     setOnlyMine(false);
   }, [project.id]);
 
@@ -192,6 +205,11 @@ export default function TaskListV2({
       return child ? matchesTree(child) : false;
     });
   }, [matchesSelf, childIds, projectTasks]);
+
+  const kanbanTasks = useMemo(
+    () => projectTasks.filter(matchesSelf),
+    [projectTasks, matchesSelf]
+  );
 
   // ---- Inline editing (autosave on change / commit) ------------------------
   const commitInline = () => {
@@ -287,6 +305,43 @@ export default function TaskListV2({
     setDragId(null); setDropTarget(null);
   };
 
+  const applyKanbanDrop = (columnId: string) => {
+    if (!kanbanDragId || !canEditTask(activeRole)) {
+      setKanbanDragId(null);
+      return;
+    }
+
+    const task = projectTasks.find(t => t.id === kanbanDragId);
+    if (!task) {
+      setKanbanDragId(null);
+      return;
+    }
+
+    if (kanbanGroupMode === 'status') {
+      const nextStatus = columnId as Task['status'];
+      if (task.status !== nextStatus) {
+        onUpdateTask({ ...task, status: nextStatus, ...(nextStatus === 'completed' ? { progress: 100 } : {}) });
+      }
+    } else if (kanbanGroupMode === 'assignee') {
+      const assignedConsultantId = columnId === '__unassigned' ? null : columnId;
+      if ((task.assignedConsultantId ?? null) !== assignedConsultantId) {
+        onUpdateTask({ ...task, assignedConsultantId });
+      }
+    } else {
+      const parentId = columnId === '__top' ? null : columnId;
+      if (parentId === task.id) {
+        onAddToast('Cannot make a task its own parent.', 'warning');
+      } else if (parentId && isDescendant(task.id, parentId)) {
+        onAddToast('Cannot move a task under one of its own subtasks.', 'warning');
+      } else if ((task.parentId ?? null) !== parentId) {
+        const siblingCount = projectTasks.filter(t => (t.parentId ?? null) === parentId && t.id !== task.id).length;
+        onUpdateTask({ ...task, parentId, sortOrder: (siblingCount + 1) * 10 });
+      }
+    }
+
+    setKanbanDragId(null);
+  };
+
   // Build a sortOrder rewrite for an entire sibling group, optionally moving
   // `movedId` into that group near `anchorId`.
   const buildReorderUpdates = (
@@ -316,6 +371,42 @@ export default function TaskListV2({
       parentId: t.id === movedId ? newParentId : (t.parentId ?? null)
     }));
   };
+
+  const kanbanColumns = useMemo<KanbanColumn[]>(() => {
+    const sortedCards = [...kanbanTasks].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+
+    if (kanbanGroupMode === 'status') {
+      return STATUS_OPTIONS.map(status => ({
+        id: status.value,
+        label: status.label,
+        tasks: sortedCards.filter(t => t.status === status.value)
+      }));
+    }
+
+    if (kanbanGroupMode === 'parent') {
+      const parents = projectTasks
+        .filter(t => isParent(t.id))
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+
+      return [
+        { id: '__top', label: 'Top level', tasks: sortedCards.filter(t => !t.parentId) },
+        ...parents.map(parent => ({
+          id: parent.id,
+          label: parent.name,
+          tasks: sortedCards.filter(t => t.parentId === parent.id)
+        }))
+      ];
+    }
+
+    return [
+      { id: '__unassigned', label: 'Unassigned', tasks: sortedCards.filter(t => !t.assignedConsultantId) },
+      ...consultants.map(consultant => ({
+        id: consultant.id,
+        label: consultant.name,
+        tasks: sortedCards.filter(t => t.assignedConsultantId === consultant.id)
+      }))
+    ];
+  }, [kanbanTasks, kanbanGroupMode, projectTasks, consultants, isParent]);
 
   // ---- Render helpers -------------------------------------------------------
   const renderDependencyTree = (
@@ -566,6 +657,58 @@ export default function TaskListV2({
     return rows;
   };
 
+  const renderKanbanCard = (task: Task) => {
+    const assigned = consultants.find(c => c.id === task.assignedConsultantId);
+    const parent = task.parentId ? projectTasks.find(t => t.id === task.parentId) : null;
+    const prog = progressFor(task);
+    const durationDerived = task.durationDays === 0 && !!task.dueDate;
+    const taskIsParent = isParent(task.id);
+    const isOverdue = isTaskOverdue(task);
+
+    return (
+      <div
+        key={task.id}
+        className={`tv2-kanban-card tv2-status-${task.status}`}
+        draggable={canEditTask(activeRole)}
+        onDragStart={(e) => { setKanbanDragId(task.id); e.dataTransfer.effectAllowed = 'move'; }}
+        onDragEnd={() => setKanbanDragId(null)}
+        onClick={() => setModalTaskId(task.id)}
+      >
+        <div className="tv2-kanban-card-top">
+          <span className={`tv2-kanban-title ${taskIsParent ? 'tv2-kanban-title-parent' : ''}`}>{task.name}</span>
+          <span className={`${statusBadgeClass(task.status)} tv2-badge-static`}>{statusLabel(task.status)}</span>
+        </div>
+        <div className="tv2-kanban-meta">
+          {parent && <span title="Parent task"><CornerDownRight size={12} /> {parent.name}</span>}
+          <span><Clock size={12} /> {durationDerived ? 'Due derived' : `${task.durationDays}d`}</span>
+          <span><Calendar size={12} /> {task.plannedStartDate ? formatDateFriendly(task.plannedStartDate) : 'No start'}</span>
+        </div>
+        <div className="tv2-kanban-progress" title={`${prog}% complete`}>
+          <div className="tv2-progress-mini">
+            <div className="tv2-progress-fill" style={{ width: `${prog}%`, backgroundColor: accent }} />
+          </div>
+          <span className="tv2-progress-num">{prog}%</span>
+        </div>
+        <div className="tv2-kanban-footer">
+          {assigned ? (
+            <span className="tv2-kanban-assignee">
+              <span className="tv2-avatar" style={{ backgroundColor: assigned.avatarColor || '#1e3449' }}>
+                {initials(assigned.name)}
+              </span>
+              {assigned.name}
+            </span>
+          ) : (
+            <span className="tv2-unassigned">Unassigned</span>
+          )}
+          <span className="tv2-tags">
+            {task.pinkNumber && <span className="tv2-chip tv2-chip-pink">Pink #{task.pinkNumber}</span>}
+            {isOverdue && <span className="tv2-chip tv2-chip-overdue"><AlertTriangle size={11} /> Overdue</span>}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
   const modalTask = modalTaskId && modalTaskId !== '__new__' ? (projectTasks.find(t => t.id === modalTaskId) ?? null) : null;
   const hasActiveFilters = hideCompleted || ownerFilter !== 'all' || assigneeFilter !== 'all' || statusFilter !== 'all' || onlyMine;
 
@@ -592,6 +735,22 @@ export default function TaskListV2({
       <div className="tv2-toolbar">
         <div className="tv2-toolbar-left">
           <h3 className="tv2-title">Implementation Tasks</h3>
+          <div className="tv2-view-toggle" role="group" aria-label="Task view">
+            <button
+              type="button"
+              className={`tv2-view-btn ${viewMode === 'list' ? 'tv2-view-btn-active' : ''}`}
+              onClick={() => setViewMode('list')}
+            >
+              <List size={14} /> List
+            </button>
+            <button
+              type="button"
+              className={`tv2-view-btn ${viewMode === 'kanban' ? 'tv2-view-btn-active' : ''}`}
+              onClick={() => setViewMode('kanban')}
+            >
+              <Columns3 size={14} /> Kanban
+            </button>
+          </div>
           {canCreateTask(activeRole) && (
             <button className="btn btn-primary tv2-add-btn"
               style={{ backgroundColor: accent, color: 'white', border: '1px solid rgba(0,0,0,0.1)' }}
@@ -620,6 +779,19 @@ export default function TaskListV2({
             onChange={(v) => setStatusFilter(v as StatusFilter)}
             options={[{ label: 'All statuses', value: 'all' }, ...STATUS_OPTIONS]}
           />
+          {viewMode === 'kanban' && (
+            <>
+              <span className="tv2-filter-divider" />
+              <WinComboBox className="tv2-filter-combo" value={kanbanGroupMode}
+                onChange={(v) => setKanbanGroupMode(v as KanbanGroupMode)}
+                options={[
+                  { label: 'Kanban by status', value: 'status' },
+                  { label: 'Kanban by parent task', value: 'parent' },
+                  { label: 'Kanban by assignee', value: 'assignee' }
+                ]}
+              />
+            </>
+          )}
           {hasActiveFilters && (
             <button className="btn btn-ghost tv2-clear-filters" onClick={() => { setHideCompleted(false); setOwnerFilter('all'); setAssigneeFilter('all'); setStatusFilter('all'); setOnlyMine(false); }}>
               Clear
@@ -628,36 +800,70 @@ export default function TaskListV2({
         </div>
       </div>
 
-      {/* Tree table */}
-      <div className="tv2-table card" style={{ borderTop: `4px solid ${accent}` }}>
-        {projectTasks.length === 0 ? (
-          <div className="tv2-empty">
-            <p>No tasks created yet for this project. Click <b>Add Task</b> to build your implementation checklist.</p>
-          </div>
-        ) : (
-          <div className="tv2-table-scroll">
-            <div className="tv2-head">
-              <div className="tv2-cell tv2-cell-name">
-                <span className="tv2-head-check">
-                  {canEditTask(activeRole) && (
-                    <input type="checkbox" className="win-checkbox"
-                      checked={leafTasks.length > 0 && selectedIds.length === leafTasks.length}
-                      onChange={(e) => setSelectedIds(e.target.checked ? leafTasks.map(t => t.id) : [])}
-                    />
-                  )}
-                </span>
-                Task Name
-              </div>
-              <div className="tv2-cell tv2-cell-assignee">Assignee</div>
-              <div className="tv2-cell tv2-cell-duration">Dur.</div>
-              <div className="tv2-cell tv2-cell-start">Start</div>
-              <div className="tv2-cell tv2-cell-progress">Progress</div>
-              <div className="tv2-cell tv2-cell-status">Status</div>
+      {viewMode === 'list' ? (
+        <div className="tv2-table card" style={{ borderTop: `4px solid ${accent}` }}>
+          {projectTasks.length === 0 ? (
+            <div className="tv2-empty">
+              <p>No tasks created yet for this project. Click <b>Add Task</b> to build your implementation checklist.</p>
             </div>
-            {renderTree(null, 0, '', [])}
-          </div>
-        )}
-      </div>
+          ) : (
+            <div className="tv2-table-scroll">
+              <div className="tv2-head">
+                <div className="tv2-cell tv2-cell-name">
+                  <span className="tv2-head-check">
+                    {canEditTask(activeRole) && (
+                      <input type="checkbox" className="win-checkbox"
+                        checked={leafTasks.length > 0 && selectedIds.length === leafTasks.length}
+                        onChange={(e) => setSelectedIds(e.target.checked ? leafTasks.map(t => t.id) : [])}
+                      />
+                    )}
+                  </span>
+                  Task Name
+                </div>
+                <div className="tv2-cell tv2-cell-assignee">Assignee</div>
+                <div className="tv2-cell tv2-cell-duration">Dur.</div>
+                <div className="tv2-cell tv2-cell-start">Start</div>
+                <div className="tv2-cell tv2-cell-progress">Progress</div>
+                <div className="tv2-cell tv2-cell-status">Status</div>
+              </div>
+              {renderTree(null, 0, '', [])}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="tv2-kanban card" style={{ borderTop: `4px solid ${accent}` }}>
+          {projectTasks.length === 0 ? (
+            <div className="tv2-empty">
+              <p>No tasks created yet for this project. Click <b>Add Task</b> to build your implementation checklist.</p>
+            </div>
+          ) : kanbanTasks.length === 0 ? (
+            <div className="tv2-empty">
+              <p>No tasks match the current filters.</p>
+            </div>
+          ) : (
+            <div className="tv2-kanban-scroll">
+              {kanbanColumns.map(column => (
+                <section
+                  key={column.id}
+                  className={`tv2-kanban-column ${kanbanDragId ? 'tv2-kanban-column-droppable' : ''}`}
+                  onDragOver={(e) => { if (kanbanDragId && canEditTask(activeRole)) e.preventDefault(); }}
+                  onDrop={(e) => { e.preventDefault(); applyKanbanDrop(column.id); }}
+                >
+                  <header className="tv2-kanban-column-head">
+                    <span className="tv2-kanban-column-title">{column.label}</span>
+                    <span className="tv2-kanban-count">{column.tasks.length}</span>
+                  </header>
+                  <div className="tv2-kanban-cards">
+                    {column.tasks.length > 0 ? column.tasks.map(renderKanbanCard) : (
+                      <div className="tv2-kanban-empty">No tasks</div>
+                    )}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Floating bulk-action bar */}
       {selectedIds.length > 0 && (
