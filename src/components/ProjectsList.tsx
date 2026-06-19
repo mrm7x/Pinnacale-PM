@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Project, Consultant, Task } from '../types';
 import { formatDateFriendly } from './Dashboard';
-import { Plus, Search, Trash2, LayoutGrid, List, AlertCircle, Users, CheckCircle2, Filter } from 'lucide-react';
+import { Plus, Search, Trash2, LayoutGrid, List, AlertCircle, Users, CheckCircle2, Filter, Columns3 } from 'lucide-react';
 import { WinComboBox } from './winui/WinComboBox';
 import { resolvePhaseMeta, PHASE_ORDER } from '../utils/phases';
 
@@ -16,6 +16,29 @@ interface ProjectsListProps {
   onAddToast: (msg: string, type: 'success' | 'error' | 'warning' | 'info') => void;
   setIsNewProjectModalOpen: (val: boolean) => void;
 }
+
+type ProjectsViewMode = 'grid' | 'list' | 'kanban';
+type ProjectKanbanGroupMode = 'phase' | 'status' | 'lead' | 'rag';
+
+interface ProjectKanbanColumn {
+  id: string;
+  label: string;
+  projects: Project[];
+}
+
+const PROJECT_STATUS_OPTIONS: { label: string; value: Project['status'] }[] = [
+  { label: 'New', value: 'new' },
+  { label: 'In Progress', value: 'in progress' },
+  { label: 'On Hold', value: 'on hold' },
+  { label: 'Completed', value: 'completed' },
+  { label: 'Cancelled', value: 'cancelled' }
+];
+
+const RAG_OPTIONS = [
+  { label: 'On Track', value: 'green' },
+  { label: 'At Risk', value: 'amber' },
+  { label: 'Off Track', value: 'red' }
+];
 
 export default function ProjectsList({
   projects,
@@ -33,7 +56,9 @@ export default function ProjectsList({
   const [healthFilter, setHealthFilter] = useState<string>('all');
   const [leadConsultantFilter, setLeadConsultantFilter] = useState<string>('all');
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useState<ProjectsViewMode>('list');
+  const [kanbanGroupMode, setKanbanGroupMode] = useState<ProjectKanbanGroupMode>('phase');
+  const [kanbanDragId, setKanbanDragId] = useState<string | null>(null);
   
   // Bulk Action States
   const [bulkStatus, setBulkStatus] = useState<string>('');
@@ -108,6 +133,72 @@ export default function ProjectsList({
     }
   };
 
+  const kanbanColumns = useMemo<ProjectKanbanColumn[]>(() => {
+    if (kanbanGroupMode === 'phase') {
+      const customPhases = Array.from(new Set(filteredProjects.map(p => resolvePhaseMeta({ phase: p.phase, status: p.status }).label)))
+        .filter(phase => !PHASE_ORDER.includes(phase));
+      const phases = [...PHASE_ORDER, ...customPhases];
+      return phases.map(phase => ({
+        id: phase,
+        label: phase,
+        projects: filteredProjects.filter(p => resolvePhaseMeta({ phase: p.phase, status: p.status }).label === phase)
+      }));
+    }
+
+    if (kanbanGroupMode === 'status') {
+      return PROJECT_STATUS_OPTIONS.map(status => ({
+        id: status.value,
+        label: status.label,
+        projects: filteredProjects.filter(p => p.status === status.value)
+      }));
+    }
+
+    if (kanbanGroupMode === 'lead') {
+      return [
+        { id: '__unassigned', label: 'Unassigned', projects: filteredProjects.filter(p => !p.leadConsultantId) },
+        ...consultants.map(consultant => ({
+          id: consultant.id,
+          label: consultant.name,
+          projects: filteredProjects.filter(p => p.leadConsultantId === consultant.id)
+        }))
+      ];
+    }
+
+    return RAG_OPTIONS.map(rag => ({
+      id: rag.value,
+      label: rag.label,
+      projects: filteredProjects.filter(p => (p.ragOverall || 'green').toLowerCase() === rag.value)
+    }));
+  }, [filteredProjects, kanbanGroupMode, consultants]);
+
+  const applyKanbanDrop = (columnId: string) => {
+    if (!kanbanDragId) return;
+    const project = activeProjects.find(p => p.id === kanbanDragId);
+    if (!project) {
+      setKanbanDragId(null);
+      return;
+    }
+
+    if (kanbanGroupMode === 'phase') {
+      if ((project.phase || getPhaseColors(project.phase, project.status).label) !== columnId) {
+        onBulkUpdateProjects([project.id], { phase: columnId });
+      }
+    } else if (kanbanGroupMode === 'status') {
+      if (project.status !== columnId) {
+        onBulkUpdateProjects([project.id], { status: columnId as Project['status'] });
+      }
+    } else if (kanbanGroupMode === 'lead') {
+      const leadConsultantId = columnId === '__unassigned' ? null : columnId;
+      if ((project.leadConsultantId ?? null) !== leadConsultantId) {
+        onBulkUpdateProjects([project.id], { leadConsultantId });
+      }
+    } else if ((project.ragOverall || 'green').toLowerCase() !== columnId) {
+      onBulkUpdateProjects([project.id], { ragOverall: columnId });
+    }
+
+    setKanbanDragId(null);
+  };
+
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
       setSelectedProjectIds(filteredProjects.map(p => p.id));
@@ -167,6 +258,73 @@ export default function ProjectsList({
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
+  const renderProjectKanbanCard = (project: Project) => {
+    const metrics = getProjectMetrics(project.id, project.budgetDays);
+    const healthColors = getHealthColors(project.ragOverall);
+    const phaseColors = getPhaseColors(project.phase, project.status);
+    const lead = consultants.find(c => c.id === project.leadConsultantId);
+    const projectCode = `PRJ-${project.id.substring(0, 5).toUpperCase()}`;
+    const daysRemaining = calculateDaysRemaining(project.targetGoLiveDate, project.startDate);
+
+    return (
+      <div
+        key={project.id}
+        className="pl-kanban-card"
+        draggable
+        onDragStart={(e) => { setKanbanDragId(project.id); e.dataTransfer.effectAllowed = 'move'; }}
+        onDragEnd={() => setKanbanDragId(null)}
+        onClick={() => onSelectProject(project.id)}
+        style={{ borderLeftColor: getStatusDotColor(project.status) }}
+      >
+        <div className="pl-kanban-card-top">
+          <div className="pl-kanban-heading">
+            <span className="pl-kanban-code">{projectCode}</span>
+            <span className="pl-kanban-title">{project.name}</span>
+            <span className="pl-kanban-client">{project.clientName}</span>
+          </div>
+          <input
+            type="checkbox"
+            className="win-checkbox"
+            checked={selectedProjectIds.includes(project.id)}
+            onChange={() => handleSelectOne(project.id)}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+        <div className="pl-kanban-badges">
+          <span className="pl-kanban-pill" style={{ backgroundColor: phaseColors.bg, color: phaseColors.text, borderColor: `${phaseColors.text}30` }}>
+            {phaseColors.label}
+          </span>
+          <span className="pl-kanban-pill" style={{ backgroundColor: healthColors.bg, color: healthColors.text, borderColor: `${healthColors.text}30` }}>
+            <span className="pl-kanban-dot" style={{ backgroundColor: healthColors.dot }} />
+            {healthColors.label}
+          </span>
+        </div>
+        <div className="pl-kanban-progress">
+          <div className="pl-kanban-progress-bar">
+            <div style={{ width: `${metrics.progress}%`, backgroundColor: getStatusDotColor(project.status) }} />
+          </div>
+          <span>{metrics.progress}%</span>
+        </div>
+        <div className="pl-kanban-meta">
+          <span>{metrics.taskCount} tasks</span>
+          <span>{metrics.daysUsed}/{project.budgetDays}d</span>
+          <span>{daysRemaining >= 0 ? `${daysRemaining}d left` : `${Math.abs(daysRemaining)}d overdue`}</span>
+        </div>
+        <div className="pl-kanban-footer">
+          {lead ? (
+            <span className="pl-kanban-person">
+              <span style={{ backgroundColor: lead.avatarColor }}>{lead.name.charAt(0)}</span>
+              {lead.name}
+            </span>
+          ) : (
+            <span className="pl-kanban-unassigned">No lead</span>
+          )}
+          <span className="pl-kanban-status">{project.status}</span>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       {/* Header Panel */}
@@ -190,11 +348,7 @@ export default function ProjectsList({
               onChange={setStatusFilter}
               options={[
                 { label: 'All Status', value: 'all' },
-                { label: 'New', value: 'new' },
-                { label: 'In Progress', value: 'in progress' },
-                { label: 'On Hold', value: 'on hold' },
-                { label: 'Completed', value: 'completed' },
-                { label: 'Cancelled', value: 'cancelled' }
+                ...PROJECT_STATUS_OPTIONS
               ]}
             />
           </div>
@@ -233,6 +387,21 @@ export default function ProjectsList({
               ]}
             />
           </div>
+
+          {viewMode === 'kanban' && (
+            <div style={{ minWidth: '190px', flex: '1 1 190px' }}>
+              <WinComboBox
+                value={kanbanGroupMode}
+                onChange={(v) => setKanbanGroupMode(v as ProjectKanbanGroupMode)}
+                options={[
+                  { label: 'Kanban by phase', value: 'phase' },
+                  { label: 'Kanban by status', value: 'status' },
+                  { label: 'Kanban by lead', value: 'lead' },
+                  { label: 'Kanban by RAG', value: 'rag' }
+                ]}
+              />
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -252,6 +421,14 @@ export default function ProjectsList({
               title="List View"
             >
               <List size={18} />
+            </button>
+            <button
+              className={`btn ${viewMode === 'kanban' ? 'btn-primary' : ''}`}
+              style={{ padding: '0.55rem', backgroundColor: viewMode === 'kanban' ? 'var(--bg-elevated)' : 'transparent', color: viewMode === 'kanban' ? 'var(--primary)' : 'var(--text-secondary)', border: 'none', boxShadow: viewMode === 'kanban' ? 'var(--shadow-sm)' : 'none', minWidth: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              onClick={() => setViewMode('kanban')}
+              title="Kanban View"
+            >
+              <Columns3 size={18} />
             </button>
           </div>
 
@@ -448,7 +625,7 @@ export default function ProjectsList({
              </div>
           )}
         </div>
-      ) : (
+      ) : viewMode === 'list' ? (
         <div className="card" style={{ overflowX: 'auto', borderTop: '5px solid var(--primary)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
             <thead>
@@ -557,6 +734,33 @@ export default function ProjectsList({
               )}
             </tbody>
           </table>
+        </div>
+      ) : (
+        <div className="card pl-kanban" style={{ borderTop: '5px solid var(--primary)' }}>
+          {filteredProjects.length === 0 ? (
+            <div className="pl-kanban-empty-board">No projects found matching your criteria.</div>
+          ) : (
+            <div className="pl-kanban-scroll">
+              {kanbanColumns.map(column => (
+                <section
+                  key={column.id}
+                  className={`pl-kanban-column ${kanbanDragId ? 'pl-kanban-column-droppable' : ''}`}
+                  onDragOver={(e) => { if (kanbanDragId) e.preventDefault(); }}
+                  onDrop={(e) => { e.preventDefault(); applyKanbanDrop(column.id); }}
+                >
+                  <header className="pl-kanban-column-head">
+                    <span className="pl-kanban-column-title">{column.label}</span>
+                    <span className="pl-kanban-count">{column.projects.length}</span>
+                  </header>
+                  <div className="pl-kanban-cards">
+                    {column.projects.length > 0 ? column.projects.map(renderProjectKanbanCard) : (
+                      <div className="pl-kanban-empty">No projects</div>
+                    )}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
