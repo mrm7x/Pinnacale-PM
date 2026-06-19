@@ -888,7 +888,12 @@ function TaskModal(props: TaskModalProps) {
                 <label className="form-label">Parent task</label>
                 <WinComboBox value={form.parentId}
                   onChange={(v) => update({ parentId: v })}
-                  options={[{ label: 'None (top-level)', value: '' }, ...tasks.filter(t => t.id !== task?.id && !isParent(t.id)).map(t => ({ label: t.name, value: t.id }))]} />
+                  options={[
+                    { label: 'None (top-level)', value: '' },
+                    ...tasks
+                      .filter(t => t.id !== task?.id && (!isParent(t.id) || t.id === form.parentId))
+                      .map(t => ({ label: t.name, value: t.id }))
+                  ]} />
               </div>
               <div className="tv2-field">
                 <label className="form-label">Pink number</label>
