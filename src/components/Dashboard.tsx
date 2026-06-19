@@ -260,7 +260,7 @@ export default function Dashboard({
             </div>
 
             <div className="card kpi-card">
-              <div className="kpi-icon-wrapper" style={{ backgroundColor: 'var(--accent-light)', color: 'var(--accent)' }}>
+              <div className="kpi-icon-wrapper" style={{ backgroundColor: 'color-mix(in srgb, var(--warning) 18%, transparent)', color: 'var(--warning)' }}>
                 <Clock size={24} />
               </div>
               <div className="kpi-details">
@@ -280,7 +280,7 @@ export default function Dashboard({
             </div>
 
             <div className="card kpi-card">
-              <div className="kpi-icon-wrapper" style={{ backgroundColor: '#e0f2fe', color: '#0284c7' }}>
+              <div className="kpi-icon-wrapper" style={{ backgroundColor: 'color-mix(in srgb, #0ea5e9 16%, transparent)', color: '#0ea5e9' }}>
                 <CheckCircle2 size={24} />
               </div>
               <div className="kpi-details">
@@ -485,29 +485,29 @@ export default function Dashboard({
                 icon: <FolderKanban size={20} />,
                 value: totalProjects,
                 label: 'Active Projects',
-                iconBg: 'linear-gradient(135deg, #edf2f7 0%, #dce7f0 100%)',
+                iconBg: 'color-mix(in srgb, var(--primary) 16%, transparent)',
                 iconColor: 'var(--primary)'
               },
               {
                 icon: <Clock size={20} />,
                 value: `${totalAllocatedDays} / ${totalBudgetDays}d`,
                 label: 'Time Budget Used',
-                iconBg: 'linear-gradient(135deg, #fdf5ee 0%, #fae5ce 100%)',
-                iconColor: 'var(--accent)'
+                iconBg: 'color-mix(in srgb, var(--warning) 18%, transparent)',
+                iconColor: 'var(--warning)'
               },
               {
                 icon: <CheckSquare size={20} />,
                 value: `${completionPercentage}%`,
                 label: 'Task Completion',
-                iconBg: 'linear-gradient(135deg, #ecfdf3 0%, #d1fae5 100%)',
+                iconBg: 'color-mix(in srgb, var(--success) 16%, transparent)',
                 iconColor: 'var(--success)'
               },
               {
                 icon: <Users size={20} />,
                 value: consultants.length,
                 label: 'Consultants',
-                iconBg: 'linear-gradient(135deg, #eef3ff 0%, #dde6ff 100%)',
-                iconColor: '#6366f1'
+                iconBg: 'color-mix(in srgb, #0ea5e9 16%, transparent)',
+                iconColor: '#0ea5e9'
               }
             ].map((kpi, i) => (
               <div key={i} className="card kpi-card" style={{ padding: '1.5rem 1.75rem' }}>

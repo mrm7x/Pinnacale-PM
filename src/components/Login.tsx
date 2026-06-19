@@ -167,7 +167,7 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
 
   const renderLeftHeroPanel = () => (
     <div className="login-hero-panel" style={{
-      background: 'linear-gradient(145deg, var(--primary-dark) 0%, var(--primary) 50%, #3a6186 100%)',
+      background: 'linear-gradient(145deg, var(--primary-dark) 0%, var(--primary) 55%, #7c3aed 100%)',
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'space-between',
@@ -194,7 +194,7 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
         position: 'absolute', bottom: '160px', right: '40px',
         width: '140px', height: '140px',
         borderRadius: '50%',
-        background: 'rgba(204, 119, 48, 0.15)',
+        background: 'rgba(167, 139, 250, 0.22)',
         pointerEvents: 'none'
       }} />
 
@@ -207,8 +207,8 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
       <div style={{ zIndex: 1 }}>
         <div style={{
           display: 'inline-block',
-          backgroundColor: 'rgba(204, 119, 48, 0.2)',
-          color: 'rgba(255,255,255,0.85)',
+          backgroundColor: 'rgba(255,255,255,0.14)',
+          color: 'rgba(255,255,255,0.92)',
           padding: '0.3rem 0.85rem',
           borderRadius: '100px',
           fontSize: '0.75rem',
@@ -216,7 +216,7 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
           letterSpacing: '0.08em',
           textTransform: 'uppercase',
           marginBottom: '1.25rem',
-          border: '1px solid rgba(204,119,48,0.35)'
+          border: '1px solid rgba(255,255,255,0.28)'
         }}>
           Implementation Management
         </div>
