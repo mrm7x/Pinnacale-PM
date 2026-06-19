@@ -110,15 +110,33 @@ export default function TaskListV2({
     projectTasks.some(t => t.parentId === id),
     [projectTasks]);
 
-  // Duration-weighted progress rollup for parents (recursive).
-  const progressFor = useCallback((task: Task): number => {
-    if (!isParent(task.id)) return clampProgress(task.progress);
-    const children = projectTasks.filter(t => t.parentId === task.id);
-    const totalWeight = children.reduce((acc, c) => acc + Math.max(0.5, c.durationDays), 0);
-    if (totalWeight === 0) return 0;
-    const weighted = children.reduce((acc, c) => acc + progressFor(c) * Math.max(0.5, c.durationDays), 0);
-    return Math.round(weighted / totalWeight);
+  // Count leaf (sub-)tasks beneath a parent and how many are completed.
+  // Leaf tasks have status only — no per-task progress. A parent's progress is
+  // simply the share of its sub-tasks that are completed.
+  const leafStats = useCallback((taskId: string): { completed: number; total: number } => {
+    let completed = 0;
+    let total = 0;
+    const walk = (id: string) => {
+      projectTasks.filter(t => t.parentId === id).forEach(child => {
+        if (isParent(child.id)) {
+          walk(child.id);
+        } else {
+          total++;
+          if (child.status === 'completed') completed++;
+        }
+      });
+    };
+    walk(taskId);
+    return { completed, total };
   }, [projectTasks, isParent]);
+
+  // Progress % only exists for parents (derived from completed sub-tasks).
+  // For a leaf task it is purely status-driven (completed = 100, otherwise 0).
+  const progressFor = useCallback((task: Task): number => {
+    if (!isParent(task.id)) return task.status === 'completed' ? 100 : 0;
+    const { completed, total } = leafStats(task.id);
+    return total === 0 ? 0 : Math.round((completed / total) * 100);
+  }, [isParent, leafStats]);
 
   // ---- UI state -------------------------------------------------------------
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -549,7 +567,7 @@ export default function TaskListV2({
             </div>
 
             {/* Assignee */}
-            <div className="tv2-cell tv2-cell-assignee">
+            <div className="tv2-cell tv2-cell-assignee" data-label="Assignee">
               {inlineEdit?.id === task.id && inlineEdit.field === 'assignee' ? (
                 <div className="tv2-inline-edit" onClick={(e) => e.stopPropagation()}>
                   <WinComboBox
@@ -579,7 +597,7 @@ export default function TaskListV2({
             </div>
 
             {/* Duration */}
-            <div className="tv2-cell tv2-cell-duration">
+            <div className="tv2-cell tv2-cell-duration" data-label="Duration">
               {inlineEdit?.id === task.id && inlineEdit.field === 'duration' ? (
                 <div className="tv2-inline-edit" onClick={(e) => e.stopPropagation()}>
                   <input type="number" step="0.5" min="0" autoFocus className="form-input tv2-duration-input"
@@ -601,7 +619,7 @@ export default function TaskListV2({
             </div>
 
             {/* Start date (read-only in the row; editable in the modal) */}
-            <div className="tv2-cell tv2-cell-start">
+            <div className="tv2-cell tv2-cell-start" data-label="Start">
               <span className="tv2-readonly">
                 <Calendar size={12} />
                 {task.plannedStartDate ? formatDateFriendly(task.plannedStartDate) : <span className="tv2-dash">—</span>}
@@ -609,23 +627,33 @@ export default function TaskListV2({
             </div>
 
             {/* Due date (read-only in the row; editable in the modal) */}
-            <div className="tv2-cell tv2-cell-due">
+            <div className="tv2-cell tv2-cell-due" data-label="Due">
               <span className={`tv2-readonly ${isOverdue ? 'tv2-readonly-overdue' : ''}`} title={isOverdue ? 'Overdue' : undefined}>
                 <Calendar size={12} />
                 {task.dueDate ? formatDateFriendly(task.dueDate) : <span className="tv2-dash">—</span>}
               </span>
             </div>
 
-            {/* Progress (mini bar) */}
-            <div className="tv2-cell tv2-cell-progress" title={`${prog}% complete${taskIsParent ? ' (weighted rollup)' : ''}`}>
-              <div className="tv2-progress-mini">
-                <div className="tv2-progress-fill" style={{ width: `${prog}%`, backgroundColor: accent }} />
-              </div>
-              <span className="tv2-progress-num">{prog}%</span>
+            {/* Progress — parents only: share of sub-tasks completed. Leaf tasks
+                are status-driven and show no progress. */}
+            <div className={`tv2-cell tv2-cell-progress ${taskIsParent ? '' : 'tv2-cell-progress-empty'}`} data-label="Progress">
+              {taskIsParent ? (() => {
+                const { completed, total } = leafStats(task.id);
+                return (
+                  <>
+                    <div className="tv2-progress-mini" title={`${completed} of ${total} sub-task${total === 1 ? '' : 's'} completed`}>
+                      <div className="tv2-progress-fill" style={{ width: `${prog}%`, backgroundColor: accent }} />
+                    </div>
+                    <span className="tv2-progress-num">{completed}/{total}</span>
+                  </>
+                );
+              })() : (
+                <span className="tv2-progress-na" title="Sub-tasks are tracked by status">—</span>
+              )}
             </div>
 
             {/* Status */}
-            <div className="tv2-cell tv2-cell-status">
+            <div className="tv2-cell tv2-cell-status" data-label="Status">
               {inlineEdit?.id === task.id && inlineEdit.field === 'status' ? (
                 <div className="tv2-inline-edit" onClick={(e) => e.stopPropagation()}>
                   <WinComboBox
@@ -668,9 +696,10 @@ export default function TaskListV2({
   const renderKanbanCard = (task: Task) => {
     const assigned = consultants.find(c => c.id === task.assignedConsultantId);
     const parent = task.parentId ? projectTasks.find(t => t.id === task.parentId) : null;
-    const prog = progressFor(task);
     const durationDerived = task.durationDays === 0 && !!task.dueDate;
     const taskIsParent = isParent(task.id);
+    const prog = taskIsParent ? progressFor(task) : 0;
+    const stats = taskIsParent ? leafStats(task.id) : null;
     const isOverdue = isTaskOverdue(task);
 
     return (
@@ -691,12 +720,14 @@ export default function TaskListV2({
           <span><Clock size={12} /> {durationDerived ? 'Due derived' : `${task.durationDays}d`}</span>
           <span><Calendar size={12} /> {task.plannedStartDate ? formatDateFriendly(task.plannedStartDate) : 'No start'}</span>
         </div>
-        <div className="tv2-kanban-progress" title={`${prog}% complete`}>
-          <div className="tv2-progress-mini">
-            <div className="tv2-progress-fill" style={{ width: `${prog}%`, backgroundColor: accent }} />
+        {taskIsParent && stats && (
+          <div className="tv2-kanban-progress" title={`${stats.completed} of ${stats.total} sub-task${stats.total === 1 ? '' : 's'} completed`}>
+            <div className="tv2-progress-mini">
+              <div className="tv2-progress-fill" style={{ width: `${prog}%`, backgroundColor: accent }} />
+            </div>
+            <span className="tv2-progress-num">{stats.completed}/{stats.total}</span>
           </div>
-          <span className="tv2-progress-num">{prog}%</span>
-        </div>
+        )}
         <div className="tv2-kanban-footer">
           {assigned ? (
             <span className="tv2-kanban-assignee">
@@ -1081,22 +1112,21 @@ function TaskModal(props: TaskModalProps) {
               </div>
             )}
 
-            <div className="tv2-field">
-              <label className="form-label">
-                Progress {showRollupNote && <span className="tv2-hint">(weighted rollup of children)</span>}
-              </label>
-              {showRollupNote ? (
-                <div className="tv2-progress-wide">
-                  <div className="tv2-progress-fill" style={{ width: `${progressFor(task!)}%`, backgroundColor: accent }} />
-                </div>
-              ) : (
+            {/* Progress only applies to parent tasks (share of sub-tasks completed).
+                Leaf tasks are tracked purely by their Status. */}
+            {showRollupNote && (
+              <div className="tv2-field">
+                <label className="form-label">
+                  Progress <span className="tv2-hint">(share of sub-tasks completed)</span>
+                </label>
                 <div className="tv2-slider-row">
-                  <input type="range" min={0} max={100} step={5} className="tv2-slider" value={form.progress}
-                    onChange={(e) => update({ progress: parseInt(e.target.value, 10) })} />
-                  <span className="tv2-slider-value">{form.progress}%</span>
+                  <div className="tv2-progress-wide">
+                    <div className="tv2-progress-fill" style={{ width: `${progressFor(task!)}%`, backgroundColor: accent }} />
+                  </div>
+                  <span className="tv2-slider-value">{progressFor(task!)}%</span>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             <div className="tv2-field-row">
               <div className="tv2-field">

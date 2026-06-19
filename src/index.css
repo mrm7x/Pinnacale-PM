@@ -1843,6 +1843,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
 }
 .tv2-progress-fill { height: 100%; border-radius: 5px; transition: width 0.3s ease; }
 .tv2-progress-num { font-size: 0.72rem; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.tv2-progress-na { font-size: 0.85rem; color: var(--text-tertiary); }
 
 /* Badges reused for status pill + summary */
 .tv2-badge {
@@ -2196,20 +2197,83 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
   to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
-/* ---- Responsive: stack columns on small screens ---- */
+/* ---- Responsive: progressive disclosure ----
+   Column priority (kept longest → dropped first):
+     Name > Assignee > Status > Due > Progress > Start > Duration
+   Wide grid shows everything; as width shrinks we drop low-priority columns,
+   then switch to stacked cards, ending at just Name + Assignee on the tightest
+   phones — and reveal more again as the screen grows. */
+
+/* ≤1100: grid, drop the lowest-priority Duration column (6 cells:
+   name, assignee, start, due, progress, status). */
 @media (max-width: 1100px) {
-  /* Drop the Due column: 6 cells remain (name, assignee, dur, start, progress, status). */
   .tv2-head, .tv2-row {
-    grid-template-columns: minmax(220px, 1.5fr) minmax(130px, 1fr) 90px 120px minmax(130px, 1.3fr) minmax(110px, 0.9fr);
+    grid-template-columns: minmax(220px, 1.6fr) minmax(140px, 1fr) 120px 120px minmax(140px, 1.3fr) minmax(120px, 0.9fr);
   }
-  .tv2-cell-due { display: none; }
+  .tv2-cell-duration { display: none; }
 }
+
+/* ≤900: switch to stacked cards. Name on its own line; the remaining cells
+   wrap beneath as labelled chips. Base stacked tier shows
+   Name, Assignee, Status, Due, Progress (Duration + Start dropped). */
 @media (max-width: 900px) {
-  /* Drop Due + Progress: 5 cells remain (name, assignee, dur, start, status). */
-  .tv2-head, .tv2-row {
-    grid-template-columns: 1fr 110px 90px 110px 120px;
+  .tv2-table-scroll { overflow-x: visible; }
+  .tv2-head { display: none; }
+
+  .tv2-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.65rem;
+    padding: 0.7rem 0.85rem;
+    min-height: 0;
   }
-  .tv2-cell-progress, .tv2-cell-due { display: none; }
+  .tv2-cell-name { flex: 1 1 100%; }
+  .tv2-cell-assignee,
+  .tv2-cell-duration,
+  .tv2-cell-start,
+  .tv2-cell-due,
+  .tv2-cell-progress,
+  .tv2-cell-status {
+    flex: 0 0 auto;
+    justify-content: flex-start;
+    min-width: 0;
+  }
+  /* Re-show Due + Progress that the wider grid tiers hide; drop low-priority. */
+  .tv2-cell-due,
+  .tv2-cell-progress { display: flex; }
+  .tv2-cell-duration,
+  .tv2-cell-start { display: none; }
+  .tv2-cell-progress-empty { display: none; }
+  .tv2-progress-mini { max-width: 90px; }
+
+  /* Inline labels so the wrapped chips read clearly without a header row. */
+  .tv2-cell[data-label]::before {
+    content: attr(data-label) ': ';
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-tertiary);
+    margin-right: 0.3rem;
+    white-space: nowrap;
+  }
+  /* Assignee avatar and the status badge are self-explanatory. */
+  .tv2-cell-assignee::before,
+  .tv2-cell-status::before { content: none; }
+
+  .tv2-toolbar-left { flex-wrap: wrap; }
+}
+
+/* ≤600: tighter — drop Due + Progress (Name, Assignee, Status). */
+@media (max-width: 600px) {
+  .tv2-cell-due,
+  .tv2-cell-progress { display: none; }
+}
+
+/* ≤430: tightest — just Name + Assignee. */
+@media (max-width: 430px) {
+  .tv2-cell-status { display: none; }
 }
 
 /* ===========================================================================
