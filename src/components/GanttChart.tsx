@@ -473,7 +473,7 @@ function GanttPopover({ task, consultants, allTasks, accent, anchorRow, rowHeigh
           {task.pinkNumber && (
             <div className="g2-pop-row">
               <span className="g2-pop-label">Pink #</span>
-              <span className="g2-pop-value">{task.pinkNumber}{task.billed ? ' · Billed' : ''}</span>
+              <span className="g2-pop-value">{task.pinkNumber}</span>
             </div>
           )}
           {preds.length > 0 && (

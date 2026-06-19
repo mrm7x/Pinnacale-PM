@@ -206,8 +206,11 @@ CREATE TABLE IF NOT EXISTS tasks (
     start_half_day INTEGER NOT NULL DEFAULT 0,
     end_half_day INTEGER NOT NULL DEFAULT 0,
     pink_number TEXT,
-    billed BOOLEAN DEFAULT false,
-    sort_order INTEGER DEFAULT 0
+    sort_order INTEGER DEFAULT 0,
+    custom_start_date TEXT,
+    progress INTEGER DEFAULT 0,
+    due_date TEXT,
+    task_owner TEXT NOT NULL DEFAULT 'Pinnacle'
 );
 
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;

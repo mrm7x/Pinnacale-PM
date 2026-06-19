@@ -114,7 +114,6 @@ export default function ProjectDetails({
     predecessorIds: [] as string[],
     status: 'not_started' as Task['status'],
     pinkNumber: '',
-    billed: false,
     customStartDate: ''
   });
 
@@ -145,7 +144,6 @@ export default function ProjectDetails({
   const [applyToSubtasks, setApplyToSubtasks] = useState(false);
 
   const [hideCompleted, setHideCompleted] = useState(false);
-  const [billedFilter, setBilledFilter] = useState<'all' | 'only' | 'hide'>('all');
   const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [commTypeFilter, setCommTypeFilter] = useState<string>('all');
@@ -167,8 +165,6 @@ export default function ProjectDetails({
   const totalLeafTasks = leafTasks.length;
   const completedLeafTasks = leafTasks.filter(t => t.status === 'completed').length;
   const completedPercentage = totalLeafTasks > 0 ? Math.round((completedLeafTasks / totalLeafTasks) * 100) : 0;
-  const totalBilledTasks = leafTasks.filter(t => t.billed).length;
-  const billedPercentage = totalLeafTasks > 0 ? Math.round((totalBilledTasks / totalLeafTasks) * 100) : 0;
 
   // Toggle tree expansion
   const toggleExpand = (taskId: string) => {
@@ -203,7 +199,6 @@ export default function ProjectDetails({
       predecessorIds: [],
       status: 'not_started',
       pinkNumber: '',
-      billed: false,
       customStartDate: ''
     });
     setIsTaskModalOpen(true);
@@ -220,7 +215,6 @@ export default function ProjectDetails({
       predecessorIds: [],
       status: 'not_started',
       pinkNumber: '',
-      billed: false,
       customStartDate: ''
     });
     setIsTaskModalOpen(true);
@@ -238,7 +232,6 @@ export default function ProjectDetails({
       predecessorIds: task.predecessorIds || [],
       status: task.status,
       pinkNumber: task.pinkNumber || '',
-      billed: !!task.billed,
       customStartDate: task.customStartDate || ''
     });
     setIsTaskModalOpen(true);
@@ -273,7 +266,6 @@ export default function ProjectDetails({
       predecessorIds: taskForm.predecessorIds,
       status: taskForm.status,
       pinkNumber: taskForm.pinkNumber,
-      billed: taskForm.billed,
       customStartDate: taskForm.customStartDate || null,
       sortOrder: editingTask ? editingTask.sortOrder : maxSortOrder + 10
     };
@@ -386,11 +378,6 @@ export default function ProjectDetails({
     }
   };
 
-  const handleBulkBillingChange = (billed: boolean) => {
-    onBulkUpdateTasks(selectedTaskIds, { billed });
-    setSelectedTaskIds([]);
-  };
-
   const handleBulkDurationApply = () => {
     const days = parseFloat(bulkDuration);
     if (!isNaN(days) && days >= 0) {
@@ -437,11 +424,6 @@ export default function ProjectDetails({
     let selfMatches = true;
     if (hideCompleted && task.status === 'completed') {
       selfMatches = false;
-    }
-    if (billedFilter === 'hide') {
-      if (task.billed) selfMatches = false;
-    } else if (billedFilter === 'only') {
-      if (!task.billed) selfMatches = false;
     }
     if (assigneeFilter !== 'all') {
       if (assigneeFilter === 'unassigned') {
@@ -587,12 +569,6 @@ export default function ProjectDetails({
                           value={inlineEditForm.pinkNumber || ''}
                           onChange={(e) => setInlineEditForm({ ...inlineEditForm, pinkNumber: e.target.value })}
                         />
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.75rem', cursor: 'pointer', margin: 0 }}>
-                          <input type="checkbox" className="win-checkbox" style={{ width: '14px', height: '14px', margin: 0 }}
-                            checked={inlineEditForm.billed || false}
-                            onChange={(e) => setInlineEditForm({ ...inlineEditForm, billed: e.target.checked })}
-                          /> Billed
-                        </label>
                         <button type="button" className="btn btn-primary" style={{ padding: '0.15rem', borderRadius: '4px' }} onClick={(e) => { e.stopPropagation(); handleInlineSave(task.id); }}>
                           <Check size={14} />
                         </button>
@@ -600,19 +576,14 @@ export default function ProjectDetails({
                     ) : (
                       <>
                         {task.pinkNumber && (
-                          <span style={{ fontSize: '0.68rem', backgroundColor: '#fdf2f8', color: '#db2777', border: '1px solid #fbcfe8', padding: '0.05rem 0.35rem', borderRadius: '4px', fontWeight: 600, cursor: 'pointer' }} title="Pink Number" onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('pinkNumber'); setInlineEditForm({ pinkNumber: task.pinkNumber, billed: task.billed }); }}>
+                          <span style={{ fontSize: '0.68rem', backgroundColor: '#fdf2f8', color: '#db2777', border: '1px solid #fbcfe8', padding: '0.05rem 0.35rem', borderRadius: '4px', fontWeight: 600, cursor: 'pointer' }} title="Pink Number" onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('pinkNumber'); setInlineEditForm({ pinkNumber: task.pinkNumber }); }}>
                             Pink #: {task.pinkNumber}
-                          </span>
-                        )}
-                        {task.billed && (
-                          <span style={{ fontSize: '0.68rem', backgroundColor: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', padding: '0.05rem 0.35rem', borderRadius: '4px', fontWeight: 600 }} title="Billed Status">
-                            Billed
                           </span>
                         )}
                         {!task.pinkNumber && (
                           <button
                             type="button"
-                            onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('pinkNumber'); setInlineEditForm({ pinkNumber: '', billed: false }); }}
+                            onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('pinkNumber'); setInlineEditForm({ pinkNumber: '' }); }}
                             style={{ 
                               fontSize: '0.68rem', color: 'var(--text-tertiary)', border: '1px dashed var(--border-color)', background: 'transparent', padding: '0.05rem 0.35rem', borderRadius: '4px', cursor: 'pointer',
                               opacity: hoveredTaskId === task.id ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: hoveredTaskId === task.id ? 'auto' : 'none'
@@ -1038,17 +1009,6 @@ export default function ProjectDetails({
                     <div style={{ height: '100%', width: `${completedPercentage}%`, backgroundColor: 'var(--primary)', borderRadius: '4px', transition: 'width 0.3s ease' }} />
                   </div>
                 </div>
-
-                <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Billed Progress</span>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
-                    <span style={{ fontSize: '1.9rem', fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{billedPercentage}%</span>
-                    <span style={{ fontSize: '0.95rem', color: 'var(--text-tertiary)' }}>{totalBilledTasks}/{totalLeafTasks}</span>
-                  </div>
-                  <div style={{ height: '8px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden', marginTop: '0.25rem' }}>
-                    <div style={{ height: '100%', width: `${billedPercentage}%`, backgroundColor: 'var(--success)', borderRadius: '4px', transition: 'width 0.3s ease' }} />
-                  </div>
-                </div>
               </div>
 
               {/* ROLES & LINKS */}
@@ -1185,23 +1145,6 @@ export default function ProjectDetails({
               />
               <span>Hide Completed</span>
             </label>
-
-            <span style={{ color: 'var(--border-color)', height: '15px', borderLeft: '1px solid currentColor' }} />
-
-            {/* Billed Filter */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Billing:</span>
-              <WinComboBox
-                className="form-select"
-                value={billedFilter}
-                onChange={(val) => setBilledFilter(val as 'all' | 'only' | 'hide')}
-                options={[
-                  { label: 'Show All', value: 'all' },
-                  { label: 'Show Only Billed', value: 'only' },
-                  { label: 'Hide Billed', value: 'hide' }
-                ]}
-              />
-            </div>
 
             <span style={{ color: 'var(--border-color)', height: '15px', borderLeft: '1px solid currentColor' }} />
 
@@ -1676,29 +1619,16 @@ export default function ProjectDetails({
                       </div>
                     </div>
 
-                    {/* Pink Number & Billed Checkbox */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '0.75rem', alignItems: 'center' }}>
-                      <div className="form-group" style={{ margin: 0 }}>
-                        <label htmlFor="form-field-10" className="form-label">Pink Number</label>
-                        <input id="form-field-10"
-                          type="text"
-                          className="form-input"
-                          placeholder="e.g. PN-12345"
-                          value={taskForm.pinkNumber}
-                          onChange={(e) => setTaskForm({ ...taskForm, pinkNumber: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="form-group" style={{ margin: 0, display: 'flex', alignItems: 'center', height: '100%', paddingTop: '1.4rem' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
-                          <input type="checkbox" className="win-checkbox"
-                            checked={taskForm.billed}
-                            onChange={(e) => setTaskForm({ ...taskForm, billed: e.target.checked })}
-                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                          />
-                          <span>Billed</span>
-                        </label>
-                      </div>
+                    {/* Pink Number */}
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label htmlFor="form-field-10" className="form-label">Pink Number</label>
+                      <input id="form-field-10"
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. PN-12345"
+                        value={taskForm.pinkNumber}
+                        onChange={(e) => setTaskForm({ ...taskForm, pinkNumber: e.target.value })}
+                      />
                     </div>
                   </div>
 
@@ -2057,24 +1987,6 @@ export default function ProjectDetails({
                   { label: 'Change Assignee...', value: '' },
                   { label: 'Unassigned', value: 'unassigned' },
                   ...consultants.map(c => ({ label: c.name, value: c.id }))
-                ]}
-              />
-            </div>
-
-            {/* Billed Select */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>Billing:</span>
-              <WinComboBox
-                className="form-select"
-                value=""
-                onChange={(val) => {
-                  if (val) handleBulkBillingChange(val === 'billed');
-                }}
-                menuPosition="top"
-                options={[
-                  { label: 'Change Billing...', value: '' },
-                  { label: 'Mark as Billed', value: 'billed' },
-                  { label: 'Mark as Unbilled', value: 'unbilled' }
                 ]}
               />
             </div>

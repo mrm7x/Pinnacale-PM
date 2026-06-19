@@ -1291,41 +1291,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
   gap: 1rem;
 }
 
-/* ---- Summary strip ---- */
-.tv2-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1rem;
-}
-.tv2-summary-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 1rem 1.25rem;
-  box-shadow: var(--shadow-xs);
-}
-.tv2-summary-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-tertiary);
-}
-.tv2-summary-value {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-}
-.tv2-summary-sub {
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--text-tertiary);
-}
+/* ---- Progress bar (used in modal rollup) ---- */
 .tv2-progress-wide {
   height: 10px;
   background-color: var(--bg-tertiary);
@@ -1536,12 +1502,13 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
   white-space: nowrap;
 }
 .tv2-chip-pink { background-color: #fdf2f8; color: #db2777; border: 1px solid #fbcfe8; }
-.tv2-chip-billed { background-color: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
 .tv2-chip-overdue { background-color: var(--danger-light); color: var(--danger); border: 1px solid var(--danger); }
 .tv2-chip-dep { background-color: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color); }
 .tv2-chip-blocks { background-color: var(--warning-light); color: #b45309; border: 1px solid var(--border-color); }
+.tv2-chip-owner { background-color: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color); }
+.tv2-chip-owner-customer { background-color: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
 :root.dark .tv2-chip-pink { background-color: #3a1a2a; color: #f9a8d4; border-color: #6b2c47; }
-:root.dark .tv2-chip-billed { background-color: #16331f; color: #86efac; border-color: #1f5135; }
+:root.dark .tv2-chip-owner-customer { background-color: #1e293b; color: #93c5fd; border-color: #334155; }
 
 /* Generic cell buttons (assignee / duration / status) */
 .tv2-cell { display: flex; align-items: center; min-width: 0; }
@@ -1628,29 +1595,64 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
 
 /* Inline editors */
 .tv2-inline-edit { display: flex; align-items: center; gap: 0.3rem; width: 100%; }
-.tv2-inline-ok { padding: 0.25rem !important; border-radius: var(--radius-sm) !important; flex-shrink: 0; }
 .tv2-duration-input { width: 70px; padding: 0.25rem 0.4rem; height: auto; text-align: center; }
 
-/* Drop zones (between/around rows) */
-.tv2-drop-zone { height: 6px; }
-.tv2-drop-active {
-  height: 8px;
-  background-color: var(--primary);
-  border-radius: 4px;
+/* Drop zones (between/around rows) — reorder shows a solid bar; nest is on the row itself */
+.tv2-drop-zone {
+  height: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tv2-drop-active.tv2-drop-reorder {
+  height: 10px;
+  background-color: var(--accent, var(--primary));
+  border-radius: 6px;
   margin: 0 0.5rem;
-  box-shadow: 0 0 0 2px var(--primary-light);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, var(--primary)) 22%, transparent);
+}
+.tv2-drop-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: white;
+  background-color: var(--accent, var(--primary));
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* Nest-as-subtask indicator on the row itself */
+.tv2-row-dropinto {
+  box-shadow: inset 0 0 0 2px var(--accent, var(--primary)), inset 4px 0 0 0 var(--accent, var(--primary)) !important;
+  background-color: color-mix(in srgb, var(--accent, var(--primary)) 12%, var(--bg-secondary)) !important;
+  position: relative;
+}
+.tv2-row-dropinto::after {
+  content: "↳ Drop as subtask";
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: white;
+  background-color: var(--accent, var(--primary));
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 2;
 }
 
 /* Children container — no extra styling needed; guides handle indentation */
 .tv2-children { display: flex; flex-direction: column; }
 
-/* ---- Floating bulk-action bar ---- */
+/* ---- Floating bulk-action bar (solid background) ---- */
 .tv2-bulkbar {
   position: fixed;
   bottom: 2rem;
   left: 50%;
   transform: translateX(-50%);
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-elevated);
   border: 1px solid var(--border-color);
   border-top: 3px solid var(--accent, var(--primary));
   border-radius: var(--radius-lg);
@@ -1676,45 +1678,43 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
   to { opacity: 1; transform: translate(-50%, 0); }
 }
 
-/* ---- Slide-over drawer ---- */
-.tv2-drawer-backdrop {
+/* ---- Centered floating modal (solid background) ---- */
+.tv2-modal {
   position: fixed;
-  inset: 0;
-  background-color: rgba(0, 0, 0, 0.4);
-  z-index: 1100;
-  animation: tv2-fade-in 0.15s ease-out;
-}
-.tv2-drawer {
-  position: fixed;
-  top: 0; right: 0; bottom: 0;
-  width: min(440px, 100vw);
-  background-color: var(--bg-secondary);
-  backdrop-filter: blur(40px);
-  -webkit-backdrop-filter: blur(40px);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(640px, calc(100vw - 2rem));
+  max-height: 90vh;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   z-index: 1101;
   display: flex;
   flex-direction: column;
-  animation: tv2-slide-in-right 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  overflow: hidden;
+  animation: tv2-pop-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.tv2-drawer-form { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-.tv2-drawer-header {
+.tv2-modal-form { display: flex; flex-direction: column; height: 100%; max-height: 90vh; overflow: hidden; }
+.tv2-modal-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
   padding: 1.25rem 1.5rem;
   border-bottom: 3px solid var(--primary);
+  flex-shrink: 0;
 }
-.tv2-drawer-eyebrow {
+.tv2-modal-eyebrow {
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-tertiary);
 }
-.tv2-drawer-title { margin: 0.15rem 0 0; font-size: 1.2rem; font-weight: 700; color: var(--text-primary); }
-.tv2-drawer-body {
+.tv2-modal-title { margin: 0.15rem 0 0; font-size: 1.2rem; font-weight: 700; color: var(--text-primary); }
+.tv2-modal-body {
   padding: 1.25rem 1.5rem;
   overflow-y: auto;
   display: flex;
@@ -1725,15 +1725,16 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
 .tv2-field { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
 .tv2-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; }
 .tv2-hint { font-size: 0.72rem; font-weight: 500; color: var(--text-tertiary); text-transform: none; letter-spacing: 0; }
-.tv2-check-row {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.88rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  cursor: pointer;
+.tv2-owner-note {
+  font-size: 0.76rem;
+  color: #1d4ed8;
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.6rem;
+  margin-top: -0.4rem;
 }
+:root.dark .tv2-owner-note { color: #93c5fd; background-color: #1e293b; border-color: #334155; }
 .tv2-slider-row { display: flex; align-items: center; gap: 0.75rem; }
 .tv2-slider { flex: 1; accent-color: var(--primary); cursor: pointer; }
 .tv2-slider-value { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-primary); min-width: 3ch; text-align: right; }
@@ -1756,21 +1757,23 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
 }
 .tv2-wbs-mini { font-weight: 600; color: var(--text-tertiary); min-width: 1.5rem; text-align: right; font-size: 0.75rem; }
 .tv2-dep-empty { font-size: 0.8rem; color: var(--text-tertiary); font-style: italic; padding: 0.4rem 0; }
-.tv2-drawer-footer {
+.tv2-modal-footer {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 1rem 1.5rem;
   border-top: 1px solid var(--border-color);
   background-color: var(--bg-tertiary);
+  flex-shrink: 0;
 }
-.tv2-drawer-spacer { flex: 1; }
-.tv2-drawer-danger { color: var(--danger); }
+.tv2-modal-spacer { flex: 1; }
+.tv2-modal-danger { color: var(--danger); }
+.tv2-modal-addsub { font-size: 0.82rem; display: inline-flex; align-items: center; gap: 0.3rem; }
 
 @keyframes tv2-fade-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes tv2-slide-in-right {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
+@keyframes tv2-pop-in {
+  from { opacity: 0; transform: translate(-50%, -48%) scale(0.97); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
 /* ---- Responsive: stack columns on small screens ---- */

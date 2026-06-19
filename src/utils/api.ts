@@ -99,10 +99,11 @@ function mapTaskFromDb(db: any): Task {
     startHalfDay: Number(db.start_half_day),
     endHalfDay: Number(db.end_half_day),
     pinkNumber: db.pink_number || '',
-    billed: !!db.billed,
     sortOrder: db.sort_order ? Number(db.sort_order) : 0,
     customStartDate: db.custom_start_date || null,
-    progress: db.progress != null ? Number(db.progress) : 0
+    progress: db.progress != null ? Number(db.progress) : 0,
+    dueDate: db.due_date || null,
+    taskOwner: db.task_owner || 'Pinnacle'
   };
 }
 
@@ -124,10 +125,11 @@ function mapTaskToDb(t: Task) {
     start_half_day: t.startHalfDay,
     end_half_day: t.endHalfDay,
     pink_number: t.pinkNumber || '',
-    billed: !!t.billed,
     sort_order: t.sortOrder || 0,
     custom_start_date: t.customStartDate || null,
-    progress: t.progress ?? 0
+    progress: t.progress ?? 0,
+    due_date: t.dueDate || null,
+    task_owner: t.taskOwner || 'Pinnacle'
   };
 }
 

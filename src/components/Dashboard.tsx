@@ -95,7 +95,7 @@ export default function Dashboard({
   const [agendaShowAllTasks, setAgendaShowAllTasks] = useState(false);
   const [inlineEditingTaskId, setInlineEditingTaskId] = useState<string | null>(null);
   const [inlineEditField, setInlineEditField] = useState<'pinkNumber' | null>(null);
-  const [inlineEditForm, setInlineEditForm] = useState<{ pinkNumber: string; billed: boolean }>({ pinkNumber: '', billed: false });
+  const [inlineEditForm, setInlineEditForm] = useState<{ pinkNumber: string }>({ pinkNumber: '' });
   const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null);
 
   const activeUser = consultants.find(c => c.id === activeUserId) || null;
@@ -128,7 +128,7 @@ export default function Dashboard({
 
   const handleInlineSave = (task: Task) => {
     if (!inlineEditingTaskId) return;
-    onUpdateTask({ ...task, pinkNumber: inlineEditForm.pinkNumber, billed: inlineEditForm.billed });
+    onUpdateTask({ ...task, pinkNumber: inlineEditForm.pinkNumber });
     setInlineEditingTaskId(null);
     setInlineEditField(null);
   };
@@ -393,14 +393,6 @@ export default function Dashboard({
                                             if (e.key === 'Escape') { setInlineEditingTaskId(null); setInlineEditField(null); }
                                           }}
                                         />
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
-                                          <input 
-                                            type="checkbox" 
-                                            checked={inlineEditForm.billed} 
-                                            onChange={(e) => setInlineEditForm({ ...inlineEditForm, billed: e.target.checked })}
-                                          />
-                                          Billed
-                                        </label>
                                         <button className="btn btn-primary" style={{ padding: '0.1rem 0.4rem', minHeight: 'auto', borderRadius: '4px' }} onClick={() => handleInlineSave(task)}>
                                           <CheckCircle2 size={14} />
                                         </button>
@@ -408,27 +400,27 @@ export default function Dashboard({
                                     ) : (
                                       <>
                                         {task.pinkNumber && (
-                                          <span style={{ fontSize: '0.68rem', backgroundColor: task.billed ? '#ecfdf5' : '#fdf2f8', color: task.billed ? '#10b981' : '#db2777', border: `1px solid ${task.billed ? '#a7f3d0' : '#fbcfe8'}`, padding: '0.05rem 0.35rem', borderRadius: '4px', fontWeight: 600, cursor: 'pointer' }} title="Pink Number" onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('pinkNumber'); setInlineEditForm({ pinkNumber: task.pinkNumber || '', billed: task.billed || false }); }}>
-                                            {task.billed ? 'Billed: ' : 'Pink #: '}{task.pinkNumber}
+                                          <span style={{ fontSize: '0.68rem', backgroundColor: '#fdf2f8', color: '#db2777', border: '1px solid #fbcfe8', padding: '0.05rem 0.35rem', borderRadius: '4px', fontWeight: 600, cursor: 'pointer' }} title="Pink Number" onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('pinkNumber'); setInlineEditForm({ pinkNumber: task.pinkNumber || '' }); }}>
+                                            {'Pink #: '}{task.pinkNumber}
                                           </span>
                                         )}
                                         {!task.pinkNumber && (
-                                          <span 
+                                          <span
                                             className="add-pink-number-btn"
-                                            style={{ 
-                                              fontSize: '0.68rem', 
-                                              color: 'var(--text-tertiary)', 
+                                            style={{
+                                              fontSize: '0.68rem',
+                                              color: 'var(--text-tertiary)',
                                               border: '1px dashed var(--border-color)',
                                               background: 'transparent',
                                               padding: '0.05rem 0.35rem',
                                               borderRadius: '4px',
-                                              cursor: 'pointer', 
+                                              cursor: 'pointer',
                                               fontWeight: 600,
                                               opacity: hoveredTaskId === task.id ? 1 : 0,
                                               transition: 'opacity 0.2s',
                                               pointerEvents: hoveredTaskId === task.id ? 'auto' : 'none'
                                             }}
-                                            onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('pinkNumber'); setInlineEditForm({ pinkNumber: '', billed: false }); }}
+                                            onClick={(e) => { e.stopPropagation(); setInlineEditingTaskId(task.id); setInlineEditField('pinkNumber'); setInlineEditForm({ pinkNumber: '' }); }}
                                           >
                                             + Add Pink Number
                                           </span>

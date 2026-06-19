@@ -60,10 +60,11 @@ export interface Task {
   o365TaskId?: string | null;
   o365CalendarEventId?: string | null;
   pinkNumber?: string;
-  billed?: boolean;
   sortOrder?: number;
   customStartDate?: string | null;
   progress?: number; // 0-100, stored on leaf tasks; parents compute a rollup
+  dueDate?: string | null; // YYYY-MM-DD; when set & durationDays === 0, duration is derived
+  taskOwner?: 'Pinnacle' | 'Customer' | 'Pinnacle/Customer'; // default 'Pinnacle'; Customer days don't count to budget
   
   // Computed scheduling fields (dynamically calculated)
   plannedStartDate?: string; // YYYY-MM-DD

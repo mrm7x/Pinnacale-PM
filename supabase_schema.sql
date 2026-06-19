@@ -86,10 +86,11 @@ CREATE TABLE IF NOT EXISTS tasks (
     start_half_day INTEGER NOT NULL DEFAULT 0,
     end_half_day INTEGER NOT NULL DEFAULT 0,
     pink_number TEXT,
-    billed BOOLEAN DEFAULT false,
     sort_order INTEGER DEFAULT 0,
     custom_start_date TEXT,
     progress INTEGER DEFAULT 0,
+    due_date TEXT, -- YYYY-MM-DD; when set & duration_days = 0, duration is derived from start->due
+    task_owner TEXT NOT NULL DEFAULT 'Pinnacle', -- 'Pinnacle' | 'Customer' | 'Pinnacle/Customer'
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

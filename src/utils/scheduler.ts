@@ -152,7 +152,8 @@ export function calculateTaskSchedules(projectStartDate: string, tasks: Task[]):
   // 2. Clone tasks to avoid mutating state directly
   const scheduledTasks = tasks.map(t => ({
     ...t,
-    durationDays: Math.max(0.5, Math.round(t.durationDays * 2) / 2), // snap to 0.5 increments
+    // Snap to 0.5 increments; allow 0 (means "derive from due date" for leaves).
+    durationDays: Math.max(0, Math.round(t.durationDays * 2) / 2),
     predecessorIds: t.predecessorIds || []
   }));
 
@@ -268,7 +269,16 @@ export function calculateTaskSchedules(projectStartDate: string, tasks: Task[]):
       }
 
       const startHalfDay = maxPredecessorEnd === -1 ? baselineStart : Math.max(baselineStart, maxPredecessorEnd + 1);
-      const durationHalfDays = Math.round(task.durationDays * 2);
+      let durationHalfDays = Math.round(task.durationDays * 2);
+      // If no explicit duration is budgeted (0) and a due date exists, derive the
+      // duration from the span between the task's resolved start and its due date.
+      if (durationHalfDays === 0 && task.dueDate) {
+        const startPoint = getSchedulePoint(projectStartDate, startHalfDay);
+        const dueHalfDays = getHalfDaysBetween(projectStartDate, task.dueDate);
+        durationHalfDays = Math.max(1, dueHalfDays - startHalfDay + 1);
+        task.durationDays = durationHalfDays / 2; // reflect derived duration on the task
+        void startPoint; // start date string is mapped back in step 4; kept for clarity
+      }
       const endHalfDay = startHalfDay + Math.max(1, durationHalfDays) - 1;
 
       scheduleIndices.set(taskId, { start: startHalfDay, end: endHalfDay });

@@ -3,7 +3,7 @@ import type { Project, Task, Consultant } from '../types';
 import { canCreateTask, canEditTask, canDeleteTask } from '../utils/permissions';
 import {
   Plus, ChevronDown, ChevronRight, X, Clock, Calendar, Trash2,
-  Link2, AlertTriangle, ListChecks, Filter, GripVertical, Check
+  Link2, AlertTriangle, ListChecks, Filter, GripVertical, CornerDownRight
 } from 'lucide-react';
 import { WinComboBox } from './winui/WinComboBox';
 import { WinDatePicker } from './winui/WinDatePicker';
@@ -17,13 +17,14 @@ import { getProjectAccent } from '../utils/phases';
  *  - No overlapping/cluttered controls. The row holds only hot cells:
  *    status, assignee, duration (all click-to-edit, sized to their column).
  *  - Everything else (name, dates, dependencies, pink#, description, progress)
- *    lives in a right-side slide-over drawer that opens on task-name click.
+ *    lives in a centered floating modal that opens on task-name click.
  *  - Reorder/reparent via drag-and-drop (drop between rows = reorder among
- *    siblings; drop onto a row = nest under it). No chevron buttons.
- *  - No O365 / Microsoft Graph surface.
+ *    siblings; drop onto a row = nest under it). Distinct visual indicators.
  *
  * Enhancements: per-task Progress % (duration-weighted rollup on parents),
- * an overdue badge, dependency-count hints, and a "My Tasks" worklist strip.
+ * an overdue badge, dependency-count hints, a "My Tasks" worklist strip,
+ * a due date that derives duration when no days are budgeted, and a
+ * Task Owner concept (Customer-owned days are excluded from budget).
  */
 
 interface TaskListV2Props {
@@ -41,13 +42,21 @@ interface TaskListV2Props {
 }
 
 type StatusFilter = 'all' | 'not_started' | 'in_progress' | 'on_hold' | 'completed';
-type BilledFilter = 'all' | 'only' | 'hide';
+type OwnerFilter = 'all' | 'pinnacle' | 'customer' | 'shared';
+
+type TaskOwner = 'Pinnacle' | 'Customer' | 'Pinnacle/Customer';
 
 const STATUS_OPTIONS: { label: string; value: Task['status'] }[] = [
   { label: 'Not Started', value: 'not_started' },
   { label: 'In Progress', value: 'in_progress' },
   { label: 'On Hold', value: 'on_hold' },
   { label: 'Completed', value: 'completed' }
+];
+
+const OWNER_OPTIONS: { label: string; value: TaskOwner }[] = [
+  { label: 'Pinnacle', value: 'Pinnacle' },
+  { label: 'Customer', value: 'Customer' },
+  { label: 'Pinnacle / Customer', value: 'Pinnacle/Customer' }
 ];
 
 const statusLabel = (s: Task['status']) =>
@@ -59,6 +68,8 @@ const statusBadgeClass = (s: Task['status']) =>
   : s === 'on_hold' ? 'tv2-badge tv2-badge-warning'
   : 'tv2-badge tv2-badge-secondary';
 
+// Days owned by the Customer don't count toward the project budget (excluded
+// wherever a budget total is computed, e.g. Dashboard / ProjectDetails).
 export default function TaskListV2({
   project,
   tasks,
@@ -103,12 +114,14 @@ export default function TaskListV2({
   // ---- UI state -------------------------------------------------------------
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [drawerTaskId, setDrawerTaskId] = useState<string | null>(null);
+  const [modalTaskId, setModalTaskId] = useState<string | null>(null);
+  // Preset parent for a newly created (sub)task.
+  const [createParentId, setCreateParentId] = useState<string | null>(null);
   const [inlineEdit, setInlineEdit] = useState<{ id: string; field: 'duration' | 'status' | 'assignee'; value: string } | null>(null);
 
   // Filters
   const [hideCompleted, setHideCompleted] = useState(false);
-  const [billedFilter, setBilledFilter] = useState<BilledFilter>('all');
+  const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>('all');
   const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [onlyMine, setOnlyMine] = useState(false);
@@ -120,22 +133,31 @@ export default function TaskListV2({
   // Reset ephemeral state when the project changes.
   useEffect(() => {
     setSelectedIds([]);
-    setDrawerTaskId(null);
+    setModalTaskId(null);
+    setCreateParentId(null);
     setInlineEdit(null);
     setDragId(null);
     setDropTarget(null);
     setOnlyMine(false);
   }, [project.id]);
 
-  // Close drawer on Escape.
+  // Close modal on Escape.
   useEffect(() => {
-    if (!drawerTaskId) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrawerTaskId(null); };
+    if (!modalTaskId && !createParentId) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setModalTaskId(null); setCreateParentId(null); } };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [drawerTaskId]);
+  }, [modalTaskId, createParentId]);
 
-  const toggleExpand = (id: string) => setExpanded(prev => ({ ...prev, [id]: prev[id] === undefined ? false : !prev[id] }));
+  const toggleExpand = (id: string) => setExpanded(prev => {
+    const cur = prev[id];
+    return { ...prev, [id]: cur === undefined ? true : !cur };
+  });
+
+  const openCreate = (parentId: string | null = null) => {
+    setCreateParentId(parentId);
+    setModalTaskId(null);
+  };
 
   // ---- "My Tasks" worklist --------------------------------------------------
   const myActiveTasks = useMemo(
@@ -147,28 +169,21 @@ export default function TaskListV2({
     [projectTasks, activeUserId, isParent]
   );
 
-  // ---- Budget / progress summary -------------------------------------------
+  // ---- Leaf tasks (used for selection + budget) -----------------------------
   const leafTasks = useMemo(() => projectTasks.filter(t => !isParent(t.id)), [projectTasks, isParent]);
-  const totalAllocated = leafTasks.reduce((acc, t) => acc + t.durationDays, 0);
-  const isOverBudget = totalAllocated > project.budgetDays;
-  const overallProgress = useMemo(() => {
-    const weight = leafTasks.reduce((acc, t) => acc + Math.max(0.5, t.durationDays), 0);
-    if (weight === 0) return 0;
-    const weighted = leafTasks.reduce((acc, t) => acc + progressFor(t) * Math.max(0.5, t.durationDays), 0);
-    return Math.round(weighted / weight);
-  }, [leafTasks, progressFor]);
 
   // ---- Filtering (keep ancestors of matching descendants visible) ----------
   const matchesSelf = useCallback((task: Task): boolean => {
     if (hideCompleted && task.status === 'completed') return false;
-    if (billedFilter === 'hide' && task.billed) return false;
-    if (billedFilter === 'only' && !task.billed) return false;
+    if (ownerFilter === 'customer' && !isParent(task.id) && task.taskOwner !== 'Customer') return false;
+    if (ownerFilter === 'pinnacle' && !isParent(task.id) && task.taskOwner !== 'Pinnacle') return false;
+    if (ownerFilter === 'shared' && !isParent(task.id) && task.taskOwner !== 'Pinnacle/Customer') return false;
     if (assigneeFilter === 'unassigned' && task.assignedConsultantId) return false;
     if (assigneeFilter !== 'all' && assigneeFilter !== 'unassigned' && task.assignedConsultantId !== assigneeFilter) return false;
     if (statusFilter !== 'all' && task.status !== statusFilter) return false;
     if (onlyMine && task.assignedConsultantId !== activeUserId) return false;
     return true;
-  }, [hideCompleted, billedFilter, assigneeFilter, statusFilter, onlyMine, activeUserId]);
+  }, [hideCompleted, ownerFilter, assigneeFilter, statusFilter, onlyMine, activeUserId, isParent]);
 
   const matchesTree = useCallback((task: Task): boolean => {
     if (matchesSelf(task)) return true;
@@ -178,7 +193,7 @@ export default function TaskListV2({
     });
   }, [matchesSelf, childIds, projectTasks]);
 
-  // ---- Inline editing -------------------------------------------------------
+  // ---- Inline editing (autosave on change / commit) ------------------------
   const commitInline = () => {
     if (!inlineEdit) return;
     const task = projectTasks.find(t => t.id === inlineEdit.id);
@@ -200,6 +215,21 @@ export default function TaskListV2({
     } else if (inlineEdit.field === 'assignee') {
       const assignedConsultantId = inlineEdit.value === '' ? null : inlineEdit.value;
       onUpdateTask({ ...task, assignedConsultantId });
+    }
+    setInlineEdit(null);
+  };
+
+  // Immediate commit for combobox-driven inline edits (no confirm button).
+  const commitInlineSelect = (id: string, field: 'status' | 'assignee', value: string) => {
+    const task = projectTasks.find(t => t.id === id);
+    if (!task) { setInlineEdit(null); return; }
+    if (field === 'status') {
+      const next = value as Task['status'];
+      const patch: Partial<Task> = { status: next };
+      if (next === 'completed') patch.progress = 100;
+      onUpdateTask({ ...task, ...patch });
+    } else {
+      onUpdateTask({ ...task, assignedConsultantId: value === '' ? null : value });
     }
     setInlineEdit(null);
   };
@@ -234,9 +264,7 @@ export default function TaskListV2({
 
     if (dropTarget.type === 'into') {
       newParentId = target.id;
-      // Append at the end of the target's children.
       const updates = buildReorderUpdates(dragId, target.id, null, false);
-      // Only reparent if it's safe (not onto a descendant).
       if (isDescendant(dragId, target.id)) {
         onAddToast('Cannot move a task under one of its own subtasks.', 'warning');
       } else {
@@ -267,7 +295,6 @@ export default function TaskListV2({
     anchorId: string | null,
     insertBefore: boolean
   ): { id: string; sortOrder: number; parentId?: string | null }[] => {
-    // Start from the destination sibling list (excluding the moved task).
     let group = projectTasks
       .filter(t => (t.parentId ?? null) === newParentId && t.id !== movedId)
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
@@ -347,6 +374,9 @@ export default function TaskListV2({
       const blockedBy = (task.predecessorIds || []).map(id => projectTasks.find(t => t.id === id)).filter(Boolean) as Task[];
       const blockingCount = projectTasks.filter(t => (t.predecessorIds || []).includes(task.id)).length;
       const prog = progressFor(task);
+      const owner = (task.taskOwner || 'Pinnacle') as TaskOwner;
+      const isCustomerOwned = owner === 'Customer';
+      const durationDerived = task.durationDays === 0 && !!task.dueDate;
 
       // Three drop targets around each row.
       const isDropBefore = dropTarget?.type === 'before' && dropTarget.id === task.id;
@@ -358,10 +388,12 @@ export default function TaskListV2({
         <div key={task.id} className="tv2-row-wrap">
           {/* before drop indicator */}
           <div
-            className={`tv2-drop-zone ${isDropBefore ? 'tv2-drop-active' : ''}`}
+            className={`tv2-drop-zone ${isDropBefore ? 'tv2-drop-active tv2-drop-reorder' : ''}`}
             onDragOver={(e) => { if (dragId && dragId !== task.id && !isDescendant(task.id, dragId)) { e.preventDefault(); setDropTarget({ type: 'before', id: task.id }); } }}
             onDrop={(e) => { e.preventDefault(); applyDrop(); }}
-          />
+          >
+            {isDropBefore && <span className="tv2-drop-label">Drop here to reorder</span>}
+          </div>
           <div
             className={`tv2-row ${isSelected ? 'tv2-row-selected' : ''} ${isDragging ? 'tv2-row-dragging' : ''} ${isDropInto ? 'tv2-row-dropinto' : ''} tv2-status-${task.status}`}
             draggable={canEditTask(activeRole)}
@@ -378,7 +410,7 @@ export default function TaskListV2({
             style={{ '--tv2-depth': depth } as React.CSSProperties}
           >
             {/* Left: guide lines + grip + checkbox + expand + name */}
-            <div className="tv2-cell tv2-cell-name" onClick={() => setDrawerTaskId(task.id)}>
+            <div className="tv2-cell tv2-cell-name" onClick={() => setModalTaskId(task.id)}>
               <div className="tv2-guides" aria-hidden>
                 {Array.from({ length: depth }).map((_, i) => (
                   <span key={i} className="tv2-guide-col">
@@ -412,7 +444,12 @@ export default function TaskListV2({
                 <span className={`tv2-name-text ${taskIsParent ? 'tv2-name-parent' : ''}`}>{task.name}</span>
                 <span className="tv2-tags">
                   {task.pinkNumber && <span className="tv2-chip tv2-chip-pink" title="Pink Number">Pink #{task.pinkNumber}</span>}
-                  {task.billed && <span className="tv2-chip tv2-chip-billed">Billed</span>}
+                  {!taskIsParent && (
+                    <span className={`tv2-chip ${isCustomerOwned ? 'tv2-chip-owner-customer' : 'tv2-chip-owner'}`} title="Task owner">
+                      {isCustomerOwned ? 'Customer' : owner === 'Pinnacle/Customer' ? 'Pinn/Cust' : 'Pinnacle'}
+                    </span>
+                  )}
+                  {durationDerived && <span className="tv2-chip tv2-chip-dep" title="Duration derived from due date">Due→</span>}
                   {isOverdue && <span className="tv2-chip tv2-chip-overdue" title={`Was due ${task.plannedEndDate}`}><AlertTriangle size={11} /> Overdue</span>}
                   {blockedBy.length > 0 && <span className="tv2-chip tv2-chip-dep" title={`Depends on: ${blockedBy.map(b => b.name).join(', ')}`}><Link2 size={11} /> {blockedBy.length}</span>}
                   {blockingCount > 0 && <span className="tv2-chip tv2-chip-blocks" title={`Blocks ${blockingCount} other task(s)`}>⛓ {blockingCount}</span>}
@@ -426,10 +463,10 @@ export default function TaskListV2({
                 <div className="tv2-inline-edit" onClick={(e) => e.stopPropagation()}>
                   <WinComboBox
                     value={inlineEdit.value}
-                    onChange={(val) => setInlineEdit({ ...inlineEdit, value: val })}
+                    menuPosition="top"
+                    onChange={(val) => commitInlineSelect(task.id, 'assignee', val)}
                     options={[{ label: 'Unassigned', value: '' }, ...consultants.map(c => ({ label: c.name, value: c.id }))]}
                   />
-                  <button className="btn btn-primary tv2-inline-ok" onClick={commitInline}><Check size={13} /></button>
                 </div>
               ) : (
                 <button type="button" className="tv2-cell-btn"
@@ -457,22 +494,22 @@ export default function TaskListV2({
                   <input type="number" step="0.5" min="0" autoFocus className="form-input tv2-duration-input"
                     value={inlineEdit.value}
                     onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
+                    onBlur={commitInline}
                     onKeyDown={(e) => { if (e.key === 'Enter') commitInline(); if (e.key === 'Escape') setInlineEdit(null); }}
                   />
-                  <button className="btn btn-primary tv2-inline-ok" onClick={commitInline}><Check size={13} /></button>
                 </div>
               ) : (
                 <button type="button" className="tv2-cell-btn tv2-cell-btn-center"
                   disabled={!canEditTask(activeRole) || taskIsParent}
-                  title={taskIsParent ? 'Parent duration is computed from children' : 'Edit duration'}
+                  title={taskIsParent ? 'Parent duration is computed from children' : 'Edit duration (0 = derive from due date)'}
                   onClick={(e) => { e.stopPropagation(); if (!taskIsParent) setInlineEdit({ id: task.id, field: 'duration', value: String(task.durationDays) }); }}
                 >
-                  <Clock size={12} /> {task.durationDays}d
+                  <Clock size={12} /> {durationDerived ? 'Due→' : `${task.durationDays}d`}
                 </button>
               )}
             </div>
 
-            {/* Start date (read-only in the row; editable in the drawer) */}
+            {/* Start date (read-only in the row; editable in the modal) */}
             <div className="tv2-cell tv2-cell-start">
               <span className="tv2-readonly">
                 <Calendar size={12} />
@@ -494,10 +531,10 @@ export default function TaskListV2({
                 <div className="tv2-inline-edit" onClick={(e) => e.stopPropagation()}>
                   <WinComboBox
                     value={inlineEdit.value}
-                    onChange={(val) => setInlineEdit({ ...inlineEdit, value: val })}
+                    menuPosition="top"
+                    onChange={(val) => commitInlineSelect(task.id, 'status', val)}
                     options={STATUS_OPTIONS}
                   />
-                  <button className="btn btn-primary tv2-inline-ok" onClick={commitInline}><Check size={13} /></button>
                 </div>
               ) : (
                 <button type="button" className={statusBadgeClass(task.status)}
@@ -511,10 +548,12 @@ export default function TaskListV2({
           </div>
           {/* after drop indicator */}
           <div
-            className={`tv2-drop-zone ${isDropAfter ? 'tv2-drop-active' : ''}`}
+            className={`tv2-drop-zone ${isDropAfter ? 'tv2-drop-active tv2-drop-reorder' : ''}`}
             onDragOver={(e) => { if (dragId && dragId !== task.id && !isDescendant(task.id, dragId)) { e.preventDefault(); setDropTarget({ type: 'after', id: task.id }); } }}
             onDrop={(e) => { e.preventDefault(); applyDrop(); }}
-          />
+          >
+            {isDropAfter && <span className="tv2-drop-label">Drop here to reorder</span>}
+          </div>
 
           {taskIsParent && isExpanded && (
             <div className="tv2-children">
@@ -527,35 +566,14 @@ export default function TaskListV2({
     return rows;
   };
 
-  const drawerTask = drawerTaskId && drawerTaskId !== '__new__' ? (projectTasks.find(t => t.id === drawerTaskId) ?? null) : null;
-  const hasActiveFilters = hideCompleted || billedFilter !== 'all' || assigneeFilter !== 'all' || statusFilter !== 'all' || onlyMine;
+  const modalTask = modalTaskId && modalTaskId !== '__new__' ? (projectTasks.find(t => t.id === modalTaskId) ?? null) : null;
+  const hasActiveFilters = hideCompleted || ownerFilter !== 'all' || assigneeFilter !== 'all' || statusFilter !== 'all' || onlyMine;
+
+  // Active modal mode: editing an existing task, or creating a new one.
+  const modalOpen = !!modalTaskId || createParentId !== null;
 
   return (
     <div className="tv2-root">
-      {/* Summary strip */}
-      <div className="tv2-summary">
-        <div className="tv2-summary-item">
-          <span className="tv2-summary-label">Allocated</span>
-          <span className="tv2-summary-value">
-            {totalAllocated.toFixed(1)}d <span className="tv2-summary-sub">/ {project.budgetDays.toFixed(1)}d</span>
-          </span>
-          {isOverBudget
-            ? <span className="tv2-badge tv2-badge-danger">Over by {(totalAllocated - project.budgetDays).toFixed(1)}d</span>
-            : <span className="tv2-badge tv2-badge-success">{(project.budgetDays - totalAllocated).toFixed(1)}d left</span>}
-        </div>
-        <div className="tv2-summary-item">
-          <span className="tv2-summary-label">Progress</span>
-          <div className="tv2-progress-wide">
-            <div className="tv2-progress-fill" style={{ width: `${overallProgress}%`, backgroundColor: accent }} />
-          </div>
-          <span className="tv2-summary-value">{overallProgress}%</span>
-        </div>
-        <div className="tv2-summary-item">
-          <span className="tv2-summary-label">Tasks</span>
-          <span className="tv2-summary-value">{leafTasks.length} <span className="tv2-summary-sub">leaf</span></span>
-        </div>
-      </div>
-
       {/* My Tasks strip */}
       {myActiveTasks.length > 0 && (
         <div className="tv2-mytasks">
@@ -577,7 +595,7 @@ export default function TaskListV2({
           {canCreateTask(activeRole) && (
             <button className="btn btn-primary tv2-add-btn"
               style={{ backgroundColor: accent, color: 'white', border: '1px solid rgba(0,0,0,0.1)' }}
-              onClick={() => setDrawerTaskId('__new__')}
+              onClick={() => openCreate(null)}
             >
               <Plus size={15} /> Add Task
             </button>
@@ -590,9 +608,9 @@ export default function TaskListV2({
             <span>Hide completed</span>
           </label>
           <span className="tv2-filter-divider" />
-          <WinComboBox className="tv2-filter-combo" value={billedFilter}
-            onChange={(v) => setBilledFilter(v as BilledFilter)}
-            options={[{ label: 'All billing', value: 'all' }, { label: 'Billed only', value: 'only' }, { label: 'Hide billed', value: 'hide' }]}
+          <WinComboBox className="tv2-filter-combo" value={ownerFilter}
+            onChange={(v) => setOwnerFilter(v as OwnerFilter)}
+            options={[{ label: 'All owners', value: 'all' }, { label: 'Pinnacle', value: 'pinnacle' }, { label: 'Customer', value: 'customer' }, { label: 'Pinnacle/Customer', value: 'shared' }]}
           />
           <WinComboBox className="tv2-filter-combo" value={assigneeFilter}
             onChange={setAssigneeFilter}
@@ -603,7 +621,7 @@ export default function TaskListV2({
             options={[{ label: 'All statuses', value: 'all' }, ...STATUS_OPTIONS]}
           />
           {hasActiveFilters && (
-            <button className="btn btn-ghost tv2-clear-filters" onClick={() => { setHideCompleted(false); setBilledFilter('all'); setAssigneeFilter('all'); setStatusFilter('all'); setOnlyMine(false); }}>
+            <button className="btn btn-ghost tv2-clear-filters" onClick={() => { setHideCompleted(false); setOwnerFilter('all'); setAssigneeFilter('all'); setStatusFilter('all'); setOnlyMine(false); }}>
               Clear
             </button>
           )}
@@ -654,17 +672,17 @@ export default function TaskListV2({
             />
           </div>
           <div className="tv2-bulkbar-group">
+            <span className="tv2-bulkbar-label">Owner:</span>
+            <WinComboBox className="tv2-bulkbar-combo" value="" menuPosition="top"
+              onChange={(v) => { if (v) { onBulkUpdateTasks(selectedIds, { taskOwner: v as TaskOwner }); setSelectedIds([]); } }}
+              options={[{ label: 'Change…', value: '' }, ...OWNER_OPTIONS]}
+            />
+          </div>
+          <div className="tv2-bulkbar-group">
             <span className="tv2-bulkbar-label">Assignee:</span>
             <WinComboBox className="tv2-bulkbar-combo" value="" menuPosition="top"
               onChange={(v) => { if (v) { onBulkUpdateTasks(selectedIds, { assignedConsultantId: v === 'unassigned' ? null : v }); setSelectedIds([]); } }}
               options={[{ label: 'Change…', value: '' }, { label: 'Unassigned', value: 'unassigned' }, ...consultants.map(c => ({ label: c.name, value: c.id }))]}
-            />
-          </div>
-          <div className="tv2-bulkbar-group">
-            <span className="tv2-bulkbar-label">Billing:</span>
-            <WinComboBox className="tv2-bulkbar-combo" value="" menuPosition="top"
-              onChange={(v) => { if (v) { onBulkUpdateTasks(selectedIds, { billed: v === 'billed' }); setSelectedIds([]); } }}
-              options={[{ label: 'Change…', value: '' }, { label: 'Mark billed', value: 'billed' }, { label: 'Mark unbilled', value: 'unbilled' }]}
             />
           </div>
           {canDeleteTask(activeRole) && (
@@ -678,11 +696,12 @@ export default function TaskListV2({
         </div>
       )}
 
-      {/* Slide-over drawer (edit / create) */}
-      {(drawerTaskId || drawerTaskId === '__new__') && (
-        <TaskDrawer
-          mode={drawerTaskId === '__new__' ? 'create' : 'edit'}
-          task={drawerTask}
+      {/* Floating centered modal (edit / create) */}
+      {modalOpen && (
+        <TaskModal
+          mode={createParentId !== null || modalTaskId === '__new__' ? 'create' : 'edit'}
+          task={modalTask}
+          presetParentId={createParentId}
           project={project}
           tasks={projectTasks}
           consultants={consultants}
@@ -690,10 +709,23 @@ export default function TaskListV2({
           canEdit={canEditTask(activeRole)}
           isParent={isParent}
           progressFor={progressFor}
-          onClose={() => setDrawerTaskId(null)}
-          onSave={(t) => { onCreateTask(t); setDrawerTaskId(null); onAddToast('Task created successfully!', 'success'); }}
-          onUpdate={(t) => { onUpdateTask(t); /* keep drawer open for further edits */ }}
-          onDelete={(id) => { onDeleteTask(id); setDrawerTaskId(null); onAddToast('Task deleted.', 'warning'); }}
+          onClose={() => { setModalTaskId(null); setCreateParentId(null); }}
+          onSave={(t) => {
+            onCreateTask(t);
+            setModalTaskId(null);
+            setCreateParentId(null);
+            onAddToast('Task created successfully!', 'success');
+            // Ensure a newly created subtask's parent is expanded.
+            if (t.parentId) setExpanded(prev => ({ ...prev, [t.parentId as string]: true }));
+          }}
+          onUpdate={(t) => { onUpdateTask(t); /* keep modal open for further edits */ }}
+          onDelete={(id) => { onDeleteTask(id); setModalTaskId(null); setCreateParentId(null); onAddToast('Task deleted.', 'warning'); }}
+          onAddSubTask={(parentId) => {
+            // Close this edit modal and open the create modal preset to the parent.
+            setModalTaskId(null);
+            setCreateParentId(parentId);
+            setExpanded(prev => ({ ...prev, [parentId]: true }));
+          }}
           renderDependencyTree={renderDependencyTree}
         />
       )}
@@ -702,12 +734,13 @@ export default function TaskListV2({
 }
 
 // =============================================================================
-// Slide-over drawer
+// Floating centered modal
 // =============================================================================
 
-interface TaskDrawerProps {
+interface TaskModalProps {
   mode: 'create' | 'edit';
   task: Task | null;
+  presetParentId: string | null;
   project: Project;
   tasks: Task[];
   consultants: Consultant[];
@@ -719,17 +752,18 @@ interface TaskDrawerProps {
   onSave: (task: Omit<Task, 'id'>) => void;
   onUpdate: (task: Task) => void;
   onDelete: (id: string) => void;
+  onAddSubTask: (parentId: string) => void;
   renderDependencyTree: (
     parentId: string | null, depth: number, parentNumber: string,
     editingId: string | null, selected: string[], toggle: (id: string) => void
   ) => React.ReactNode[];
 }
 
-function TaskDrawer(props: TaskDrawerProps) {
-  const { mode, task, project, tasks, consultants, accent, canEdit, isParent, progressFor, onClose, onSave, onUpdate, onDelete, renderDependencyTree } = props;
+function TaskModal(props: TaskModalProps) {
+  const { mode, task, presetParentId, project, tasks, consultants, accent, canEdit, isParent, progressFor, onClose, onSave, onUpdate, onDelete, onAddSubTask, renderDependencyTree } = props;
   const creating = mode === 'create';
 
-  const [form, setForm] = useState(() => buildForm(task, creating));
+  const [form, setForm] = useState(() => buildForm(task, creating, presetParentId));
   // For edit mode, auto-persist on every change (the parent re-schedules). For
   // create mode we wait for the explicit Save button.
   const update = (patch: Partial<typeof form>) => {
@@ -760,21 +794,22 @@ function TaskDrawer(props: TaskDrawerProps) {
 
   const isEditingParent = !creating && task ? isParent(task.id) : false;
   const showRollupNote = isEditingParent;
+  const durationDerived = form.durationDays === 0 && !!form.dueDate;
 
   return (
     <>
-      <div className="tv2-drawer-backdrop" onClick={onClose} />
-      <aside className="tv2-drawer" role="dialog" aria-modal="true">
-        <form onSubmit={handleSubmit} className="tv2-drawer-form">
-          <header className="tv2-drawer-header" style={{ borderBottomColor: accent }}>
+      <div className="modal-overlay" onClick={onClose} />
+      <div className="tv2-modal" role="dialog" aria-modal="true">
+        <form onSubmit={handleSubmit} className="tv2-modal-form">
+          <header className="tv2-modal-header" style={{ borderBottomColor: accent }}>
             <div>
-              <span className="tv2-drawer-eyebrow">{creating ? 'New task' : 'Edit task'}</span>
-              <h3 className="tv2-drawer-title">{creating ? 'Add Implementation Task' : form.name || 'Task'}</h3>
+              <span className="tv2-modal-eyebrow">{creating ? 'New task' : 'Edit task'}</span>
+              <h3 className="tv2-modal-title">{creating ? (presetParentId ? 'Add Sub Task' : 'Add Implementation Task') : form.name || 'Task'}</h3>
             </div>
             <button type="button" className="btn btn-secondary btn-icon" onClick={onClose}><X size={18} /></button>
           </header>
 
-          <div className="tv2-drawer-body">
+          <div className="tv2-modal-body">
             <div className="tv2-field">
               <label className="form-label">Task name</label>
               <input className="form-input" value={form.name}
@@ -797,17 +832,37 @@ function TaskDrawer(props: TaskDrawerProps) {
 
             <div className="tv2-field-row">
               <div className="tv2-field">
-                <label className="form-label">Duration (days)</label>
+                <label className="form-label">
+                  Duration (days)
+                  {durationDerived && <span className="tv2-hint"> · derived from due date</span>}
+                  {!durationDerived && form.durationDays === 0 && <span className="tv2-hint"> · enter 0 to use due date</span>}
+                </label>
                 <input type="number" step="0.5" min="0" className="form-input" value={form.durationDays}
                   disabled={isEditingParent}
                   title={isEditingParent ? 'Parent duration is computed from children' : undefined}
                   onChange={(e) => update({ durationDays: parseFloat(e.target.value) || 0 })} />
               </div>
               <div className="tv2-field">
+                <label className="form-label">Due date</label>
+                <WinDatePicker value={form.dueDate} onChange={(v) => update({ dueDate: v })} />
+              </div>
+            </div>
+
+            <div className="tv2-field-row">
+              <div className="tv2-field">
                 <label className="form-label">Start date</label>
                 <WinDatePicker value={form.customStartDate} onChange={(v) => update({ customStartDate: v })} />
               </div>
+              <div className="tv2-field">
+                <label className="form-label">Task owner</label>
+                <WinComboBox value={form.taskOwner} onChange={(v) => update({ taskOwner: v as TaskOwner })} options={OWNER_OPTIONS} />
+              </div>
             </div>
+            {form.taskOwner === 'Customer' && (
+              <div className="tv2-owner-note">
+                Customer-owned tasks are excluded from the project budget.
+              </div>
+            )}
 
             <div className="tv2-field">
               <label className="form-label">
@@ -840,12 +895,6 @@ function TaskDrawer(props: TaskDrawerProps) {
               </div>
             </div>
 
-            <label className="tv2-check-row">
-              <input type="checkbox" className="win-checkbox" checked={form.billed}
-                onChange={(e) => update({ billed: e.target.checked })} />
-              <span>Billed</span>
-            </label>
-
             <div className="tv2-field">
               <label className="form-label">Dependencies</label>
               <div className="tv2-dep-list">
@@ -863,19 +912,25 @@ function TaskDrawer(props: TaskDrawerProps) {
             </div>
           </div>
 
-          <footer className="tv2-drawer-footer">
+          <footer className="tv2-modal-footer">
             {!creating && task && canEdit && (
-              <button type="button" className="btn btn-ghost tv2-drawer-danger"
-                onClick={() => { if (confirm(`Delete "${task.name}"? Subtasks will also be deleted.`)) onDelete(task.id); }}>
-                <Trash2 size={14} /> Delete
-              </button>
+              <>
+                <button type="button" className="btn btn-ghost tv2-modal-danger"
+                  onClick={() => { if (confirm(`Delete "${task.name}"? Subtasks will also be deleted.`)) onDelete(task.id); }}>
+                  <Trash2 size={14} /> Delete
+                </button>
+                <button type="button" className="btn btn-secondary tv2-modal-addsub"
+                  onClick={() => onAddSubTask(task.id)}>
+                  <CornerDownRight size={14} /> Add Sub Task
+                </button>
+              </>
             )}
-            <div className="tv2-drawer-spacer" />
+            <div className="tv2-modal-spacer" />
             <button type="button" className="btn btn-secondary" onClick={onClose}>{creating ? 'Cancel' : 'Done'}</button>
             {creating && <button type="submit" className="btn btn-primary" style={{ backgroundColor: accent, color: 'white', border: '1px solid rgba(0,0,0,0.1)' }}>Create task</button>}
           </footer>
         </form>
-      </aside>
+      </div>
     </>
   );
 }
@@ -891,7 +946,7 @@ function clampProgress(n?: number): number {
 }
 
 function snapHalf(n: number): number {
-  return Math.max(0.5, Math.round(n * 2) / 2);
+  return Math.max(0, Math.round(n * 2) / 2);
 }
 
 function initials(name: string): string {
@@ -912,18 +967,20 @@ interface DrawerForm {
   assignedConsultantId: string;
   durationDays: number;
   customStartDate: string;
+  dueDate: string;
+  taskOwner: TaskOwner;
   parentId: string;
   pinkNumber: string;
-  billed: boolean;
   progress: number;
   predecessorIds: string[];
 }
 
-function buildForm(task: Task | null, creating: boolean): DrawerForm {
+function buildForm(task: Task | null, creating: boolean, presetParentId: string | null = null): DrawerForm {
   if (creating || !task) {
     return {
       name: '', description: '', status: 'not_started', assignedConsultantId: '',
-      durationDays: 1, customStartDate: '', parentId: '', pinkNumber: '', billed: false,
+      durationDays: 0, customStartDate: '', dueDate: '', taskOwner: 'Pinnacle',
+      parentId: presetParentId || '', pinkNumber: '',
       progress: 0, predecessorIds: []
     };
   }
@@ -934,9 +991,10 @@ function buildForm(task: Task | null, creating: boolean): DrawerForm {
     assignedConsultantId: task.assignedConsultantId || '',
     durationDays: task.durationDays,
     customStartDate: task.customStartDate || '',
+    dueDate: task.dueDate || '',
+    taskOwner: (task.taskOwner || 'Pinnacle') as TaskOwner,
     parentId: task.parentId || '',
     pinkNumber: task.pinkNumber || '',
-    billed: !!task.billed,
     progress: clampProgress(task.progress),
     predecessorIds: task.predecessorIds || []
   };
@@ -953,8 +1011,9 @@ function toTaskPatch(form: DrawerForm, existing: Task | null): Omit<Task, 'id'> 
     predecessorIds: form.predecessorIds,
     status: form.status,
     pinkNumber: form.pinkNumber,
-    billed: form.billed,
     customStartDate: form.customStartDate || null,
+    dueDate: form.dueDate || null,
+    taskOwner: form.taskOwner,
     progress: form.progress,
     ...(existing ? {
       o365TaskId: existing.o365TaskId,
