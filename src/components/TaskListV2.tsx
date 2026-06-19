@@ -115,7 +115,7 @@ export default function TaskListV2({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [modalTaskId, setModalTaskId] = useState<string | null>(null);
-  // Preset parent for a newly created (sub)task.
+  // When non-null, the create modal is open with this as the preset parent (empty string = top-level).
   const [createParentId, setCreateParentId] = useState<string | null>(null);
   const [inlineEdit, setInlineEdit] = useState<{ id: string; field: 'duration' | 'status' | 'assignee'; value: string } | null>(null);
 
@@ -155,7 +155,7 @@ export default function TaskListV2({
   });
 
   const openCreate = (parentId: string | null = null) => {
-    setCreateParentId(parentId);
+    setCreateParentId(parentId ?? '');
     setModalTaskId(null);
   };
 
@@ -767,14 +767,16 @@ function TaskModal(props: TaskModalProps) {
   // For edit mode, auto-persist on every change (the parent re-schedules). For
   // create mode we wait for the explicit Save button.
   const update = (patch: Partial<typeof form>) => {
-    const next = { ...form, ...patch };
-    // Snap duration to half-days; auto-set progress on complete.
-    if (patch.durationDays !== undefined) next.durationDays = snapHalf(patch.durationDays);
-    if (patch.status === 'completed') next.progress = 100;
-    setForm(next);
-    if (!creating && task) {
-      onUpdate({ ...task, ...toTaskPatch(next, task) });
-    }
+    setForm(prev => {
+      const next = { ...prev, ...patch };
+      // Snap duration to half-days; auto-set progress on complete.
+      if (patch.durationDays !== undefined) next.durationDays = snapHalf(patch.durationDays);
+      if (patch.status === 'completed') next.progress = 100;
+      if (!creating && task) {
+        onUpdate({ ...task, ...toTaskPatch(next, task) });
+      }
+      return next;
+    });
   };
 
   const toggleDep = (id: string) => {
@@ -832,6 +834,10 @@ function TaskModal(props: TaskModalProps) {
 
             <div className="tv2-field-row">
               <div className="tv2-field">
+                <label className="form-label">Due date</label>
+                <WinDatePicker value={form.dueDate} onChange={(v) => update({ dueDate: v })} />
+              </div>
+              <div className="tv2-field">
                 <label className="form-label">
                   Duration (days)
                   {durationDerived && <span className="tv2-hint"> · derived from due date</span>}
@@ -841,10 +847,6 @@ function TaskModal(props: TaskModalProps) {
                   disabled={isEditingParent}
                   title={isEditingParent ? 'Parent duration is computed from children' : undefined}
                   onChange={(e) => update({ durationDays: parseFloat(e.target.value) || 0 })} />
-              </div>
-              <div className="tv2-field">
-                <label className="form-label">Due date</label>
-                <WinDatePicker value={form.dueDate} onChange={(v) => update({ dueDate: v })} />
               </div>
             </div>
 
