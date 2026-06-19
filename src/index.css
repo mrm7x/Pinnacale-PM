@@ -1113,6 +1113,13 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
   display: none !important;
 }
 
+/* --- User profile card --- */
+.user-profile-card {
+  border: 1px solid var(--border-color);
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+.user-profile-card:hover { border-color: var(--border-strong); }
+
 /* --- Theme Toggle Switch --- */
 .theme-switch-row {
   transition: background-color var(--transition-fast);
@@ -1228,6 +1235,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
     transform: translateX(-100%);
     transition: transform var(--transition-normal) !important;
     box-shadow: var(--shadow-lg);
+    background-color: var(--bg-elevated) !important;
   }
 
   .sidebar.mobile-open {

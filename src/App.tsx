@@ -1159,7 +1159,7 @@ export default function App() {
         {/* Sidebar navigation */}
         <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''} ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            <div className="brand-section" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2rem', padding: '0 0.5rem' }}>
+            <div className="brand-section" style={{ justifyContent: 'center' }}>
               {!isSidebarCollapsed ? (
                 <Logo style={{ height: '26px', width: 'auto' }} />
               ) : (
@@ -1219,8 +1219,9 @@ export default function App() {
             </div>
 
             <nav style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+              {!isSidebarCollapsed && <div className="nav-section-label">Menu</div>}
               <ul className="nav-list">
-                <li 
+                <li
                   className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
                   onClick={() => {
                     setActiveTab('dashboard');
@@ -1240,8 +1241,8 @@ export default function App() {
                   <LayoutDashboard size={18} />
                   <span>Dashboard</span>
                 </li>
-                <li style={{ display: 'flex', flexDirection: 'column' }}>
-                  <div 
+                <li>
+                  <div
                     className={`nav-item ${activeTab === 'projects' && !selectedProjectId ? 'active' : ''}`}
                     onClick={() => {
                       setSelectedProjectId(null);
@@ -1263,31 +1264,40 @@ export default function App() {
                     <FolderKanban size={18} />
                     <span>Projects</span>
                   </div>
-                  
-                  {/* Tree children */}
-                  {!isSidebarCollapsed && (
-                    <ul style={{ listStyle: 'none', paddingLeft: '2.5rem', margin: '0.25rem 0', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                      {projects.filter(p => !p.isTemplate).slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 10).map(p => (
-                        <li 
+                </li>
+              </ul>
+
+              {/* Recent projects sub-tree */}
+              {!isSidebarCollapsed && (() => {
+                const recentProjects = projects
+                  .filter(p => !p.isTemplate)
+                  .slice()
+                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                  .slice(0, 10);
+                if (recentProjects.length === 0) return null;
+                return (
+                  <>
+                    <div className="nav-section-label">Recent Projects</div>
+                    <ul className="nav-subtree">
+                      {recentProjects.map(p => (
+                        <li
                           key={p.id}
-                          style={{
-                            fontSize: '0.8rem', cursor: 'pointer', color: selectedProjectId === p.id ? 'var(--primary)' : 'var(--text-secondary)',
-                            fontWeight: selectedProjectId === p.id ? 600 : 400,
-                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
-                          }}
+                          className={`nav-subitem ${selectedProjectId === p.id ? 'nav-subitem-active' : ''}`}
                           onClick={() => {
                             setSelectedProjectId(p.id);
                             setActiveTab('projects');
                             setIsMobileMenuOpen(false);
                           }}
+                          title={p.name}
                         >
-                          {p.name}
+                          <span className="nav-subitem-dot" />
+                          <span className="nav-subitem-text">{p.name}</span>
                         </li>
                       ))}
                     </ul>
-                  )}
-                </li>
-              </ul>
+                  </>
+                );
+              })()}
             </nav>
           </div>
 
