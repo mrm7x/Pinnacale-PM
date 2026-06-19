@@ -1843,9 +1843,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
 .g2-left-head-sub { font-weight: 500; text-transform: none; letter-spacing: 0; font-size: 0.68rem; color: var(--text-tertiary); opacity: 0.8; }
 .g2-left-row {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 0.1rem;
+  align-items: center;
   padding: 0 1rem;
   border-bottom: 1px solid var(--border-color);
   cursor: pointer;
@@ -1862,18 +1860,17 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
   text-overflow: ellipsis;
 }
 .g2-left-bracket { color: var(--text-tertiary); margin-right: 0.25rem; }
-.g2-left-meta { font-size: 0.72rem; color: var(--text-tertiary); display: inline-flex; align-items: center; gap: 0.3rem; }
 .g2-avatar-mini {
   width: 16px; height: 16px; border-radius: 50%;
   color: white; display: inline-flex; align-items: center; justify-content: center;
   font-size: 0.5rem; font-weight: 700;
 }
 .g2-unassigned { font-style: italic; }
-.g2-dur-dot { opacity: 0.6; }
 .g2-stripe { background-color: var(--bg-primary); }
 
 /* Right scroll area */
-.g2-scroll { overflow-x: auto; overflow-y: hidden; }
+.g2-scroll { overflow-x: auto; overflow-y: hidden; cursor: grab; }
+.g2-scroll-panning { cursor: grabbing; user-select: none; }
 .g2-head {
   display: flex;
   background-color: var(--bg-tertiary);

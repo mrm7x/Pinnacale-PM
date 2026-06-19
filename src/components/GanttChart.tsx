@@ -13,8 +13,8 @@ import {
  *
  * Improvements over the original:
  *  - Sticky left task column stays visible while you scroll the timeline right.
- *  - Easier horizontal scrolling: mouse-wheel anywhere pans horizontally;
- *    dedicated ←/→ buttons; a "Today" jump button.
+ *  - Drag-to-scroll (click and drag) pans the timeline horizontally; dedicated
+ *    ←/→ buttons and a "Today" jump button are also provided.
  *  - Zoom in/out of the day-column width.
  *  - Weekend columns are shaded; a "Today" vertical line marks the current date.
  *  - Bars show a progress fill and the assignee color; completed bars dim.
@@ -137,12 +137,38 @@ export default function GanttChart({
       scrollRef.current.scrollTo({ left: 0, behavior: 'smooth' });
     }
   };
-  const onWheel = (e: React.WheelEvent) => {
-    // Convert vertical wheel motion into horizontal pan when not over a scroll target.
-    if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && scrollRef.current) {
-      scrollRef.current.scrollLeft += e.deltaY;
-    }
+  // ---- Drag-to-scroll (pan) the timeline --------------------------------------
+  const panRef = useRef<{ startX: number; scrollLeft: number } | null>(null);
+  const [isPanning, setIsPanning] = useState(false);
+
+  const onPanStart = (e: React.MouseEvent) => {
+    // Only initiate pan with left button, and not when clicking on a bar.
+    if (e.button !== 0 || !scrollRef.current) return;
+    // If the mousedown originated from a .g2-bar, let bar drag handle it.
+    if ((e.target as HTMLElement).closest('.g2-bar')) return;
+    panRef.current = { startX: e.clientX, scrollLeft: scrollRef.current.scrollLeft };
+    setIsPanning(true);
+    e.preventDefault();
   };
+
+  useEffect(() => {
+    if (!isPanning) return;
+    const onMove = (e: MouseEvent) => {
+      if (!panRef.current || !scrollRef.current) return;
+      const dx = e.clientX - panRef.current.startX;
+      scrollRef.current.scrollLeft = panRef.current.scrollLeft - dx;
+    };
+    const onUp = () => {
+      panRef.current = null;
+      setIsPanning(false);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [isPanning]);
 
   // ---- Drag-to-reschedule -------------------------------------------------------
   useEffect(() => {
@@ -244,11 +270,9 @@ export default function GanttChart({
         <div className="g2-left">
           <div className="g2-left-head" style={{ height: HEADER_HEIGHT }}>
             <span>Task</span>
-            <span className="g2-left-head-sub">Assignee · Dur.</span>
           </div>
           {projectTasks.map((task, idx) => {
             const parent = isParent(task.id);
-            const assigned = consultants.find(c => c.id === task.assignedConsultantId);
             const depth = parentDepth(task, projectTasks);
             return (
               <div key={task.id}
@@ -260,19 +284,13 @@ export default function GanttChart({
                   {parent && <span className="g2-left-bracket">▸</span>}
                   {task.name}
                 </span>
-                <span className="g2-left-meta">
-                  {assigned
-                    ? <><span className="g2-avatar-mini" style={{ backgroundColor: assigned.avatarColor || '#1e3449' }}>{initials(assigned.name)}</span>{assigned.name.split(' ')[0]}</>
-                    : <span className="g2-unassigned">Unassigned</span>}
-                  <span className="g2-dur-dot">·</span>{task.durationDays}d
-                </span>
               </div>
             );
           })}
         </div>
 
         {/* Scrollable timeline */}
-        <div className="g2-scroll" ref={scrollRef} onWheel={onWheel}>
+        <div className={`g2-scroll ${isPanning ? 'g2-scroll-panning' : ''}`} ref={scrollRef} onMouseDown={onPanStart}>
           <div style={{ width: timelineWidth, position: 'relative' }}>
             {/* Header */}
             <div className="g2-head" style={{ height: HEADER_HEIGHT }}>

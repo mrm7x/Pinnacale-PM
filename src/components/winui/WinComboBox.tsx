@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -24,7 +24,11 @@ export function WinComboBox({ value, onChange, options, placeholder = 'Select...
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      // Close only if click is outside BOTH the trigger and the portaled menu.
+      if (
+        containerRef.current && !containerRef.current.contains(event.target as Node) &&
+        menuRef.current && !menuRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     }
@@ -32,14 +36,11 @@ export function WinComboBox({ value, onChange, options, placeholder = 'Select...
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    if (!isOpen) {
-      setSearchTerm('');
-      return;
-    }
-    // Position the portal menu relative to the trigger button
+  // Use useLayoutEffect so position is set before the browser paints — prevents
+  // a one-frame flash of the menu at (0,0).
+  const computeMenuStyle = () => {
     const trigger = containerRef.current;
-    if (!trigger) return;
+    if (!trigger) return {};
     const rect = trigger.getBoundingClientRect();
     const style: React.CSSProperties = {
       position: 'fixed',
@@ -58,7 +59,6 @@ export function WinComboBox({ value, onChange, options, placeholder = 'Select...
     };
 
     if (menuPosition === 'bottom') {
-      // Check if there's room below, otherwise flip
       const spaceBelow = window.innerHeight - rect.bottom;
       if (spaceBelow < 260 && rect.top > spaceBelow) {
         style.bottom = `${window.innerHeight - rect.top + 4}px`;
@@ -73,7 +73,15 @@ export function WinComboBox({ value, onChange, options, placeholder = 'Select...
         style.bottom = `${window.innerHeight - rect.top + 4}px`;
       }
     }
-    setMenuStyle(style);
+    return style;
+  };
+
+  useLayoutEffect(() => {
+    if (!isOpen) {
+      setSearchTerm('');
+      return;
+    }
+    setMenuStyle(computeMenuStyle());
   }, [isOpen, menuPosition]);
 
   // Keep menu in view on scroll / resize
@@ -83,14 +91,10 @@ export function WinComboBox({ value, onChange, options, placeholder = 'Select...
       const trigger = containerRef.current;
       if (!trigger) return;
       const rect = trigger.getBoundingClientRect();
-      setMenuStyle(prev => ({
-        ...prev,
-        left: `${rect.left}px`,
-        minWidth: `${rect.width}px`,
-        ...(menuPosition === 'bottom'
-          ? (prev.top !== undefined ? { top: `${rect.bottom + 4}px` } : { bottom: `${window.innerHeight - rect.top + 4}px` })
-          : (prev.bottom !== undefined ? { bottom: `${window.innerHeight - rect.top + 4}px` } : { top: `${rect.bottom + 4}px` }))
-      }));
+      setMenuStyle(prev => (prev.top !== undefined
+        ? { ...prev, left: `${rect.left}px`, minWidth: `${rect.width}px`, top: `${rect.bottom + 4}px` }
+        : { ...prev, left: `${rect.left}px`, minWidth: `${rect.width}px`, bottom: `${window.innerHeight - rect.top + 4}px` }
+      ));
     };
     window.addEventListener('scroll', update, true);
     window.addEventListener('resize', update);
@@ -98,7 +102,7 @@ export function WinComboBox({ value, onChange, options, placeholder = 'Select...
       window.removeEventListener('scroll', update, true);
       window.removeEventListener('resize', update);
     };
-  }, [isOpen, menuPosition]);
+  }, [isOpen]);
 
   const filteredClassName = className?.replace(/\b(form-select|form-input)\b/g, '').trim();
 
@@ -171,7 +175,9 @@ export function WinComboBox({ value, onChange, options, placeholder = 'Select...
               <div
                 key={option.value}
                 onClick={() => {
-                  onChange(option.value);
+                  if (option.value !== value) {
+                    onChange(option.value);
+                  }
                   setIsOpen(false);
                 }}
                 style={{

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 
@@ -13,15 +13,24 @@ export function WinDatePicker({ value, onChange, className = '', disabled = fals
   const [isOpen, setIsOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   
   // Track currently viewed month in the calendar
   const [viewDate, setViewDate] = useState(() => {
     return value ? new Date(value) : new Date();
   });
 
+  // Sync calendar view to the selected value when it changes externally
+  useEffect(() => {
+    if (value) setViewDate(new Date(value));
+  }, [value]);
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      if (
+        containerRef.current && !containerRef.current.contains(event.target as Node) &&
+        menuRef.current && !menuRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     }
@@ -29,10 +38,10 @@ export function WinDatePicker({ value, onChange, className = '', disabled = fals
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    if (!isOpen) return;
+  // Use useLayoutEffect so position is set before the browser paints.
+  const computeMenuStyle = () => {
     const trigger = containerRef.current;
-    if (!trigger) return;
+    if (!trigger) return {};
     const rect = trigger.getBoundingClientRect();
     const style: React.CSSProperties = {
       position: 'fixed',
@@ -53,7 +62,12 @@ export function WinDatePicker({ value, onChange, className = '', disabled = fals
     } else {
       style.top = `${rect.bottom + 4}px`;
     }
-    setMenuStyle(style);
+    return style;
+  };
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    setMenuStyle(computeMenuStyle());
   }, [isOpen]);
 
   // Keep menu in view on scroll / resize
@@ -63,13 +77,10 @@ export function WinDatePicker({ value, onChange, className = '', disabled = fals
       const trigger = containerRef.current;
       if (!trigger) return;
       const rect = trigger.getBoundingClientRect();
-      setMenuStyle(prev => ({
-        ...prev,
-        left: `${rect.left}px`,
-        ...(prev.top !== undefined
-          ? { top: `${rect.bottom + 4}px` }
-          : { bottom: `${window.innerHeight - rect.top + 4}px` })
-      }));
+      setMenuStyle(prev => (prev.top !== undefined
+        ? { ...prev, left: `${rect.left}px`, top: `${rect.bottom + 4}px` }
+        : { ...prev, left: `${rect.left}px`, bottom: `${window.innerHeight - rect.top + 4}px` }
+      ));
     };
     window.addEventListener('scroll', update, true);
     window.addEventListener('resize', update);
@@ -151,7 +162,7 @@ export function WinDatePicker({ value, onChange, className = '', disabled = fals
     }
 
     return (
-      <div style={menuStyle}>
+      <div ref={menuRef} style={menuStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
           <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>
             {viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
