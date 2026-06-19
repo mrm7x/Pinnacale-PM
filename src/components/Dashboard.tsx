@@ -1,11 +1,76 @@
 import React, { useState } from 'react';
 import type { Project, Task, Consultant, O365Config } from '../types';
-import { 
-  FolderKanban, Clock, CheckSquare, Users, AlertTriangle, 
-  User, Calendar, RefreshCw, CheckCircle2, Circle, ChevronLeft, ChevronRight
+import {
+  FolderKanban, Clock, CheckSquare, Users, AlertTriangle,
+  User, Calendar, RefreshCw, CheckCircle2, Circle, ChevronLeft, ChevronRight,
+  BarChart3, Activity, Gauge, Flag, PieChart, Layers, AlertCircle, CalendarClock
 } from 'lucide-react';
 import { syncTaskToO365 } from '../utils/o365';
-import { getProjectAccent } from '../utils/phases';
+import { getProjectAccent, resolvePhase, resolvePhaseMeta, PHASE_ORDER } from '../utils/phases';
+
+// Status metadata shared across analytics/health views
+const STATUS_META: Record<Task['status'], { label: string; color: string }> = {
+  not_started: { label: 'Not Started', color: 'var(--text-tertiary)' },
+  in_progress: { label: 'In Progress', color: 'var(--primary)' },
+  on_hold: { label: 'On Hold', color: 'var(--warning)' },
+  completed: { label: 'Completed', color: 'var(--success)' }
+};
+
+/** Lightweight SVG donut chart driven by colored segments. */
+function DonutChart({ segments, size = 148, thickness = 22 }: {
+  segments: { label: string; value: number; color: string }[];
+  size?: number;
+  thickness?: number;
+}) {
+  const total = segments.reduce((a, s) => a + s.value, 0);
+  const r = (size - thickness) / 2;
+  const circ = 2 * Math.PI * r;
+  let offset = 0;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }}>
+      <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
+        {total === 0 ? (
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--bg-tertiary)" strokeWidth={thickness} />
+        ) : segments.map((s, i) => {
+          if (s.value === 0) return null;
+          const len = (s.value / total) * circ;
+          const el = (
+            <circle key={i} cx={size / 2} cy={size / 2} r={r} fill="none" stroke={s.color}
+              strokeWidth={thickness} strokeDasharray={`${len} ${circ - len}`} strokeDashoffset={-offset} />
+          );
+          offset += len;
+          return el;
+        })}
+      </g>
+      <text x="50%" y="46%" textAnchor="middle" dominantBaseline="middle"
+        style={{ fontSize: '1.6rem', fontWeight: 800, fill: 'var(--text-primary)' }}>{total}</text>
+      <text x="50%" y="60%" textAnchor="middle" dominantBaseline="middle"
+        style={{ fontSize: '0.7rem', fill: 'var(--text-tertiary)' }}>tasks</text>
+    </svg>
+  );
+}
+
+/** Thin horizontal progress/stat bar. */
+function StatBar({ value, max, color }: { value: number; max: number; color: string }) {
+  const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+  return (
+    <div style={{ height: 8, backgroundColor: 'var(--bg-tertiary)', borderRadius: 4, overflow: 'hidden' }}>
+      <div style={{ height: '100%', width: `${pct}%`, backgroundColor: color, borderRadius: 4, transition: 'width 0.3s ease' }} />
+    </div>
+  );
+}
+
+/** Small rounded pill used for inline metrics/flags. */
+function Pill({ children, color }: { children: React.ReactNode; color: string }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+      fontSize: '0.72rem', fontWeight: 700, padding: '0.18rem 0.5rem', borderRadius: 'var(--radius-sm)',
+      backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`, color,
+      border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`, whiteSpace: 'nowrap'
+    }}>{children}</span>
+  );
+}
 
 export function formatDateFriendly(dateStr?: string | null): string {
   if (!dateStr) return '—';
@@ -82,7 +147,7 @@ export default function Dashboard({
   onAddToast
 }: DashboardProps) {
   const isConsultant = activeUserId !== 'admin';
-  const [dashboardMode, setDashboardMode] = useState<'team' | 'personal' | 'projects' | 'calendar'>(isConsultant ? 'personal' : 'team');
+  const [dashboardMode, setDashboardMode] = useState<'team' | 'personal' | 'projects' | 'calendar' | 'analytics' | 'health' | 'resource' | 'timeline'>(isConsultant ? 'personal' : 'team');
   const [syncingTaskId, setSyncingTaskId] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
@@ -194,12 +259,74 @@ export default function Dashboard({
     }
   };
 
+  // ---- Shared computations for Analytics / Health / Resource / Timeline ----
+  const todayMid = new Date();
+  todayMid.setHours(0, 0, 0, 0);
+  const toDateMid = (s?: string | null) => {
+    if (!s) return null;
+    const d = new Date(s);
+    d.setHours(0, 0, 0, 0);
+    return isNaN(d.getTime()) ? null : d;
+  };
+  const isLeaf = (t: Task) => !tasks.some(c => c.parentId === t.id);
+  const leafTasks = tasks.filter(isLeaf);
+
+  const statusCounts: Record<Task['status'], number> = { not_started: 0, in_progress: 0, on_hold: 0, completed: 0 };
+  leafTasks.forEach(t => { statusCounts[t.status] = (statusCounts[t.status] || 0) + 1; });
+
+  const overdueTasksAll = leafTasks.filter(t => {
+    if (t.status === 'completed') return false;
+    const d = toDateMid(t.dueDate || t.plannedEndDate);
+    return d != null && d < todayMid;
+  });
+
+  const computeProjectStats = (project: Project) => {
+    const pTasks = tasks.filter(t => t.projectId === project.id);
+    const pLeaf = pTasks.filter(isLeaf);
+    const allocated = pLeaf.reduce((a, t) => a + t.durationDays, 0);
+    const completed = pTasks.filter(t => t.status === 'completed').length;
+    const pct = pTasks.length ? Math.round((completed / pTasks.length) * 100) : 0;
+    const overBudget = allocated > project.budgetDays;
+    const overdue = pLeaf.filter(t => {
+      if (t.status === 'completed') return false;
+      const d = toDateMid(t.dueDate || t.plannedEndDate);
+      return d != null && d < todayMid;
+    }).length;
+    const onHold = pLeaf.filter(t => t.status === 'on_hold').length;
+    const goLive = getDaysLeft(project.targetGoLiveDate);
+    const isDone = project.status === 'completed';
+    const isCancelled = project.status === 'cancelled';
+
+    let score = 100;
+    if (overBudget) score -= 25;
+    score -= Math.min(30, overdue * 6);
+    score -= Math.min(15, onHold * 3);
+    if (!isDone && goLive.status === 'danger') score -= 20;
+    else if (!isDone && goLive.status === 'warning') score -= 5;
+    if (isDone) score = 100;
+    score = Math.max(0, Math.min(100, score));
+
+    const band = isCancelled ? { label: 'Cancelled', color: 'var(--text-tertiary)' }
+      : isDone ? { label: 'Delivered', color: 'var(--success)' }
+      : score >= 80 ? { label: 'On Track', color: 'var(--success)' }
+      : score >= 55 ? { label: 'Needs Attention', color: 'var(--warning)' }
+      : { label: 'At Risk', color: 'var(--danger)' };
+
+    return { pTasks, pLeaf, allocated, completed, pct, overBudget, overdue, onHold, goLive, score, band, isDone, isCancelled, total: pTasks.length };
+  };
+
+  const projectStats = projects.map(p => ({ project: p, stats: computeProjectStats(p) }));
+
   return (
     <div>
       {/* Dashboard Toggle — pill tab bar */}
-      <div style={{ display: 'flex', gap: '0.3rem', marginBottom: '2rem', backgroundColor: 'var(--bg-secondary)', padding: '0.35rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)', width: 'fit-content' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '2rem', backgroundColor: 'var(--bg-secondary)', padding: '0.35rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)', width: 'fit-content', maxWidth: '100%' }}>
         {([
           { id: 'team', icon: <Users size={17} />, label: 'Team Overview' },
+          { id: 'analytics', icon: <BarChart3 size={17} />, label: 'Analytics' },
+          { id: 'health', icon: <Activity size={17} />, label: 'Health' },
+          { id: 'resource', icon: <Gauge size={17} />, label: 'Resources' },
+          { id: 'timeline', icon: <Flag size={17} />, label: 'Timeline' },
           { id: 'projects', icon: <FolderKanban size={17} />, label: 'Projects' },
           { id: 'calendar', icon: <Calendar size={17} />, label: 'Calendar' },
           ...(isConsultant ? [{ id: 'personal', icon: <User size={17} />, label: 'My Agenda' }] : [])
@@ -211,14 +338,14 @@ export default function Dashboard({
               display: 'flex', alignItems: 'center', gap: '0.45rem',
               padding: '0.55rem 1.1rem',
               borderRadius: 'var(--radius-md)',
-              fontSize: '0.95rem',
+              fontSize: '0.92rem',
               fontWeight: 600,
               cursor: 'pointer',
               border: 'none',
               transition: 'all 0.15s ease',
               backgroundColor: dashboardMode === tab.id ? 'var(--primary)' : 'transparent',
               color: dashboardMode === tab.id ? 'white' : 'var(--text-secondary)',
-              boxShadow: dashboardMode === tab.id ? '0 1px 4px rgba(45,74,101,0.25)' : 'none'
+              boxShadow: dashboardMode === tab.id ? '0 2px 8px color-mix(in srgb, var(--primary) 35%, transparent)' : 'none'
             }}
           >
             {tab.icon} {tab.label}
@@ -654,6 +781,405 @@ export default function Dashboard({
           </div>
         </div>
       )}
+
+      {/* ============================ ANALYTICS & REPORTS ============================ */}
+      {dashboardMode === 'analytics' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div className="kpi-grid">
+            {[
+              { icon: <FolderKanban size={20} />, value: totalProjects, label: 'Total Projects', c: 'var(--primary)' },
+              { icon: <CheckSquare size={20} />, value: totalTasks, label: 'Total Tasks', c: '#0ea5e9' },
+              { icon: <CheckCircle2 size={20} />, value: `${completionPercentage}%`, label: 'Overall Completion', c: 'var(--success)' },
+              { icon: <Clock size={20} />, value: `${totalAllocatedDays}d`, label: 'Allocated Effort', c: 'var(--warning)' }
+            ].map((k, i) => (
+              <div key={i} className="card kpi-card" style={{ padding: '1.5rem 1.75rem' }}>
+                <div className="kpi-icon-wrapper" style={{ background: `color-mix(in srgb, ${k.c} 16%, transparent)`, color: k.c, width: '44px', height: '44px', borderRadius: 'var(--radius-lg)' }}>{k.icon}</div>
+                <div className="kpi-details">
+                  <span className="kpi-value" style={{ fontSize: '1.6rem', letterSpacing: '-0.03em' }}>{k.value}</span>
+                  <span className="kpi-label" style={{ marginTop: '0.15rem' }}>{k.label}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid-cols-12">
+            {/* Task status donut */}
+            <div className="card col-span-4">
+              <div className="card-header">
+                <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><PieChart size={18} /> Task Status</h3>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <DonutChart segments={(['completed', 'in_progress', 'on_hold', 'not_started'] as Task['status'][]).map(s => ({ label: STATUS_META[s].label, value: statusCounts[s], color: STATUS_META[s].color }))} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', minWidth: '150px' }}>
+                  {(['completed', 'in_progress', 'on_hold', 'not_started'] as Task['status'][]).map(s => (
+                    <div key={s} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
+                      <span style={{ width: '10px', height: '10px', borderRadius: '3px', backgroundColor: STATUS_META[s].color, flexShrink: 0 }} />
+                      <span style={{ color: 'var(--text-secondary)', flex: 1 }}>{STATUS_META[s].label}</span>
+                      <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{statusCounts[s]}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Projects by phase */}
+            <div className="card col-span-8">
+              <div className="card-header">
+                <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Layers size={18} /> Projects by Phase</h3>
+              </div>
+              {(() => {
+                const counts = PHASE_ORDER.map(ph => ({ phase: ph, count: projects.filter(p => resolvePhase(p) === ph).length }));
+                const maxC = Math.max(1, ...counts.map(c => c.count));
+                if (!counts.some(c => c.count > 0)) return <p style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '1.5rem 0' }}>No project phase data yet.</p>;
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                    {counts.map(c => (
+                      <div key={c.phase} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 32px', alignItems: 'center', gap: '0.75rem' }}>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{c.phase}</span>
+                        <StatBar value={c.count} max={maxC} color={resolvePhaseMeta({ phase: c.phase }).accent} />
+                        <span style={{ fontSize: '0.85rem', fontWeight: 700, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{c.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Budget vs allocated */}
+            <div className="card col-span-12">
+              <div className="card-header">
+                <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><BarChart3 size={18} /> Budget vs. Allocated Effort</h3>
+              </div>
+              {projects.length === 0 ? (
+                <p style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '1.5rem 0' }}>No projects yet.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+                  {projectStats.map(({ project, stats }) => (
+                    <div key={project.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', gap: '1rem' }}>
+                        <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.name}</span>
+                        <span style={{ color: stats.overBudget ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: 700, flexShrink: 0 }}>{stats.allocated} / {project.budgetDays}d</span>
+                      </div>
+                      <StatBar value={stats.allocated} max={project.budgetDays || stats.allocated || 1} color={stats.overBudget ? 'var(--danger)' : 'var(--accent)'} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================ PROJECT HEALTH & RISKS ============================ */}
+      {dashboardMode === 'health' && (() => {
+        const active = projectStats.filter(ps => !ps.stats.isCancelled);
+        const atRisk = active.filter(ps => ps.stats.band.label === 'At Risk').length;
+        const overBudgetCount = active.filter(ps => ps.stats.overBudget).length;
+        const avgScore = active.length ? Math.round(active.reduce((a, ps) => a + ps.stats.score, 0) / active.length) : 100;
+        const sorted = [...projectStats].sort((a, b) => a.stats.score - b.stats.score);
+        const avgColor = avgScore >= 80 ? 'var(--success)' : avgScore >= 55 ? 'var(--warning)' : 'var(--danger)';
+
+        const alerts: { text: string; color: string; projectId: string }[] = [];
+        projectStats.forEach(({ project, stats }) => {
+          if (stats.isCancelled || stats.isDone) return;
+          if (stats.goLive.status === 'danger') alerts.push({ text: `${project.name} — go-live ${stats.goLive.text}`, color: 'var(--danger)', projectId: project.id });
+          if (stats.overBudget) alerts.push({ text: `${project.name} — over budget (${stats.allocated}/${project.budgetDays}d)`, color: 'var(--danger)', projectId: project.id });
+          if (stats.overdue > 0) alerts.push({ text: `${project.name} — ${stats.overdue} overdue task${stats.overdue > 1 ? 's' : ''}`, color: 'var(--warning)', projectId: project.id });
+          if (stats.onHold > 0) alerts.push({ text: `${project.name} — ${stats.onHold} task${stats.onHold > 1 ? 's' : ''} on hold`, color: 'var(--warning)', projectId: project.id });
+        });
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div className="kpi-grid">
+              {[
+                { icon: <AlertTriangle size={20} />, value: atRisk, label: 'At-Risk Projects', c: 'var(--danger)' },
+                { icon: <Clock size={20} />, value: overBudgetCount, label: 'Over Budget', c: 'var(--danger)' },
+                { icon: <AlertCircle size={20} />, value: overdueTasksAll.length, label: 'Overdue Tasks', c: 'var(--warning)' },
+                { icon: <Activity size={20} />, value: `${avgScore}%`, label: 'Avg Health Score', c: avgColor }
+              ].map((k, i) => (
+                <div key={i} className="card kpi-card" style={{ padding: '1.5rem 1.75rem' }}>
+                  <div className="kpi-icon-wrapper" style={{ background: `color-mix(in srgb, ${k.c} 16%, transparent)`, color: k.c, width: '44px', height: '44px', borderRadius: 'var(--radius-lg)' }}>{k.icon}</div>
+                  <div className="kpi-details">
+                    <span className="kpi-value" style={{ fontSize: '1.6rem', letterSpacing: '-0.03em' }}>{k.value}</span>
+                    <span className="kpi-label" style={{ marginTop: '0.15rem' }}>{k.label}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid-cols-12">
+              <div className="card col-span-8">
+                <div className="card-header"><h3 className="card-title">Project Health</h3></div>
+                {projectStats.length === 0 ? (
+                  <p style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '2rem 0' }}>No projects to assess.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                    {sorted.map(({ project, stats }) => (
+                      <div
+                        key={project.id}
+                        onClick={() => onSelectProject(project.id)}
+                        style={{ border: '1px solid var(--border-color)', borderLeft: `4px solid ${stats.band.color}`, borderRadius: 'var(--radius-md)', padding: '1rem', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '0.7rem', transition: 'border-color var(--transition-fast)' }}
+                        onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--primary)'}
+                        onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border-color)'}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <h4 style={{ fontWeight: 700, fontSize: '1.02rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.name}</h4>
+                            <span style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>{project.clientName}</span>
+                          </div>
+                          <Pill color={stats.band.color}>{stats.band.label} · {stats.score}</Pill>
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                          {stats.overBudget && <Pill color="var(--danger)"><AlertTriangle size={12} /> Over budget</Pill>}
+                          {stats.overdue > 0 && <Pill color="var(--warning)">{stats.overdue} overdue</Pill>}
+                          {stats.onHold > 0 && <Pill color="var(--warning)">{stats.onHold} on hold</Pill>}
+                          {!stats.isDone && <Pill color={stats.goLive.status === 'danger' ? 'var(--danger)' : stats.goLive.status === 'warning' ? 'var(--warning)' : 'var(--success)'}><Flag size={12} /> {stats.goLive.text}</Pill>}
+                          <Pill color="var(--text-tertiary)">{stats.pct}% complete</Pill>
+                        </div>
+                        <StatBar value={stats.score} max={100} color={stats.band.color} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="card col-span-4">
+                <div className="card-header"><h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><AlertCircle size={18} /> Alerts</h3></div>
+                {alerts.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-tertiary)' }}>
+                    <CheckCircle2 size={36} style={{ color: 'var(--success)', marginBottom: '0.5rem' }} />
+                    <p>No active risks. Everything looks healthy.</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                    {alerts.map((a, i) => (
+                      <div key={i} onClick={() => onSelectProject(a.projectId)} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.55rem', fontSize: '0.85rem', cursor: 'pointer', padding: '0.5rem 0.6rem', borderRadius: 'var(--radius-sm)', backgroundColor: `color-mix(in srgb, ${a.color} 8%, transparent)`, borderLeft: `3px solid ${a.color}` }}>
+                        <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: a.color, marginTop: '0.35rem', flexShrink: 0 }} />
+                        <span style={{ color: 'var(--text-secondary)' }}>{a.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ============================ RESOURCE & WORKLOAD ============================ */}
+      {dashboardMode === 'resource' && (() => {
+        const data = consultants.map(c => {
+          const assigned = leafTasks.filter(t => t.assignedConsultantId === c.id);
+          const totalDays = assigned.reduce((a, t) => a + t.durationDays, 0);
+          const byProject: Record<string, number> = {};
+          assigned.forEach(t => { byProject[t.projectId] = (byProject[t.projectId] || 0) + t.durationDays; });
+          return { consultant: c, assigned, totalDays, byProject, taskCount: assigned.length };
+        });
+        const assignedTotal = data.reduce((a, r) => a + r.totalDays, 0);
+        const working = data.filter(r => r.totalDays > 0).length || 1;
+        const avg = assignedTotal / working;
+        const maxDays = Math.max(1, ...data.map(r => r.totalDays));
+        const overCount = data.filter(r => r.totalDays > 0 && r.totalDays > avg * 1.5).length;
+        const unassignedDays = leafTasks.filter(t => !t.assignedConsultantId).reduce((a, t) => a + t.durationDays, 0);
+        const sorted = [...data].sort((a, b) => b.totalDays - a.totalDays);
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div className="kpi-grid">
+              {[
+                { icon: <Users size={20} />, value: consultants.length, label: 'Consultants', c: 'var(--primary)' },
+                { icon: <Clock size={20} />, value: `${Math.round(assignedTotal)}d`, label: 'Assigned Effort', c: '#0ea5e9' },
+                { icon: <Gauge size={20} />, value: `${avg.toFixed(1)}d`, label: 'Avg / Consultant', c: 'var(--success)' },
+                { icon: <AlertTriangle size={20} />, value: overCount, label: 'Over-Allocated', c: overCount > 0 ? 'var(--danger)' : 'var(--text-tertiary)' }
+              ].map((k, i) => (
+                <div key={i} className="card kpi-card" style={{ padding: '1.5rem 1.75rem' }}>
+                  <div className="kpi-icon-wrapper" style={{ background: `color-mix(in srgb, ${k.c} 16%, transparent)`, color: k.c, width: '44px', height: '44px', borderRadius: 'var(--radius-lg)' }}>{k.icon}</div>
+                  <div className="kpi-details">
+                    <span className="kpi-value" style={{ fontSize: '1.6rem', letterSpacing: '-0.03em' }}>{k.value}</span>
+                    <span className="kpi-label" style={{ marginTop: '0.15rem' }}>{k.label}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Gauge size={18} /> Resource Allocation</h3>
+                {unassignedDays > 0 && <Pill color="var(--warning)">{Math.round(unassignedDays)}d unassigned</Pill>}
+              </div>
+              {consultants.length === 0 ? (
+                <p style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '2rem 0' }}>No consultants. Add your team in Settings.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  {sorted.map(r => {
+                    const over = r.totalDays > 0 && r.totalDays > avg * 1.5;
+                    const projectEntries = Object.entries(r.byProject).sort((a, b) => b[1] - a[1]);
+                    return (
+                      <div key={r.consultant.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                          <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: r.consultant.avatarColor || 'var(--primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.9rem', flexShrink: 0 }}>
+                            {r.consultant.name.split(' ').map(n => n[0]).join('')}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontWeight: 600 }}>{r.consultant.name}</span>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                                {over && <Pill color="var(--danger)">Over-allocated</Pill>}
+                                <span style={{ fontWeight: 700, color: over ? 'var(--danger)' : 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{r.totalDays}d</span>
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '0.1rem' }}>
+                              <span>{r.consultant.role}</span>
+                              <span>{r.taskCount} task{r.taskCount === 1 ? '' : 's'}</span>
+                            </div>
+                          </div>
+                        </div>
+                        {/* Allocation split by project */}
+                        <div style={{ display: 'flex', height: '8px', borderRadius: '4px', overflow: 'hidden', backgroundColor: 'var(--bg-tertiary)' }}>
+                          {r.totalDays === 0 ? null : projectEntries.map(([pid, days]) => {
+                            const proj = projects.find(p => p.id === pid);
+                            return <div key={pid} title={`${proj?.name || 'Unknown'}: ${days}d`} style={{ width: `${(days / maxDays) * 100}%`, backgroundColor: proj ? getProjectAccent(proj) : 'var(--text-tertiary)' }} />;
+                          })}
+                        </div>
+                        {projectEntries.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                            {projectEntries.map(([pid, days]) => {
+                              const proj = projects.find(p => p.id === pid);
+                              return (
+                                <span key={pid} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>
+                                  <span style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: proj ? getProjectAccent(proj) : 'var(--text-tertiary)' }} />
+                                  {proj?.name || 'Unknown'} ({days}d)
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ============================ PORTFOLIO TIMELINE ============================ */}
+      {dashboardMode === 'timeline' && (() => {
+        const withGoLive = projectStats.filter(ps => ps.project.targetGoLiveDate && !ps.stats.isCancelled);
+        const sorted = [...withGoLive].sort((a, b) => (a.project.targetGoLiveDate || '').localeCompare(b.project.targetGoLiveDate || ''));
+        const overdue = sorted.filter(ps => !ps.stats.isDone && ps.stats.goLive.status === 'danger');
+        const soon = sorted.filter(ps => !ps.stats.isDone && ps.stats.goLive.status !== 'danger' && ps.stats.goLive.days <= 30);
+        const later = sorted.filter(ps => !overdue.includes(ps) && !soon.includes(ps));
+        const nextLaunch = sorted.find(ps => !ps.stats.isDone && ps.stats.goLive.days >= 0);
+        const within90 = sorted.filter(ps => !ps.stats.isDone && ps.stats.goLive.days >= 0 && ps.stats.goLive.days <= 90).length;
+
+        // Rail domain
+        const times: number[] = [todayMid.getTime()];
+        projects.forEach(p => {
+          const s = toDateMid(p.startDate); if (s) times.push(s.getTime());
+          const g = toDateMid(p.targetGoLiveDate); if (g) times.push(g.getTime());
+        });
+        const minT = Math.min(...times);
+        const maxT = Math.max(...times);
+        const span = Math.max(1, maxT - minT);
+        const pos = (t: number) => ((t - minT) / span) * 100;
+        const fmtShort = (ms: number) => new Date(ms).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+
+        const renderGroup = (title: string, items: typeof sorted, accent: string) => items.length === 0 ? null : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: accent }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: accent }} /> {title} ({items.length})
+            </div>
+            {items.map(({ project, stats }) => {
+              const meta = resolvePhaseMeta(project);
+              return (
+                <div
+                  key={project.id}
+                  onClick={() => onSelectProject(project.id)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.75rem 1rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: 'border-color var(--transition-fast)' }}
+                  onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--primary)'}
+                  onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border-color)'}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '54px' }}>
+                    <CalendarClock size={16} style={{ color: 'var(--text-tertiary)' }} />
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginTop: '0.2rem', textAlign: 'center' }}>{formatDateFriendly(project.targetGoLiveDate)}</span>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.name}</span>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.1rem 0.45rem', borderRadius: 'var(--radius-sm)', backgroundColor: meta.bg, color: meta.text, flexShrink: 0 }}>{meta.label}</span>
+                    </div>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{project.clientName} · {stats.pct}% complete</span>
+                  </div>
+                  <Pill color={stats.isDone ? 'var(--success)' : stats.goLive.status === 'danger' ? 'var(--danger)' : stats.goLive.status === 'warning' ? 'var(--warning)' : 'var(--success)'}>
+                    {stats.isDone ? 'Delivered' : stats.goLive.text}
+                  </Pill>
+                </div>
+              );
+            })}
+          </div>
+        );
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div className="kpi-grid">
+              {[
+                { icon: <Flag size={20} />, value: nextLaunch ? formatDateFriendly(nextLaunch.project.targetGoLiveDate) : '—', label: 'Next Go-Live', c: 'var(--primary)' },
+                { icon: <CalendarClock size={20} />, value: soon.length, label: 'Launching ≤30 days', c: 'var(--warning)' },
+                { icon: <Calendar size={20} />, value: within90, label: 'Launching ≤90 days', c: '#0ea5e9' },
+                { icon: <AlertTriangle size={20} />, value: overdue.length, label: 'Overdue Go-Lives', c: overdue.length > 0 ? 'var(--danger)' : 'var(--text-tertiary)' }
+              ].map((k, i) => (
+                <div key={i} className="card kpi-card" style={{ padding: '1.5rem 1.75rem' }}>
+                  <div className="kpi-icon-wrapper" style={{ background: `color-mix(in srgb, ${k.c} 16%, transparent)`, color: k.c, width: '44px', height: '44px', borderRadius: 'var(--radius-lg)' }}>{k.icon}</div>
+                  <div className="kpi-details">
+                    <span className="kpi-value" style={{ fontSize: k.label === 'Next Go-Live' ? '1.1rem' : '1.6rem', letterSpacing: '-0.02em' }}>{k.value}</span>
+                    <span className="kpi-label" style={{ marginTop: '0.15rem' }}>{k.label}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Launch rail */}
+            {withGoLive.length > 0 && (
+              <div className="card">
+                <div className="card-header"><h3 className="card-title">Launch Rail</h3></div>
+                <div style={{ position: 'relative', height: '64px', margin: '0.5rem 0.5rem 0' }}>
+                  <div style={{ position: 'absolute', top: '28px', left: 0, right: 0, height: '3px', backgroundColor: 'var(--border-strong)', borderRadius: '2px' }} />
+                  {/* Today marker */}
+                  {todayMid.getTime() >= minT && todayMid.getTime() <= maxT && (
+                    <div style={{ position: 'absolute', top: '14px', bottom: '14px', left: `${pos(todayMid.getTime())}%`, width: '2px', backgroundColor: 'var(--danger)' }} title="Today">
+                      <span style={{ position: 'absolute', top: '-14px', left: '50%', transform: 'translateX(-50%)', fontSize: '0.6rem', fontWeight: 700, color: 'var(--danger)' }}>Today</span>
+                    </div>
+                  )}
+                  {withGoLive.map(({ project }) => {
+                    const g = toDateMid(project.targetGoLiveDate)!.getTime();
+                    return (
+                      <div key={project.id} title={`${project.name} — ${formatDateFriendly(project.targetGoLiveDate)}`} onClick={() => onSelectProject(project.id)}
+                        style={{ position: 'absolute', top: '21px', left: `${pos(g)}%`, transform: 'translateX(-50%)', width: '16px', height: '16px', borderRadius: '50%', backgroundColor: getProjectAccent(project), border: '2px solid var(--bg-secondary)', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', cursor: 'pointer' }} />
+                    );
+                  })}
+                  <span style={{ position: 'absolute', bottom: 0, left: 0, fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>{fmtShort(minT)}</span>
+                  <span style={{ position: 'absolute', bottom: 0, right: 0, fontSize: '0.68rem', color: 'var(--text-tertiary)' }}>{fmtShort(maxT)}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="card">
+              <div className="card-header"><h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Flag size={18} /> Milestones</h3></div>
+              {sorted.length === 0 ? (
+                <p style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '2rem 0' }}>No projects have a target go-live date set.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  {renderGroup('Overdue', overdue, 'var(--danger)')}
+                  {renderGroup('Next 30 days', soon, 'var(--warning)')}
+                  {renderGroup('Upcoming', later, 'var(--primary)')}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {dashboardMode === 'projects' && (
         // PROJECTS TIMELINE DASHBOARD
