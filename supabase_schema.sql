@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     billed BOOLEAN DEFAULT false,
     sort_order INTEGER DEFAULT 0,
     custom_start_date TEXT,
+    progress INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

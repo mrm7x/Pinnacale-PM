@@ -627,7 +627,7 @@ export default function App() {
     addToast(`Successfully updated ${taskIds.length} tasks!`, 'success');
   };
 
-  const handleReorderTasks = async (updates: { id: string; sortOrder: number }[]) => {
+  const handleReorderTasks = async (updates: { id: string; sortOrder: number; parentId?: string | null }[]) => {
     if (updates.length === 0) return;
 
     const firstTask = tasks.find(t => t.id === updates[0].id);
@@ -636,12 +636,36 @@ export default function App() {
     const activeProj = projects.find(p => p.id === firstTask.projectId);
     if (!activeProj) return;
 
-    const updateMap = new Map(updates.map(u => [u.id, u.sortOrder]));
-    const updatedTasksList = tasks.map(t => {
-      if (updateMap.has(t.id)) {
-        return { ...t, sortOrder: updateMap.get(t.id)! };
+    // Cycle guard: refuse to reparent a task onto one of its own descendants.
+    const getDescendants = (rootId: string): Set<string> => {
+      const result = new Set<string>();
+      const stack = [rootId];
+      while (stack.length) {
+        const cur = stack.pop()!;
+        tasks
+          .filter(t => t.parentId === cur)
+          .forEach(child => {
+            if (!result.has(child.id)) {
+              result.add(child.id);
+              stack.push(child.id);
+            }
+          });
       }
-      return t;
+      return result;
+    };
+
+    const updateMap = new Map(updates.map(u => [u.id, u]));
+    const updatedTasksList = tasks.map(t => {
+      const u = updateMap.get(t.id);
+      if (!u) return t;
+      if (u.parentId !== undefined) {
+        // No-op if the target parent is a descendant of the task being moved.
+        if (u.parentId && getDescendants(t.id).has(u.parentId)) {
+          return { ...t, sortOrder: u.sortOrder };
+        }
+        return { ...t, sortOrder: u.sortOrder, parentId: u.parentId };
+      }
+      return { ...t, sortOrder: u.sortOrder };
     });
 
     await rescheduleProjectTasks(firstTask.projectId, activeProj.startDate, updatedTasksList);

@@ -9,7 +9,7 @@ import {
   HelpCircle, RefreshCw, LogIn, LogOut, CheckCircle, Database, FolderKanban, Edit2, Lock 
 } from 'lucide-react';
 import { signInMicrosoft, signOutMicrosoft } from '../utils/o365';
-import { getSupabaseCredentials, testSupabaseConnection, getSupabaseClient, isSupabaseConfigured } from '../utils/supabase';
+import { getSupabaseCredentials, testSupabaseConnection, getSupabaseClient, isSupabaseConfigured, setSupabaseEnabled } from '../utils/supabase';
 
 interface SettingsProps {
   consultants: Consultant[];
@@ -117,9 +117,19 @@ export default function Settings({
 
   const handleSaveSupabaseConfig = (e: React.FormEvent) => {
     e.preventDefault();
-    localStorage.setItem('pinnacle_supabase_url', supabaseUrl.trim());
-    localStorage.setItem('pinnacle_supabase_anon_key', supabaseKey.trim());
-    onAddToast('Supabase credentials saved. App will reload to apply changes.', 'success');
+    // When there are no env vars, Supabase only activates via this explicit
+    // opt-in flag, so saving credentials here is what enables the backend.
+    if (!supabaseUrl.trim() || !supabaseKey.trim()) {
+      setSupabaseEnabled(false);
+      localStorage.removeItem('pinnacle_supabase_url');
+      localStorage.removeItem('pinnacle_supabase_anon_key');
+      onAddToast('Supabase credentials cleared. Using local storage mode.', 'info');
+    } else {
+      localStorage.setItem('pinnacle_supabase_url', supabaseUrl.trim());
+      localStorage.setItem('pinnacle_supabase_anon_key', supabaseKey.trim());
+      setSupabaseEnabled(true);
+      onAddToast('Supabase credentials saved. App will reload to apply changes.', 'success');
+    }
     setTimeout(() => {
       window.location.reload();
     }, 1200);

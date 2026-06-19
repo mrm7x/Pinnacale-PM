@@ -63,6 +63,7 @@ export interface Task {
   billed?: boolean;
   sortOrder?: number;
   customStartDate?: string | null;
+  progress?: number; // 0-100, stored on leaf tasks; parents compute a rollup
   
   // Computed scheduling fields (dynamically calculated)
   plannedStartDate?: string; // YYYY-MM-DD

@@ -1,12 +1,34 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Retrieve credentials from environment variables or fallback to localStorage
+// Credentials may come from build-time env vars (preferred) or, when the user
+// has EXPLICITLY enabled Supabase in Settings, from localStorage.
 const envUrl = import.meta.env.VITE_SUPABASE_URL;
 const envAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// Opt-in flag. Env vars always win; localStorage config is only honored when the
+// user has set this flag through the Settings panel. This prevents stale
+// localStorage credentials from silently routing login to the Supabase branch
+// (and blocking the local admin/manager fallback).
+const OPT_IN_KEY = 'pinnacle_supabase_enabled';
+
+/**
+ * Whether Supabase should be used at all.
+ * - Env vars present → yes (server-provided config).
+ * - No env vars → only if the user explicitly opted in via Settings.
+ */
+export function isSupabaseEnabled(): boolean {
+  if (envUrl && envAnonKey) return true;
+  return localStorage.getItem(OPT_IN_KEY) === 'true';
+}
+
+export function setSupabaseEnabled(enabled: boolean) {
+  if (enabled) localStorage.setItem(OPT_IN_KEY, 'true');
+  else localStorage.removeItem(OPT_IN_KEY);
+}
+
 export function getSupabaseCredentials() {
-  const url = envUrl || localStorage.getItem('pinnacle_supabase_url') || '';
-  const anonKey = envAnonKey || localStorage.getItem('pinnacle_supabase_anon_key') || '';
+  const url = envUrl || (isSupabaseEnabled() ? localStorage.getItem('pinnacle_supabase_url') : '') || '';
+  const anonKey = envAnonKey || (isSupabaseEnabled() ? localStorage.getItem('pinnacle_supabase_anon_key') : '') || '';
   return {
     url: url.trim(),
     anonKey: anonKey.trim(),
@@ -15,6 +37,7 @@ export function getSupabaseCredentials() {
 }
 
 export function isSupabaseConfigured(): boolean {
+  if (!isSupabaseEnabled()) return false;
   const { url, anonKey } = getSupabaseCredentials();
   return url.length > 0 && anonKey.length > 0;
 }

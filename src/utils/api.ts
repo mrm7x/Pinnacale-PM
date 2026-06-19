@@ -101,7 +101,8 @@ function mapTaskFromDb(db: any): Task {
     pinkNumber: db.pink_number || '',
     billed: !!db.billed,
     sortOrder: db.sort_order ? Number(db.sort_order) : 0,
-    customStartDate: db.custom_start_date || null
+    customStartDate: db.custom_start_date || null,
+    progress: db.progress != null ? Number(db.progress) : 0
   };
 }
 
@@ -125,7 +126,8 @@ function mapTaskToDb(t: Task) {
     pink_number: t.pinkNumber || '',
     billed: !!t.billed,
     sort_order: t.sortOrder || 0,
-    custom_start_date: t.customStartDate || null
+    custom_start_date: t.customStartDate || null,
+    progress: t.progress ?? 0
   };
 }
 

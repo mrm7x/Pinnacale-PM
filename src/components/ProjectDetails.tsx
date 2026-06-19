@@ -12,6 +12,7 @@ import { WinComboBox } from './winui/WinComboBox';
 import { WinDatePicker } from './winui/WinDatePicker';
 import GanttChart from './GanttChart';
 import EditProjectModal from './EditProjectModal';
+import TaskListV2 from './TaskListV2';
 import { formatDateFriendly, formatDateTimeFriendly } from './Dashboard';
 import { resolvePhaseMeta, getProjectAccent } from '../utils/phases';
 
@@ -35,7 +36,7 @@ interface ProjectDetailsProps {
   onDuplicateProject: (projectId: string, config: { name: string; clientName: string; startDate: string; copyAssignments: boolean }) => void;
   onSaveAsTemplate: (projectId: string, templateName: string) => void;
   activeUserId: string;
-  onReorderTasks: (updates: { id: string; sortOrder: number }[]) => void;
+  onReorderTasks: (updates: { id: string; sortOrder: number; parentId?: string | null }[]) => void;
   onSaveCommunication: (comm: Communication) => Promise<void>;
   onDeleteCommunication: (id: string) => Promise<void>;
   setIsNewProjectModalOpen: (val: boolean) => void;
@@ -88,7 +89,7 @@ export default function ProjectDetails({
   const activeConsultant = consultants.find(c => c.id === activeUserId);
   const activeRole = activeConsultant?.role || 'Read only';
 
-  const [activeProjectTab, setActiveProjectTab] = useState<'overview' | 'tasks' | 'gantt' | 'rag' | 'communications'>('overview');
+  const [activeProjectTab, setActiveProjectTab] = useState<'overview' | 'tasks' | 'tasks-v2' | 'gantt' | 'rag' | 'communications'>('overview');
   const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
@@ -851,6 +852,7 @@ export default function ProjectDetails({
               {([
                 { id: 'overview', label: 'Overview' },
                 { id: 'tasks', label: 'Task List' },
+                { id: 'tasks-v2', label: 'Tasks v2' },
                 { id: 'gantt', label: 'Gantt' },
                 { id: 'rag', label: 'RAG Status' },
                 { id: 'communications', label: 'Communications' }
@@ -1289,9 +1291,31 @@ export default function ProjectDetails({
         </div>
       )}
 
-      {activeProjectTab === 'gantt' && (
+          {activeProjectTab === 'tasks-v2' && activeProject && (
+            <TaskListV2
+              project={activeProject}
+              tasks={tasks}
+              consultants={consultants}
+              activeUserId={activeUserId}
+              onCreateTask={onCreateTask}
+              onUpdateTask={onUpdateTask}
+              onDeleteTask={onDeleteTask}
+              onBulkUpdateTasks={onBulkUpdateTasks}
+              onBulkDeleteTasks={onBulkDeleteTasks}
+              onReorderTasks={onReorderTasks}
+              onAddToast={onAddToast}
+            />
+          )}
+
+          {activeProjectTab === 'gantt' && (
         <div style={{ overflow: 'hidden' }}>
-          <GanttChart activeProject={activeProject} tasks={tasks} consultants={consultants} />
+          <GanttChart
+            activeProject={activeProject}
+            tasks={tasks}
+            consultants={consultants}
+            onUpdateTask={onUpdateTask}
+            canEdit={canEditTask(activeRole)}
+          />
         </div>
       )}
 
