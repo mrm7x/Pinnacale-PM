@@ -450,7 +450,7 @@ export default function TaskListV2({
                     </span>
                   )}
                   {durationDerived && <span className="tv2-chip tv2-chip-dep" title="Duration derived from due date">Due→</span>}
-                  {isOverdue && <span className="tv2-chip tv2-chip-overdue" title={`Was due ${task.plannedEndDate}`}><AlertTriangle size={11} /> Overdue</span>}
+                  {isOverdue && <span className="tv2-chip tv2-chip-overdue" title={`Was due ${task.dueDate}`}><AlertTriangle size={11} /> Overdue</span>}
                   {blockedBy.length > 0 && <span className="tv2-chip tv2-chip-dep" title={`Depends on: ${blockedBy.map(b => b.name).join(', ')}`}><Link2 size={11} /> {blockedBy.length}</span>}
                   {blockingCount > 0 && <span className="tv2-chip tv2-chip-blocks" title={`Blocks ${blockingCount} other task(s)`}>⛓ {blockingCount}</span>}
                 </span>
@@ -834,8 +834,8 @@ function TaskModal(props: TaskModalProps) {
 
             <div className="tv2-field-row">
               <div className="tv2-field">
-                <label className="form-label">Due date</label>
-                <WinDatePicker value={form.dueDate} onChange={(v) => update({ dueDate: v })} />
+                <label className="form-label">Start date</label>
+                <WinDatePicker value={form.customStartDate} onChange={(v) => update({ customStartDate: v })} />
               </div>
               <div className="tv2-field">
                 <label className="form-label">
@@ -852,8 +852,8 @@ function TaskModal(props: TaskModalProps) {
 
             <div className="tv2-field-row">
               <div className="tv2-field">
-                <label className="form-label">Start date</label>
-                <WinDatePicker value={form.customStartDate} onChange={(v) => update({ customStartDate: v })} />
+                <label className="form-label">Due date</label>
+                <WinDatePicker value={form.dueDate} onChange={(v) => update({ dueDate: v })} />
               </div>
               <div className="tv2-field">
                 <label className="form-label">Task owner</label>
@@ -956,10 +956,10 @@ function initials(name: string): string {
 }
 
 function isTaskOverdue(task: Task): boolean {
-  if (task.status === 'completed' || !task.plannedEndDate) return false;
+  if (task.status === 'completed' || !task.dueDate) return false;
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const end = new Date(task.plannedEndDate + 'T00:00:00');
-  return end.getTime() < today.getTime();
+  const due = new Date(task.dueDate + 'T00:00:00');
+  return due.getTime() < today.getTime();
 }
 
 interface DrawerForm {
