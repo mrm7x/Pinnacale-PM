@@ -1,0 +1,2 @@
+ALTER TABLE projects
+ADD COLUMN IF NOT EXISTS sage_crm_link TEXT;

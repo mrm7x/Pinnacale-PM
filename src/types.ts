@@ -24,6 +24,7 @@ export interface Project {
   projectResourceIds?: string[]; // New replacement for consultantIds
   trelloLink?: string | null;
   sharepointLink?: string | null;
+  sageCrmLink?: string | null;
   ragScope?: string;
   ragSchedule?: string;
   ragCosts?: string;

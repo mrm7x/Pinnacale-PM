@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS projects (
     project_resource_ids TEXT[] NOT NULL DEFAULT '{}',
     trello_link TEXT,
     sharepoint_link TEXT,
+    sage_crm_link TEXT,
     rag_scope TEXT DEFAULT 'green',
     rag_schedule TEXT DEFAULT 'green',
     rag_costs TEXT DEFAULT 'green',

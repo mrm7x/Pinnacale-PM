@@ -28,6 +28,7 @@ export default function NewProjectModal({ onClose, onCreateProject, projectTempl
     projectResourceIds: [] as string[],
     trelloLink: '',
     sharepointLink: '',
+    sageCrmLink: '',
     icon: 'Folder',
     status: 'new' as Project['status'],
     phase: '' as string
@@ -275,6 +276,16 @@ export default function NewProjectModal({ onClose, onCreateProject, projectTempl
                   placeholder="https://sharepoint.com/..."
                   value={newProject.sharepointLink}
                   onChange={(e) => setNewProject({ ...newProject, sharepointLink: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Sage CRM Link</label>
+                <input
+                  type="url"
+                  className="form-input"
+                  placeholder="https://sagecrm..."
+                  value={newProject.sageCrmLink}
+                  onChange={(e) => setNewProject({ ...newProject, sageCrmLink: e.target.value })}
                 />
               </div>
             </div>

@@ -22,6 +22,7 @@ export default function EditProjectModal({ onClose, onUpdateProject, project, co
     customerId: project.customerId || '',
     trelloLink: project.trelloLink || '',
     sharepointLink: project.sharepointLink || '',
+    sageCrmLink: project.sageCrmLink || '',
     status: project.status || 'new',
     phase: project.phase || '',
     budgetDays: project.budgetDays || 0,
@@ -257,6 +258,16 @@ export default function EditProjectModal({ onClose, onUpdateProject, project, co
                   placeholder="https://sharepoint.com/..."
                   value={editProject.sharepointLink}
                   onChange={(e) => setEditProject({ ...editProject, sharepointLink: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Sage CRM Link</label>
+                <input
+                  type="url"
+                  className="form-input"
+                  placeholder="https://sagecrm..."
+                  value={editProject.sageCrmLink}
+                  onChange={(e) => setEditProject({ ...editProject, sageCrmLink: e.target.value })}
                 />
               </div>
             </div>
