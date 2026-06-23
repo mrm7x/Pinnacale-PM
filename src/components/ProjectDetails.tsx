@@ -141,12 +141,12 @@ export default function ProjectDetails({
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
   const [syncingTaskId, setSyncingTaskId] = useState<string | null>(null);
   const [schedulingEvent, setSchedulingEvent] = useState(false);
-  const [editMode, setEditMode] = useState(true);
+  const [editMode, _setEditMode] = useState(true);
   const [applyToSubtasks, setApplyToSubtasks] = useState(false);
 
-  const [hideCompleted, setHideCompleted] = useState(false);
-  const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [hideCompleted, _setHideCompleted] = useState(false);
+  const [assigneeFilter, _setAssigneeFilter] = useState<string>('all');
+  const [statusFilter, _setStatusFilter] = useState<string>('all');
   const [commTypeFilter, setCommTypeFilter] = useState<string>('all');
   const [commCreatorFilter, setCommCreatorFilter] = useState<string>('all');
   const [isExporting, setIsExporting] = useState(false);
@@ -200,23 +200,6 @@ export default function ProjectDetails({
     if (!activeProject || !templateForm.name) return;
     onSaveAsTemplate(activeProject.id, templateForm.name);
     setIsTemplateSaveModalOpen(false);
-  };
-
-  // Open Task Modal for Create
-  const handleOpenCreateTask = () => {
-    setEditingTask(null);
-    setTaskForm({
-      name: '',
-      description: '',
-      durationDays: 1.0,
-      assignedConsultantId: consultants[0]?.id || '',
-      parentId: '',
-      predecessorIds: [],
-      status: 'not_started',
-      pinkNumber: '',
-      customStartDate: ''
-    });
-    setIsTaskModalOpen(true);
   };
 
   const handleAddSubtask = (parentTask: Task) => {

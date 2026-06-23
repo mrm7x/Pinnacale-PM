@@ -364,7 +364,6 @@ function addGanttSheet(
   });
 
   const TOTAL_COLS = LEFT_COLS + dayCols.length;
-  const WEEKEND_BG = 'FFF3F4F6';  // very light gray (week boundary)
   const TODAY_BG   = 'FFFFF3CD';  // pale amber for today
   const FRIDAY_BG  = 'FFEFF6FF';  // faint blue at week-end boundary
 
@@ -463,7 +462,6 @@ function addGanttSheet(
     const row = sheet.getRow(rowNum);
     row.height = isParent ? 18 : 16;
 
-    const assignee = consultants.find(c => c.id === task.assignedConsultantId);
     const isEven = idx % 2 === 0;
     const rowBg = isParent ? accentLightArgb : (isEven ? 'FFFFFFFF' : 'FFF9FAFB');
     const textArgb = isParent ? accentArgb : 'FF1F2937';
