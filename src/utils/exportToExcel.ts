@@ -312,7 +312,6 @@ function addGanttSheet(
   workbook: ExcelJS.Workbook,
   project: Project,
   flatList: FlatTask[],
-  consultants: Consultant[],
   accentArgb: string,
   accentLightArgb: string,
 ): void {
@@ -580,7 +579,7 @@ export async function exportProjectToExcel(
   workbook.properties.date1904 = false;
 
   addTaskSheet(workbook, project, flatList, consultants, accentArgb, accentLightArgb, accentMidArgb);
-  addGanttSheet(workbook, project, flatList, consultants, accentArgb, accentLightArgb);
+  addGanttSheet(workbook, project, flatList, accentArgb, accentLightArgb);
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer as ArrayBuffer], {
