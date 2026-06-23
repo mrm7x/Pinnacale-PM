@@ -5,8 +5,9 @@ import { canEditProject, canCreateTask, canEditTask, canDeleteTask } from '../ut
 import {
   Plus, Calendar, Trash2, Edit2, ChevronDown, ChevronRight, ChevronUp,
   RefreshCw, MailCheck, User, X, Clock, FolderKanban, Pencil,
-  Folder, Briefcase, Target, Rocket, Star, Layout, Check
+  Folder, Briefcase, Target, Rocket, Star, Layout, Check, Download
 } from 'lucide-react';
+import { exportProjectToExcel } from '../utils/exportToExcel';
 import { syncTaskToO365, createOutlookCalendarEvent } from '../utils/o365';
 import { WinComboBox } from './winui/WinComboBox';
 import { WinDatePicker } from './winui/WinDatePicker';
@@ -148,6 +149,20 @@ export default function ProjectDetails({
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [commTypeFilter, setCommTypeFilter] = useState<string>('all');
   const [commCreatorFilter, setCommCreatorFilter] = useState<string>('all');
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = async () => {
+    if (!activeProject) return;
+    setIsExporting(true);
+    try {
+      await exportProjectToExcel(activeProject, tasks, consultants);
+      onAddToast('Export downloaded successfully.', 'success');
+    } catch {
+      onAddToast('Export failed. Please try again.', 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // Active Project Data
   const activeProject = projects.find(p => p.id === selectedProjectId) || null;
@@ -822,8 +837,7 @@ export default function ProjectDetails({
             <div style={{ display: 'flex', gap: '0.3rem', backgroundColor: 'var(--bg-secondary)', padding: '0.35rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)', width: 'fit-content', flexWrap: 'wrap' }}>
               {([
                 { id: 'overview', label: 'Overview' },
-                { id: 'tasks', label: 'Task List' },
-                { id: 'tasks-v2', label: 'Tasks v2' },
+                { id: 'tasks-v2', label: 'Tasks' },
                 { id: 'gantt', label: 'Gantt' },
                 { id: 'rag', label: 'RAG Status' },
                 { id: 'communications', label: 'Communications' }
@@ -851,8 +865,18 @@ export default function ProjectDetails({
               ))}
             </div>
 
+            <div style={{ display: 'flex', gap: '0.4rem', paddingBottom: '0.25rem' }}>
+                <button
+                  className="btn btn-ghost"
+                  onClick={handleExport}
+                  disabled={isExporting}
+                  title="Export to Excel"
+                  style={{ padding: '0.5rem 0.85rem', fontSize: '0.9rem' }}
+                >
+                  <Download size={15} /> {isExporting ? 'Exporting…' : 'Export'}
+                </button>
             {canEditProject(activeRole) && (
-              <div style={{ display: 'flex', gap: '0.4rem', paddingBottom: '0.25rem' }}>
+              <>
                 <button
                   className="btn btn-ghost"
                   onClick={() => {
@@ -904,8 +928,9 @@ export default function ProjectDetails({
                 >
                   <Trash2 size={15} /> Delete
                 </button>
-              </div>
+              </>
             )}
+            </div>
           </div>
 
           {activeProjectTab === 'overview' && (
@@ -1193,146 +1218,6 @@ export default function ProjectDetails({
               </div>
             </div>
           )}
-
-          {activeProjectTab === 'tasks' && (
-             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {/* Tasks Operations Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: '1.3rem', fontWeight: 700 }}>Implementation Tasks</h3>
-            {canCreateTask(activeRole) && (
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <button
-                  className={`btn ${editMode ? 'btn-secondary' : 'btn-accent'}`}
-                  onClick={() => {
-                    setEditMode(!editMode);
-                    setSelectedTaskIds([]);
-                  }}
-                  title={editMode ? 'Switch to view mode' : 'Enter edit mode - click any task to edit'}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}
-                >
-                  {!editMode && <Pencil size={14} />}
-                  {editMode ? 'View Mode' : 'Edit Mode'}
-                </button>
-                <button className="btn btn-primary" onClick={handleOpenCreateTask} style={{ backgroundColor: getProjectAccent(activeProject), color: 'white', border: '1px solid rgba(0,0,0,0.1)' }}>
-                  <Plus size={16} /> Add Task
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Filters Row */}
-          <div style={{
-            display: 'flex',
-            gap: '1.25rem',
-            alignItems: 'center',
-            backgroundColor: 'var(--bg-secondary)',
-            padding: '0.75rem 1.25rem',
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--border-color)',
-            flexWrap: 'wrap',
-            marginBottom: '1rem'
-          }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Filters:
-            </span>
-
-            {/* Hide Completed */}
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500 }}>
-              <input type="checkbox" className="win-checkbox"
-                checked={hideCompleted}
-                onChange={(e) => setHideCompleted(e.target.checked)}
-                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-              />
-              <span>Hide Completed</span>
-            </label>
-
-            <span style={{ color: 'var(--border-color)', height: '15px', borderLeft: '1px solid currentColor' }} />
-
-            {/* Assignee Filter */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Assignee:</span>
-              <WinComboBox
-                className="form-select"
-                value={assigneeFilter}
-                onChange={(val) => setAssigneeFilter(val)}
-                options={[
-                  { label: 'All Assignees', value: 'all' },
-                  { label: 'Unassigned', value: 'unassigned' },
-                  ...consultants.map(c => ({ label: c.name, value: c.id }))
-                ]}
-              />
-            </div>
-
-            <span style={{ color: 'var(--border-color)', height: '15px', borderLeft: '1px solid currentColor' }} />
-
-            {/* Status Filter */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Status:</span>
-              <WinComboBox
-                className="form-select"
-                value={statusFilter}
-                onChange={(val) => setStatusFilter(val)}
-                options={[
-                  { label: 'All Statuses', value: 'all' },
-                  { label: 'Not Started', value: 'not_started' },
-                  { label: 'In Progress', value: 'in_progress' },
-                  { label: 'On Hold', value: 'on_hold' },
-                  { label: 'Completed', value: 'completed' }
-                ]}
-              />
-            </div>
-          </div>
-
-          {/* Task Tree Container */}
-          <div className="card" style={{ padding: 0, overflowX: 'auto', borderTop: `4px solid ${getProjectAccent(activeProject)}` }}>
-            {projectTasks.length === 0 ? (
-              <p style={{ color: 'var(--text-tertiary)', textAlign: 'center', padding: '3rem' }}>
-                No tasks created yet for this project. Click 'Add Task' to build your implementation checklist.
-              </p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', minWidth: '700px' }}>
-                {/* Column Headers - matching grid */}
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 90px 130px 150px 110px 70px',
-                    alignItems: 'center',
-                    padding: '0.6rem 1.25rem',
-                    gap: '0.75rem',
-                    backgroundColor: `${getProjectAccent(activeProject)}1A`,
-                    borderBottom: '1px solid var(--border-strong)',
-                    fontSize: '0.72rem',
-                    fontWeight: 700,
-                    color: 'var(--text-tertiary)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.08em'
-                  }}
-                >
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    {editMode && (
-                      <input type="checkbox" className="win-checkbox"
-                        checked={projectTasks.length > 0 && selectedTaskIds.length === projectTasks.length}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setSelectedTaskIds(checked ? projectTasks.map(t => t.id) : []);
-                        }}
-                        style={{ cursor: 'pointer', width: '15px', height: '15px' }}
-                      />
-                    )}
-                    Task Name
-                  </span>
-                  <span style={{ textAlign: 'center' }}>Duration</span>
-                  <span style={{ textAlign: 'center' }}>Start Date</span>
-                  <span style={{ textAlign: 'center' }}>Assignee</span>
-                  <span style={{ textAlign: 'center' }}>Status</span>
-                  <span style={{ textAlign: 'center' }}>Actions</span>
-                </div>
-                {renderTaskTree(null, 0, '')}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
           {activeProjectTab === 'tasks-v2' && activeProject && (
             <TaskListV2

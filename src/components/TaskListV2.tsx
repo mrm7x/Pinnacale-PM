@@ -634,21 +634,12 @@ export default function TaskListV2({
               </span>
             </div>
 
-            {/* Progress — parents only: share of sub-tasks completed. Leaf tasks
-                are status-driven and show no progress. */}
+            {/* Progress — parents only: % of sub-tasks completed. */}
             <div className={`tv2-cell tv2-cell-progress ${taskIsParent ? '' : 'tv2-cell-progress-empty'}`} data-label="Progress">
-              {taskIsParent ? (() => {
-                const { completed, total } = leafStats(task.id);
-                return (
-                  <>
-                    <div className="tv2-progress-mini" title={`${completed} of ${total} sub-task${total === 1 ? '' : 's'} completed`}>
-                      <div className="tv2-progress-fill" style={{ width: `${prog}%`, backgroundColor: accent }} />
-                    </div>
-                    <span className="tv2-progress-num">{completed}/{total}</span>
-                  </>
-                );
-              })() : (
-                <span className="tv2-progress-na" title="Sub-tasks are tracked by status">—</span>
+              {taskIsParent ? (
+                <span className="tv2-progress-pct" style={{ color: accent }} title={`${prog}% of sub-tasks completed`}>{prog}%</span>
+              ) : (
+                <span className="tv2-progress-na">—</span>
               )}
             </div>
 

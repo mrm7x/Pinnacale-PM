@@ -13,6 +13,7 @@
     "@azure/msal-browser": "^5.13.0",
     "@azure/msal-react": "^5.4.4",
     "@supabase/supabase-js": "^2.108.2",
+    "exceljs": "^4.4.0",
     "lucide-react": "^1.18.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
