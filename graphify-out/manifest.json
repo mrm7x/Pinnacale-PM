@@ -1,0 +1,127 @@
+{
+  "App.tsx": {
+    "mtime": 1782229294.8589306,
+    "ast_hash": "0fdd1fba8b345036ee20c2a9607d7d1c",
+    "semantic_hash": "0fdd1fba8b345036ee20c2a9607d7d1c"
+  },
+  "components/CroppedLogo.tsx": {
+    "mtime": 1782229294.8634498,
+    "ast_hash": "4a25713e238c4582cae4aa66197f95cb",
+    "semantic_hash": "4a25713e238c4582cae4aa66197f95cb"
+  },
+  "components/Dashboard.tsx": {
+    "mtime": 1782229294.8654554,
+    "ast_hash": "f2a7250d1fa81fa36c69d728c18da4f6",
+    "semantic_hash": "f2a7250d1fa81fa36c69d728c18da4f6"
+  },
+  "components/EditProjectModal.tsx": {
+    "mtime": 1782229294.866631,
+    "ast_hash": "013762676822bb5c83ffdc85e3f776e0",
+    "semantic_hash": "013762676822bb5c83ffdc85e3f776e0"
+  },
+  "components/GanttChart.tsx": {
+    "mtime": 1782229294.866631,
+    "ast_hash": "c44ea4938933187230eca2afb3c02bd2",
+    "semantic_hash": "c44ea4938933187230eca2afb3c02bd2"
+  },
+  "components/Login.tsx": {
+    "mtime": 1782229294.8679204,
+    "ast_hash": "65681738d39a3f8d60c70842f1ab0356",
+    "semantic_hash": "65681738d39a3f8d60c70842f1ab0356"
+  },
+  "components/Logo.tsx": {
+    "mtime": 1782229294.868925,
+    "ast_hash": "c6ccdb1fcb36ebf1699855ada4cbad93",
+    "semantic_hash": "c6ccdb1fcb36ebf1699855ada4cbad93"
+  },
+  "components/NewProjectModal.tsx": {
+    "mtime": 1782229294.868925,
+    "ast_hash": "6218abd85d97ab05d14c0c7d9cbbc556",
+    "semantic_hash": "6218abd85d97ab05d14c0c7d9cbbc556"
+  },
+  "components/PasswordReset.tsx": {
+    "mtime": 1782229294.868925,
+    "ast_hash": "1e7dbad12a1b50900b10891281c52561",
+    "semantic_hash": "1e7dbad12a1b50900b10891281c52561"
+  },
+  "components/ProjectDetails.tsx": {
+    "mtime": 1782229294.871735,
+    "ast_hash": "8902eae65a2491af6010cfba06e81e02",
+    "semantic_hash": "8902eae65a2491af6010cfba06e81e02"
+  },
+  "components/ProjectsList.tsx": {
+    "mtime": 1782229294.871735,
+    "ast_hash": "6585a6155e93e18597dbe906e5ee97e1",
+    "semantic_hash": "6585a6155e93e18597dbe906e5ee97e1"
+  },
+  "components/Settings.tsx": {
+    "mtime": 1782229294.874159,
+    "ast_hash": "feb62a49f819495f4b44ea55177595af",
+    "semantic_hash": "feb62a49f819495f4b44ea55177595af"
+  },
+  "components/TaskListV2.tsx": {
+    "mtime": 1782229294.8752697,
+    "ast_hash": "534c08f0bc6f1359657ff76f217cdd4c",
+    "semantic_hash": "534c08f0bc6f1359657ff76f217cdd4c"
+  },
+  "components/winui/WinComboBox.tsx": {
+    "mtime": 1782229294.876716,
+    "ast_hash": "c39e31d72d1d10a48b787f213bc45c5c",
+    "semantic_hash": "c39e31d72d1d10a48b787f213bc45c5c"
+  },
+  "components/winui/WinDatePicker.tsx": {
+    "mtime": 1782229294.8777153,
+    "ast_hash": "2deecb448832c12a47d736e120a398e9",
+    "semantic_hash": "2deecb448832c12a47d736e120a398e9"
+  },
+  "defaultTasks.ts": {
+    "mtime": 1782229294.8777153,
+    "ast_hash": "f45301c71f3104f955b12724fee5d85b",
+    "semantic_hash": "f45301c71f3104f955b12724fee5d85b"
+  },
+  "main.tsx": {
+    "mtime": 1782229294.8800688,
+    "ast_hash": "df3369963799e47ef5a77cdca932abf0",
+    "semantic_hash": "df3369963799e47ef5a77cdca932abf0"
+  },
+  "types.ts": {
+    "mtime": 1782229294.8810816,
+    "ast_hash": "c137fadd61c59484b7ba3a6da8b47230",
+    "semantic_hash": "c137fadd61c59484b7ba3a6da8b47230"
+  },
+  "utils/api.ts": {
+    "mtime": 1782229294.882083,
+    "ast_hash": "aee58cd6fb75e18975142b90890c8908",
+    "semantic_hash": "aee58cd6fb75e18975142b90890c8908"
+  },
+  "utils/auth.ts": {
+    "mtime": 1782229294.8830986,
+    "ast_hash": "085519c96e1469daaf050781174af406",
+    "semantic_hash": "085519c96e1469daaf050781174af406"
+  },
+  "utils/o365.ts": {
+    "mtime": 1782229294.8830986,
+    "ast_hash": "ef320e8b959a7212e4ef1a0470a260e6",
+    "semantic_hash": "ef320e8b959a7212e4ef1a0470a260e6"
+  },
+  "utils/permissions.ts": {
+    "mtime": 1782229294.8846037,
+    "ast_hash": "e41bcfd585a0e90d56ed68127d26a958",
+    "semantic_hash": "e41bcfd585a0e90d56ed68127d26a958"
+  },
+  "utils/phases.ts": {
+    "mtime": 1782229294.8846037,
+    "ast_hash": "a208a6144ed41bb024c59fdf4d42cacd",
+    "semantic_hash": "a208a6144ed41bb024c59fdf4d42cacd"
+  },
+  "utils/scheduler.ts": {
+    "mtime": 1782229294.8858232,
+    "ast_hash": "8a2fb475019b5c46a9c993835598a009",
+    "semantic_hash": "8a2fb475019b5c46a9c993835598a009"
+  },
+  "utils/supabase.ts": {
+    "mtime": 1782229294.8868206,
+    "ast_hash": "de5f659e05e89fe5e16d93f2503ea7d0",
+    "semantic_hash": "de5f659e05e89fe5e16d93f2503ea7d0"
+  }
+}
