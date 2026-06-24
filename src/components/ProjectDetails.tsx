@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, FC } from 'react';
 import type { Project, Task, Consultant, O365Config, Communication } from '../types';
 import { canEditProject, canCreateTask, canEditTask, canDeleteTask } from '../utils/permissions';
 import {
   Plus, Calendar, Trash2, Edit2, ChevronDown, ChevronRight, ChevronUp,
   RefreshCw, MailCheck, User, X, Clock, FolderKanban, Pencil,
-  Folder, Briefcase, Target, Rocket, Star, Layout, Check, Download
+  Folder, Briefcase, Target, Rocket, Star, Layout, Check, Download,
+  Pin, AlertTriangle, Lightbulb, Zap, Bell, CheckCircle, Search
 } from 'lucide-react';
 import { exportProjectToExcel } from '../utils/exportToExcel';
 import { syncTaskToO365, createOutlookCalendarEvent } from '../utils/o365';
@@ -147,9 +148,12 @@ export default function ProjectDetails({
   const [hideCompleted, _setHideCompleted] = useState(false);
   const [assigneeFilter, _setAssigneeFilter] = useState<string>('all');
   const [statusFilter, _setStatusFilter] = useState<string>('all');
-  const [commTypeFilter, setCommTypeFilter] = useState<string>('all');
-  const [commCreatorFilter, setCommCreatorFilter] = useState<string>('all');
   const [isExporting, setIsExporting] = useState(false);
+  const [ragRiskInputs, setRagRiskInputs] = useState<Record<string, string>>({});
+  const [noteForm, setNoteForm] = useState({ subject: '', description: '', noteType: 'update' as Communication['noteType'] });
+  const [noteSearch, setNoteSearch] = useState('');
+  const [noteTypeFilter, setNoteTypeFilter] = useState<string>('all');
+  const [notesPinFilter, setNotesPinFilter] = useState(false);
 
   const handleExport = async () => {
     if (!activeProject) return;
@@ -822,8 +826,8 @@ export default function ProjectDetails({
                 { id: 'overview', label: 'Overview' },
                 { id: 'tasks-v2', label: 'Tasks' },
                 { id: 'gantt', label: 'Gantt' },
-                { id: 'rag', label: 'RAG Status' },
-                { id: 'communications', label: 'Communications' }
+                { id: 'rag', label: 'RAG' },
+                { id: 'communications', label: 'Project Notes' }
               ] as const).map(tab => (
                 <button
                   key={tab.id}
@@ -1232,40 +1236,54 @@ export default function ProjectDetails({
 
       {activeProjectTab === 'rag' && (
         (() => {
-          const RAG_META: Record<string, { varName: string; color: string; label: string }> = {
-            green: { varName: 'success', color: '#10b981', label: 'On Track' },
-            amber: { varName: 'warning', color: '#f59e0b', label: 'At Risk' },
-            red: { varName: 'danger', color: '#ef4444', label: 'Off Track' }
+          const RAG_META: Record<string, { color: string; label: string }> = {
+            green: { color: '#10b981', label: 'On Track' },
+            amber: { color: '#f59e0b', label: 'At Risk' },
+            red: { color: '#ef4444', label: 'Off Track' }
           };
           const ragValue = (v?: string) => (v || 'green').toLowerCase();
           const overallVal = ragValue(activeProject.ragOverall);
           const overallMeta = RAG_META[overallVal] || RAG_META.green;
-          const categories = [
-            { key: 'ragScope', label: 'Scope', desc: 'Are deliverables meeting agreed requirements?' },
-            { key: 'ragSchedule', label: 'Schedule', desc: 'Is the project on track against milestones?' },
-            { key: 'ragCosts', label: 'Costs', desc: 'Is spend within the approved budget?' },
-            { key: 'ragBenefits', label: 'Benefits', desc: 'Will the expected business value be realised?' },
-            { key: 'ragOverall', label: 'Overall', desc: 'Consolidated health rating for this project.' }
-          ] as const;
+          type RagCatDef = {
+            key: keyof typeof activeProject;
+            reasonKey: keyof typeof activeProject;
+            risksKey: keyof typeof activeProject;
+            label: string;
+            desc: string;
+          };
+          const categories: RagCatDef[] = [
+            { key: 'ragScope',    reasonKey: 'ragScopeReason',    risksKey: 'ragScopeRisks',    label: 'Scope',   desc: 'Are deliverables aligned with agreed requirements?' },
+            { key: 'ragSchedule', reasonKey: 'ragScheduleReason', risksKey: 'ragScheduleRisks', label: 'Users',   desc: 'Are end users engaged and adoption on track?' },
+            { key: 'ragCosts',    reasonKey: 'ragCostsReason',    risksKey: 'ragCostsRisks',    label: 'Data',    desc: 'Is data migration and quality on course?' },
+            { key: 'ragBenefits', reasonKey: 'ragBenefitsReason', risksKey: 'ragBenefitsRisks', label: 'Days',    desc: 'Is the day-count spend within the approved budget?' },
+            { key: 'ragOverall',  reasonKey: 'ragOverallReason',  risksKey: 'ragOverallRisks',  label: 'Overall', desc: 'Consolidated health rating for this project.' }
+          ];
+
+          const handleAddRisk = (risksKey: string, catKey: string) => {
+            const text = (ragRiskInputs[catKey] || '').trim();
+            if (!text) return;
+            const existing = (activeProject[risksKey as keyof typeof activeProject] as { id: string; text: string; done: boolean }[] | undefined) || [];
+            const updated = [...existing, { id: `r-${Date.now()}`, text, done: false }];
+            onUpdateProject({ ...activeProject, [risksKey]: updated });
+            setRagRiskInputs(prev => ({ ...prev, [catKey]: '' }));
+          };
+
+          const handleToggleRisk = (risksKey: string, riskId: string) => {
+            const existing = (activeProject[risksKey as keyof typeof activeProject] as { id: string; text: string; done: boolean }[] | undefined) || [];
+            const updated = existing.map(r => r.id === riskId ? { ...r, done: !r.done } : r);
+            onUpdateProject({ ...activeProject, [risksKey]: updated });
+          };
+
+          const handleDeleteRisk = (risksKey: string, riskId: string) => {
+            const existing = (activeProject[risksKey as keyof typeof activeProject] as { id: string; text: string; done: boolean }[] | undefined) || [];
+            onUpdateProject({ ...activeProject, [risksKey]: existing.filter(r => r.id !== riskId) });
+          };
 
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               {/* Summary hero */}
-              <div className="card" style={{
-                padding: '2rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '1.75rem',
-                borderTop: `5px solid ${overallMeta.color}`,
-                flexWrap: 'wrap'
-              }}>
-                <div style={{
-                  width: '76px', height: '76px', borderRadius: '50%',
-                  backgroundColor: `${overallMeta.color}20`,
-                  border: `3px solid ${overallMeta.color}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0
-                }}>
+              <div className="card" style={{ padding: '2rem', display: 'flex', alignItems: 'center', gap: '1.75rem', borderTop: `5px solid ${overallMeta.color}`, flexWrap: 'wrap' }}>
+                <div style={{ width: '76px', height: '76px', borderRadius: '50%', backgroundColor: `${overallMeta.color}20`, border: `3px solid ${overallMeta.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: overallMeta.color, boxShadow: `0 0 12px ${overallMeta.color}` }} />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', flex: 1, minWidth: '240px' }}>
@@ -1280,59 +1298,90 @@ export default function ProjectDetails({
               </div>
 
               {/* Category cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.25rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
                 {categories.map(cat => {
-                  const key = cat.key as keyof Project;
-                  const current = ragValue(activeProject[key] as string);
+                  const current = ragValue(activeProject[cat.key] as string);
+                  const meta = RAG_META[current] || RAG_META.green;
+                  const risks = (activeProject[cat.risksKey] as { id: string; text: string; done: boolean }[] | undefined) || [];
+                  const reason = (activeProject[cat.reasonKey] as string | undefined) || '';
                   return (
-                    <div key={cat.key} className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div key={cat.key as string} className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', borderTop: `3px solid ${meta.color}` }}>
+                      {/* Header */}
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
                         <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{cat.label}</span>
-                        {(() => {
-                          const meta = RAG_META[current] || RAG_META.green;
-                          return (
-                            <span style={{ fontSize: '0.8rem', fontWeight: 700, padding: '0.25rem 0.7rem', borderRadius: 'var(--radius-sm)', backgroundColor: `${meta.color}1f`, color: meta.color, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-                              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: meta.color }} />
-                              {meta.label}
-                            </span>
-                          );
-                        })()}
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, padding: '0.25rem 0.7rem', borderRadius: 'var(--radius-sm)', backgroundColor: `${meta.color}1f`, color: meta.color, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: meta.color }} />
+                          {meta.label}
+                        </span>
                       </div>
-                      <span style={{ fontSize: '0.9rem', color: 'var(--text-tertiary)', lineHeight: 1.4 }}>{cat.desc}</span>
+
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)', lineHeight: 1.4 }}>{cat.desc}</span>
+
                       {/* Traffic-light selector */}
-                      <div style={{ display: 'flex', gap: '0.6rem', marginTop: 'auto' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
                         {(['green', 'amber', 'red'] as const).map(status => {
-                          const meta = RAG_META[status];
-                          const isSelected = current === status;
+                          const sm = RAG_META[status];
+                          const isSel = current === status;
                           return (
-                            <button
-                              key={status}
-                              onClick={() => onUpdateProject({ ...activeProject, [key]: status })}
-                              title={meta.label}
-                              style={{
-                                flex: 1,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem',
-                                padding: '0.6rem 0.5rem',
-                                borderRadius: 'var(--radius-sm)',
-                                border: isSelected ? 'none' : '1px solid var(--border-color)',
-                                backgroundColor: isSelected ? meta.color : 'transparent',
-                                color: isSelected ? 'white' : 'var(--text-secondary)',
-                                cursor: 'pointer',
-                                fontSize: '0.88rem',
-                                fontWeight: 700,
-                                transition: 'all 0.15s ease',
-                                textTransform: 'capitalize'
-                              }}
-                            >
-                              <span style={{
-                                width: '10px', height: '10px', borderRadius: '50%',
-                                backgroundColor: isSelected ? 'white' : meta.color,
-                                border: isSelected ? 'none' : `1px solid ${meta.color}`
-                              }} />
+                            <button key={status} onClick={() => onUpdateProject({ ...activeProject, [cat.key]: status })} title={sm.label} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', padding: '0.5rem', borderRadius: 'var(--radius-sm)', border: isSel ? 'none' : '1px solid var(--border-color)', backgroundColor: isSel ? sm.color : 'transparent', color: isSel ? 'white' : 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 700, transition: 'all 0.15s ease', textTransform: 'capitalize' }}>
+                              <span style={{ width: '9px', height: '9px', borderRadius: '50%', backgroundColor: isSel ? 'white' : sm.color, border: isSel ? 'none' : `1px solid ${sm.color}`, flexShrink: 0 }} />
                               {status}
                             </button>
                           );
                         })}
+                      </div>
+
+                      {/* Reason */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Reason</span>
+                        <textarea
+                          rows={2}
+                          className="form-textarea"
+                          placeholder="Why is this category at this status?"
+                          defaultValue={reason}
+                          onBlur={e => onUpdateProject({ ...activeProject, [cat.reasonKey]: e.target.value })}
+                          style={{ fontSize: '0.88rem', resize: 'vertical' }}
+                        />
+                      </div>
+
+                      {/* Risks */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Risks</span>
+                        {risks.length > 0 && (
+                          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                            {risks.map(risk => (
+                              <li key={risk.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.5rem', borderRadius: 'var(--radius-sm)', backgroundColor: risk.done ? 'var(--bg-secondary)' : `${meta.color}0d` }}>
+                                <button
+                                  onClick={() => handleToggleRisk(cat.risksKey as string, risk.id)}
+                                  style={{ width: '18px', height: '18px', borderRadius: '4px', border: `2px solid ${risk.done ? 'var(--text-tertiary)' : meta.color}`, backgroundColor: risk.done ? 'var(--text-tertiary)' : 'transparent', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
+                                >
+                                  {risk.done && <Check size={11} color="white" />}
+                                </button>
+                                <span style={{ flex: 1, fontSize: '0.87rem', color: risk.done ? 'var(--text-tertiary)' : 'var(--text-primary)', textDecoration: risk.done ? 'line-through' : 'none', lineHeight: 1.35 }}>{risk.text}</span>
+                                <button onClick={() => handleDeleteRisk(cat.risksKey as string, risk.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: '0 2px', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                                  <X size={13} />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <div style={{ display: 'flex', gap: '0.4rem' }}>
+                          <input
+                            className="form-input"
+                            placeholder="Add a risk…"
+                            value={ragRiskInputs[cat.key as string] || ''}
+                            onChange={e => setRagRiskInputs(prev => ({ ...prev, [cat.key as string]: e.target.value }))}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddRisk(cat.risksKey as string, cat.key as string); } }}
+                            style={{ flex: 1, fontSize: '0.87rem' }}
+                          />
+                          <button
+                            onClick={() => handleAddRisk(cat.risksKey as string, cat.key as string)}
+                            className="btn btn-primary"
+                            style={{ padding: '0.4rem 0.7rem', fontSize: '0.85rem' }}
+                          >
+                            <Plus size={14} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -1343,110 +1392,144 @@ export default function ProjectDetails({
         })()
       )}
 
-      {activeProjectTab === 'communications' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-           <div className="card" style={{ padding: '1.5rem' }}>
-              <h3 style={{ margin: '0 0 1.25rem 0', fontSize: '1.3rem', fontWeight: 700 }}>New Communication</h3>
-              <form onSubmit={e => {
-                e.preventDefault();
-                const form = e.target as HTMLFormElement;
-                const subject = (form.elements.namedItem('subject') as HTMLInputElement).value;
-                const type = (form.elements.namedItem('type') as HTMLSelectElement).value as any;
-                const description = (form.elements.namedItem('description') as HTMLTextAreaElement).value;
-                if (!subject || !type) return;
-                onSaveCommunication({
-                  id: `comm-${Math.random().toString(36).substring(2, 11)}`,
-                  projectId: activeProject.id,
-                  subject,
-                  type,
-                  description,
-                  creatorId: activeUserId,
-                  createdAt: new Date().toISOString()
-                });
-                form.reset();
-                onAddToast('Communication saved', 'success');
-              }}>
-                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-                  <input name="subject" className="form-input" placeholder="Subject" required style={{ flex: 2 }} />
-                  <select name="type" className="form-select" required style={{ flex: 1 }}>
-                    <option value="">Select Type...</option>
-                    <option value="Teams call">Teams call</option>
-                    <option value="email">Email</option>
-                    <option value="in person meeting">In person meeting</option>
-                  </select>
-                </div>
-                <textarea name="description" className="form-textarea" placeholder="Description" rows={3} style={{ marginBottom: '1rem' }}></textarea>
-                <button type="submit" className="btn btn-primary">Save Communication</button>
-              </form>
-           </div>
+      {activeProjectTab === 'communications' && (() => {
+        const NOTE_TYPES: Record<string, { label: string; color: string; Icon: FC<{ size?: number }> }> = {
+          decision: { label: 'Decision',    color: '#6366f1', Icon: CheckCircle },
+          risk:     { label: 'Risk',         color: '#ef4444', Icon: AlertTriangle },
+          action:   { label: 'Action Item',  color: '#8b5cf6', Icon: Zap },
+          update:   { label: 'Update',       color: '#10b981', Icon: Bell },
+          idea:     { label: 'Idea',         color: '#f59e0b', Icon: Lightbulb }
+        };
 
-           {/* Filters */}
-           <div style={{
-             display: 'flex',
-             gap: '1rem',
-             alignItems: 'center',
-             backgroundColor: 'var(--bg-secondary)',
-             padding: '0.65rem 1rem',
-             borderRadius: 'var(--radius-md)',
-             border: '1px solid var(--border-color)',
-             flexWrap: 'wrap'
-           }}>
-             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filters:</span>
-             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: '180px', flex: '1 1 180px' }}>
-               <span style={{ fontSize: '0.82rem', fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Type:</span>
-               <WinComboBox
-                 className="form-select"
-                 value={commTypeFilter}
-                 onChange={setCommTypeFilter}
-                 options={[
-                   { label: 'All Types', value: 'all' },
-                   { label: 'Teams call', value: 'Teams call' },
-                   { label: 'Email', value: 'email' },
-                   { label: 'In person meeting', value: 'in person meeting' }
-                 ]}
-               />
-             </div>
-             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: '200px', flex: '1 1 200px' }}>
-               <span style={{ fontSize: '0.82rem', fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>By:</span>
-               <WinComboBox
-                 className="form-select"
-                 value={commCreatorFilter}
-                 onChange={setCommCreatorFilter}
-                 options={[
-                   { label: 'All Consultants', value: 'all' },
-                   ...consultants.map(c => ({ label: c.name, value: c.id }))
-                 ]}
-               />
-             </div>
-           </div>
-           
-           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-             {communications
-               .filter(c => c.projectId === activeProject.id)
-               .filter(c => commTypeFilter === 'all' || c.type === commTypeFilter)
-               .filter(c => commCreatorFilter === 'all' || c.creatorId === commCreatorFilter)
-               .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-               .map(c => (
-               <div key={c.id} className="card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', borderLeft: `4px solid var(--primary)` }}>
-                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                   <h4 style={{ margin: 0 }}>{c.subject}</h4>
-                   <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                     <span className="badge badge-secondary">{c.type}</span>
-                     <button className="btn btn-ghost" onClick={() => onDeleteCommunication(c.id)} style={{ color: 'var(--danger)', padding: '0.25rem' }}><Trash2 size={14}/></button>
-                   </div>
-                 </div>
-                 <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
-                   By {consultants.find(cons => cons.id === c.creatorId)?.name} on {formatDateTimeFriendly(c.createdAt)}
-                 </span>
-                 <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{c.description}</p>
-               </div>
-             ))}
-             {communications.filter(c => c.projectId === activeProject.id).length === 0 && (
-               <p style={{ textAlign: 'center', color: 'var(--text-tertiary)' }}>No communications found.</p>
-             )}
-           </div>
-        </div>
-      )}
+        const projectNotes = communications
+          .filter(c => c.projectId === activeProject.id)
+          .filter(c => noteTypeFilter === 'all' || (c.noteType || 'update') === noteTypeFilter)
+          .filter(c => !notesPinFilter || c.pinned)
+          .filter(c => !noteSearch || c.subject.toLowerCase().includes(noteSearch.toLowerCase()) || c.description.toLowerCase().includes(noteSearch.toLowerCase()))
+          .sort((a, b) => {
+            if (a.pinned && !b.pinned) return -1;
+            if (!a.pinned && b.pinned) return 1;
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          });
+
+        const handleSaveNote = () => {
+          if (!noteForm.subject.trim()) return;
+          onSaveCommunication({
+            id: `note-${Math.random().toString(36).substring(2, 11)}`,
+            projectId: activeProject.id,
+            subject: noteForm.subject,
+            type: 'Teams call',
+            description: noteForm.description,
+            creatorId: activeUserId,
+            createdAt: new Date().toISOString(),
+            noteType: noteForm.noteType,
+            pinned: false
+          });
+          setNoteForm({ subject: '', description: '', noteType: 'update' });
+          onAddToast('Note saved', 'success');
+        };
+
+        const handleTogglePin = (note: Communication) => {
+          onSaveCommunication({ ...note, pinned: !note.pinned });
+        };
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {/* Capture bar */}
+            <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                {Object.entries(NOTE_TYPES).map(([key, nt]) => {
+                  const NtIcon = nt.Icon;
+                  const isSel = noteForm.noteType === key;
+                  return (
+                    <button key={key} onClick={() => setNoteForm(f => ({ ...f, noteType: key as Communication['noteType'] }))} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.4rem 0.85rem', borderRadius: '20px', border: `2px solid ${isSel ? nt.color : 'var(--border-color)'}`, backgroundColor: isSel ? `${nt.color}18` : 'transparent', color: isSel ? nt.color : 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.83rem', fontWeight: 600, transition: 'all 0.15s ease' }}>
+                      <NtIcon size={13} />
+                      {nt.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <input className="form-input" placeholder="Note title…" value={noteForm.subject} onChange={e => setNoteForm(f => ({ ...f, subject: e.target.value }))} style={{ fontWeight: 600, fontSize: '0.95rem' }} />
+              <textarea className="form-textarea" placeholder="Add details, context, or next steps…" rows={3} value={noteForm.description} onChange={e => setNoteForm(f => ({ ...f, description: e.target.value }))} style={{ resize: 'vertical' }} />
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button className="btn btn-primary" onClick={handleSaveNote} disabled={!noteForm.subject.trim()}>
+                  <Plus size={15} /> Add Note
+                </button>
+              </div>
+            </div>
+
+            {/* Toolbar */}
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', flex: '1 1 200px', minWidth: '160px' }}>
+                <Search size={14} style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)', pointerEvents: 'none' }} />
+                <input className="form-input" placeholder="Search notes…" value={noteSearch} onChange={e => setNoteSearch(e.target.value)} style={{ paddingLeft: '2.1rem', fontSize: '0.88rem' }} />
+              </div>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                {[{ value: 'all', label: 'All' }, ...Object.entries(NOTE_TYPES).map(([k, v]) => ({ value: k, label: v.label }))].map(opt => (
+                  <button key={opt.value} onClick={() => setNoteTypeFilter(opt.value)} style={{ padding: '0.35rem 0.75rem', borderRadius: '20px', border: `1.5px solid ${noteTypeFilter === opt.value ? 'var(--primary)' : 'var(--border-color)'}`, backgroundColor: noteTypeFilter === opt.value ? 'var(--primary-light)' : 'transparent', color: noteTypeFilter === opt.value ? 'var(--primary)' : 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>
+                    {opt.label}
+                  </button>
+                ))}
+                <button onClick={() => setNotesPinFilter(f => !f)} title="Pinned only" style={{ padding: '0.35rem 0.75rem', borderRadius: '20px', border: `1.5px solid ${notesPinFilter ? '#f59e0b' : 'var(--border-color)'}`, backgroundColor: notesPinFilter ? '#f59e0b18' : 'transparent', color: notesPinFilter ? '#f59e0b' : 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                  <Pin size={12} /> Pinned
+                </button>
+              </div>
+            </div>
+
+            {/* Notes grid */}
+            {projectNotes.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-tertiary)' }}>
+                <Lightbulb size={36} style={{ marginBottom: '0.75rem', opacity: 0.4 }} />
+                <p style={{ margin: 0 }}>No notes yet. Capture a decision, risk, or idea above.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+                {projectNotes.map(note => {
+                  const nt = NOTE_TYPES[note.noteType || 'update'] || NOTE_TYPES.update;
+                  const NtIcon = nt.Icon;
+                  const author = consultants.find(c => c.id === note.creatorId);
+                  return (
+                    <div key={note.id} className="card" style={{ padding: '1.1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem', borderLeft: `4px solid ${nt.color}`, position: 'relative' }}>
+                      {note.pinned && (
+                        <div style={{ position: 'absolute', top: '0.6rem', right: '2.2rem', color: '#f59e0b' }}>
+                          <Pin size={13} />
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', fontWeight: 700, color: nt.color, textTransform: 'uppercase', letterSpacing: '0.04em', backgroundColor: `${nt.color}15`, padding: '0.2rem 0.5rem', borderRadius: '20px', flexShrink: 0 }}>
+                          <NtIcon size={11} /> {nt.label}
+                        </span>
+                        <div style={{ display: 'flex', gap: '0.2rem', flexShrink: 0, marginLeft: 'auto' }}>
+                          <button onClick={() => handleTogglePin(note)} title={note.pinned ? 'Unpin' : 'Pin'} style={{ background: 'none', border: 'none', cursor: 'pointer', color: note.pinned ? '#f59e0b' : 'var(--text-tertiary)', padding: '2px', display: 'flex', alignItems: 'center' }}>
+                            <Pin size={13} />
+                          </button>
+                          <button onClick={() => onDeleteCommunication(note.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: '2px', display: 'flex', alignItems: 'center' }}>
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                      <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3 }}>{note.subject}</h4>
+                      {note.description && (
+                        <p style={{ margin: 0, fontSize: '0.87rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{note.description}</p>
+                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: 'auto', paddingTop: '0.4rem', borderTop: '1px solid var(--border-color)' }}>
+                        {author && (
+                          <div style={{ width: '22px', height: '22px', borderRadius: '50%', backgroundColor: author.avatarColor || 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700, color: 'white', flexShrink: 0 }}>
+                            {author.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>
+                          {author?.name || 'Unknown'} · {formatDateTimeFriendly(note.createdAt)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       </div>
       ) : (

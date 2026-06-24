@@ -30,6 +30,16 @@ export interface Project {
   ragCosts?: string;
   ragBenefits?: string;
   ragOverall?: string;
+  ragScopeReason?: string;
+  ragScheduleReason?: string;
+  ragCostsReason?: string;
+  ragBenefitsReason?: string;
+  ragOverallReason?: string;
+  ragScopeRisks?: { id: string; text: string; done: boolean }[];
+  ragScheduleRisks?: { id: string; text: string; done: boolean }[];
+  ragCostsRisks?: { id: string; text: string; done: boolean }[];
+  ragBenefitsRisks?: { id: string; text: string; done: boolean }[];
+  ragOverallRisks?: { id: string; text: string; done: boolean }[];
   status: 'new' | 'in progress' | 'on hold' | 'completed' | 'cancelled';
   phase?: string | null; // Human-readable delivery phase (e.g. 'Discovery', 'Implementation', 'Hypercare')
   createdAt: string;
@@ -46,6 +56,8 @@ export interface Communication {
   description: string;
   creatorId: string | null;
   createdAt: string;
+  noteType?: 'decision' | 'risk' | 'action' | 'update' | 'idea';
+  pinned?: boolean;
 }
 
 export interface Task {

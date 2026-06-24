@@ -105,6 +105,17 @@ function toYMD(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/**
+ * Estimate how many wrapped lines a string needs in a column of the given
+ * character capacity. Honours explicit newlines and wraps long lines.
+ */
+function estimateWrappedLines(text: string, charsPerLine: number): number {
+  if (!text) return 1;
+  return text
+    .split(/\r?\n/)
+    .reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / charsPerLine)), 0);
+}
+
 // ---------------------------------------------------------------------------
 // Shared style helpers
 // ---------------------------------------------------------------------------
@@ -252,7 +263,11 @@ function addTaskSheet(
   flatList.forEach(({ task, depth, wbs, isParent }, idx) => {
     const rowNum = idx + 4;
     const row = sheet.getRow(rowNum);
-    row.height = isParent ? 21 : 18;
+    // Height must grow to fit the wrapped Description (col K, width 42 ≈ 38 chars/line),
+    // otherwise multi-line text is clipped and overlaps the next row.
+    const descLines = estimateWrappedLines(task.description || '', 38);
+    const baseHeight = isParent ? 21 : 18;
+    row.height = Math.min(200, Math.max(baseHeight, descLines * 13.5 + 4));
 
     const assignee = consultants.find(c => c.id === task.assignedConsultantId);
     const isEven = idx % 2 === 0;
@@ -286,6 +301,9 @@ function addTaskSheet(
         wrap: ci === 10,
       });
     });
+
+    // A wrapped Description reads better top-aligned than vertically centred.
+    row.getCell(11).alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
 
     // Accent left border on parent rows
     if (isParent) {
@@ -504,6 +522,8 @@ function addGanttSheet(
     const progFillCount = Math.round((prog / 100) * barProgCols);
 
     let barColIdx = 0;
+    let firstBarCol = -1;
+    let lastBarCol = -1;
     dayCols.forEach((col, i) => {
       const excelCol = LEFT_COLS + 1 + i;
       const cell = row.getCell(excelCol);
@@ -513,20 +533,12 @@ function addGanttSheet(
                        col.dateStr <= task.plannedEndDate);
 
       if (inBar) {
-        const isProgFill = barColIdx < progFillCount;
-        cell.fill = solidFill(isProgFill ? barArgb : barLightArgb);
-        barColIdx++;
+        if (firstBarCol === -1) firstBarCol = excelCol;
+        lastBarCol = excelCol;
 
-        // Write task name label in the first bar cell
-        if (barColIdx === 1 && !isParent) {
-          cell.value = task.name;
-          cell.font = {
-            bold: false, size: 7, color: { argb: 'FFFFFFFF' }, name: 'Segoe UI',
-          };
-        }
-        if (isParent) {
-          cell.fill = solidFill(barArgb);
-        }
+        const isProgFill = barColIdx < progFillCount;
+        cell.fill = solidFill(isParent ? barArgb : (isProgFill ? barArgb : barLightArgb));
+        barColIdx++;
 
         cell.border = {
           top: { style: 'hair', color: { argb: barArgb } },
@@ -541,6 +553,25 @@ function addGanttSheet(
         };
       }
     });
+
+    // Place the task-name label *beside* the bar (on the light timeline area) with
+    // dark text, so it stays readable regardless of the bar's fill colour. Bars are
+    // only ~2.4 columns wide, so a label written inside them is unreadable and clipped.
+    if (firstBarCol !== -1) {
+      const rightCol = lastBarCol + 1;
+      if (rightCol <= TOTAL_COLS) {
+        const lc = row.getCell(rightCol);
+        lc.value = task.name;
+        lc.font = { bold: isParent, size: 8, color: { argb: textArgb }, name: 'Segoe UI' };
+        lc.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+      } else if (firstBarCol - 1 > LEFT_COLS) {
+        // Bar runs to the right edge — drop the label to its left instead.
+        const lc = row.getCell(firstBarCol - 1);
+        lc.value = task.name;
+        lc.font = { bold: isParent, size: 8, color: { argb: textArgb }, name: 'Segoe UI' };
+        lc.alignment = { vertical: 'middle', horizontal: 'right', indent: 1 };
+      }
+    }
   });
 
   // Freeze left cols + top 3 rows
