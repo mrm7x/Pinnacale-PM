@@ -1872,7 +1872,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
   grid-template-columns:
     minmax(260px, 2.4fr) minmax(130px, 0.9fr) 80px 110px 110px 62px minmax(110px, 0.9fr);
   align-items: start;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 /* Keep cells visually centred within their column on tall rows */
 .tv2-cell { padding-top: 0.35rem; }
@@ -1945,20 +1945,19 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
 }
 .tv2-name-inner {
   display: flex;
-  align-items: flex-start;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 0.3rem;
   flex: 1;
   min-width: 0;
   position: relative;
   z-index: 1;
-  flex-wrap: wrap;
+  white-space: nowrap;
 }
 .tv2-grip {
   color: var(--text-tertiary);
   opacity: 0;
   cursor: grab;
   flex-shrink: 0;
-  margin-top: 2px;
   transition: opacity var(--transition-fast);
 }
 .tv2-row:hover .tv2-grip { opacity: 0.7; }
@@ -1980,13 +1979,15 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
   color: var(--text-tertiary);
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
+  margin-right: 0.5rem;
 }
 .tv2-name-text {
   font-size: 0.92em;
   font-weight: 500;
   color: var(--text-secondary);
-  flex: 1;
-  min-width: 120px;
+  flex: 1 1 0;
+  min-width: 80px;
+  white-space: normal;
   word-break: break-word;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1997,18 +1998,19 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
 .tv2-tags {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.2rem;
   flex-shrink: 0;
-  flex-wrap: wrap;
-  margin-top: 1px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  margin-top: 0;
 }
 .tv2-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.2rem;
+  gap: 0.15rem;
   font-size: 0.68em;
   font-weight: 600;
-  padding: 0.05rem 0.4rem;
+  padding: 0.05rem 0.32rem;
   border-radius: 4px;
   white-space: nowrap;
 }
@@ -2020,6 +2022,22 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
 .tv2-chip-owner-customer { background-color: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
 :root.dark .tv2-chip-pink { background-color: #3a1a2a; color: #f9a8d4; border-color: #6b2c47; }
 :root.dark .tv2-chip-owner-customer { background-color: #1e293b; color: #93c5fd; border-color: #334155; }
+
+/* The name column is the flexible track, so its inline size is the true
+   signal for "the list is too narrow." The description is the most important
+   content, so as the column shrinks we progressively drop the lower-priority
+   chips — never letting them wrap to a new line and never letting them starve
+   the description of room (owner first, then deps/blocks/overdue). */
+.tv2-cell-name { container-type: inline-size; }
+@container (max-width: 560px) {
+  .tv2-chip-owner,
+  .tv2-chip-owner-customer { display: none; }
+}
+@container (max-width: 440px) {
+  .tv2-chip-dep,
+  .tv2-chip-blocks,
+  .tv2-chip-overdue { display: none; }
+}
 
 /* Generic cell buttons (assignee / duration / status) */
 .tv2-cell { display: flex; align-items: center; min-width: 0; }

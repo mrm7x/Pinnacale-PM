@@ -69,13 +69,13 @@ interface ColumnDef {
 }
 
 const COLUMN_DEFS: ColumnDef[] = [
-  { id: 'name',     label: 'Task Name', size: 'minmax(260px, 2.4fr)',  toggleable: false },
-  { id: 'assignee', label: 'Assignee',  size: 'minmax(130px, 0.9fr)',  toggleable: true },
-  { id: 'duration', label: 'Dur.',      size: '80px',                   toggleable: true },
-  { id: 'start',    label: 'Start',     size: '110px',                  toggleable: true },
-  { id: 'due',      label: 'Due',       size: '110px',                  toggleable: true },
-  { id: 'progress', label: 'Progress',  size: '62px',                   toggleable: true },
-  { id: 'status',   label: 'Status',    size: 'minmax(110px, 0.9fr)',   toggleable: true },
+  { id: 'name',     label: 'Task Name', size: 'minmax(260px, 1fr)',     toggleable: false },
+  { id: 'assignee', label: 'Assignee',  size: 'minmax(92px, 0.5fr)',    toggleable: true },
+  { id: 'duration', label: 'Dur.',      size: '58px',                   toggleable: true },
+  { id: 'start',    label: 'Start',     size: '100px',                  toggleable: true },
+  { id: 'due',      label: 'Due',       size: '100px',                  toggleable: true },
+  { id: 'progress', label: 'Progress',  size: '56px',                   toggleable: true },
+  { id: 'status',   label: 'Status',    size: 'minmax(100px, 0.6fr)',   toggleable: true },
 ];
 
 const DEFAULT_COLUMNS: TaskColumnId[] = ['name', 'assignee', 'duration', 'start', 'due', 'progress', 'status'];
