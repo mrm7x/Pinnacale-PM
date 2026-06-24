@@ -1,10 +1,13 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Project, Task, Consultant } from '../types';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import type {
+  Project, Task, Consultant, TaskColumnId, TaskView,
+  StatusFilter, OwnerFilter, TaskViewMode, KanbanGroupMode
+} from '../types';
 import { canCreateTask, canEditTask, canDeleteTask } from '../utils/permissions';
 import {
   Plus, ChevronDown, ChevronRight, X, Clock, Calendar, Trash2,
   Link2, AlertTriangle, ListChecks, Filter, GripVertical, CornerDownRight,
-  Columns3, List
+  Columns3, List, Minus, Save, Copy
 } from 'lucide-react';
 import { WinComboBox } from './winui/WinComboBox';
 import { WinDatePicker } from './winui/WinDatePicker';
@@ -42,11 +45,6 @@ interface TaskListV2Props {
   onAddToast: (msg: string, type: 'success' | 'error' | 'warning' | 'info') => void;
 }
 
-type StatusFilter = 'all' | 'not_started' | 'in_progress' | 'on_hold' | 'completed';
-type OwnerFilter = 'all' | 'pinnacle' | 'customer' | 'shared';
-type TaskViewMode = 'list' | 'kanban';
-type KanbanGroupMode = 'status' | 'parent' | 'assignee';
-
 type TaskOwner = 'Pinnacle' | 'Customer' | 'Pinnacle/Customer';
 
 interface KanbanColumn {
@@ -54,6 +52,50 @@ interface KanbanColumn {
   label: string;
   tasks: Task[];
 }
+
+// ---------------------------------------------------------------------------
+// Column registry — the single source of truth for table columns.
+// Each entry carries its grid track size + header label. Row rendering maps
+// over the visible subset and switches on the id to emit the matching cell.
+// `name` is the only non-removable column.
+// ---------------------------------------------------------------------------
+interface ColumnDef {
+  id: TaskColumnId;
+  label: string;
+  /** CSS grid track for this column. */
+  size: string;
+  /** Whether the user can hide this column (name is always visible). */
+  toggleable: boolean;
+}
+
+const COLUMN_DEFS: ColumnDef[] = [
+  { id: 'name',     label: 'Task Name', size: 'minmax(260px, 2.4fr)',  toggleable: false },
+  { id: 'assignee', label: 'Assignee',  size: 'minmax(130px, 0.9fr)',  toggleable: true },
+  { id: 'duration', label: 'Dur.',      size: '80px',                   toggleable: true },
+  { id: 'start',    label: 'Start',     size: '110px',                  toggleable: true },
+  { id: 'due',      label: 'Due',       size: '110px',                  toggleable: true },
+  { id: 'progress', label: 'Progress',  size: '62px',                   toggleable: true },
+  { id: 'status',   label: 'Status',    size: 'minmax(110px, 0.9fr)',   toggleable: true },
+];
+
+const DEFAULT_COLUMNS: TaskColumnId[] = ['name', 'assignee', 'duration', 'start', 'due', 'progress', 'status'];
+
+/** Default "Default View" seeded on first load for each project/user. */
+const BUILTIN_VIEW_ID = '__default__';
+const makeDefaultView = (): TaskView => ({
+  id: BUILTIN_VIEW_ID,
+  name: 'Default View',
+  columns: [...DEFAULT_COLUMNS],
+  hideCompleted: false,
+  ownerFilter: 'all',
+  assigneeFilter: 'all',
+  statusFilter: 'all',
+  onlyMine: false,
+  viewMode: 'list',
+  kanbanGroupMode: 'status',
+  fontScale: 1,
+  isBuiltIn: true,
+});
 
 const STATUS_OPTIONS: { label: string; value: Task['status'] }[] = [
   { label: 'Not Started', value: 'not_started' },
@@ -155,6 +197,19 @@ export default function TaskListV2({
   const [viewMode, setViewMode] = useState<TaskViewMode>('list');
   const [kanbanGroupMode, setKanbanGroupMode] = useState<KanbanGroupMode>('status');
 
+  // ---- Saved views (per project, per user) + columns + font scale ---------
+  const viewsKey = `pinnacle_user_${activeUserId}_project_${project.id}_task_views`;
+
+  const [views, setViews] = useState<TaskView[]>(() => loadViews(viewsKey));
+  const [activeViewId, setActiveViewId] = useState<string>(() => loadViews(viewsKey)[0]?.id ?? BUILTIN_VIEW_ID);
+  const [visibleColumns, setVisibleColumns] = useState<TaskColumnId[]>(() => [...DEFAULT_COLUMNS]);
+  const [fontScale, setFontScale] = useState<number>(1);
+  const [showColumnsPanel, setShowColumnsPanel] = useState(false);
+  const [showSaveAs, setShowSaveAs] = useState(false);
+  const [saveAsName, setSaveAsName] = useState('');
+  const columnsBtnRef = useRef<HTMLButtonElement>(null);
+  const columnsPanelRef = useRef<HTMLDivElement>(null);
+
   // Drag-and-drop
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ type: 'before' | 'after' | 'into'; id: string } | null>(null);
@@ -170,7 +225,14 @@ export default function TaskListV2({
     setDropTarget(null);
     setKanbanDragId(null);
     setOnlyMine(false);
-  }, [project.id]);
+    setShowColumnsPanel(false);
+    setShowSaveAs(false);
+    // Reload saved views for the new project.
+    const nextViews = loadViews(viewsKey);
+    setViews(nextViews);
+    const first = nextViews[0] ?? makeDefaultView();
+    applyView(first);
+  }, [project.id, activeUserId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close modal on Escape.
   useEffect(() => {
@@ -188,6 +250,133 @@ export default function TaskListV2({
   const openCreate = (parentId: string | null = null) => {
     setCreateParentId(parentId ?? '');
     setModalTaskId(null);
+  };
+
+  // ---- Saved views: persistence + management --------------------------------
+  // Persist views to localStorage whenever the list changes.
+  useEffect(() => {
+    try {
+      localStorage.setItem(viewsKey, JSON.stringify(views));
+    } catch { /* quota / private mode — non-fatal */ }
+  }, [views, viewsKey]);
+
+  // Close the columns popover on outside click / Escape.
+  useEffect(() => {
+    if (!showColumnsPanel) return;
+    const onDown = (e: MouseEvent) => {
+      if (columnsPanelRef.current && !columnsPanelRef.current.contains(e.target as Node) &&
+          columnsBtnRef.current && !columnsBtnRef.current.contains(e.target as Node)) {
+        setShowColumnsPanel(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowColumnsPanel(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [showColumnsPanel]);
+
+  /** Load a view's columns/filters/font into the live working state. */
+  const applyView = useCallback((view: TaskView) => {
+    setActiveViewId(view.id);
+    setVisibleColumns(sanitizeColumns(view.columns));
+    setHideCompleted(view.hideCompleted);
+    setOwnerFilter(view.ownerFilter);
+    setAssigneeFilter(view.assigneeFilter);
+    setStatusFilter(view.statusFilter);
+    setOnlyMine(view.onlyMine);
+    setViewMode(view.viewMode);
+    setKanbanGroupMode(view.kanbanGroupMode);
+    setFontScale(view.fontScale);
+  }, []);
+
+  /** The active saved view object (or the built-in default). */
+  const activeView = views.find(v => v.id === activeViewId) ?? views[0] ?? makeDefaultView();
+
+  /** Snapshot of the current live state as a TaskView (without persisting). */
+  const snapshotLive = (id: string, name: string, isBuiltIn = false): TaskView => ({
+    id, name, isBuiltIn,
+    columns: visibleColumns,
+    hideCompleted, ownerFilter, assigneeFilter, statusFilter,
+    onlyMine, viewMode, kanbanGroupMode, fontScale,
+  });
+
+  /** Does the live state differ from the active saved view? */
+  const isDirty = useMemo(() => {
+    if (!activeView) return false;
+    const a = activeView;
+    return (
+      !arrayEqual(a.columns, visibleColumns) ||
+      a.hideCompleted !== hideCompleted ||
+      a.ownerFilter !== ownerFilter ||
+      a.assigneeFilter !== assigneeFilter ||
+      a.statusFilter !== statusFilter ||
+      a.onlyMine !== onlyMine ||
+      a.viewMode !== viewMode ||
+      a.kanbanGroupMode !== kanbanGroupMode ||
+      a.fontScale !== fontScale
+    );
+  }, [activeView, visibleColumns, hideCompleted, ownerFilter, assigneeFilter, statusFilter, onlyMine, viewMode, kanbanGroupMode, fontScale]);
+
+  const saveView = () => {
+    if (!activeView) return;
+    setViews(prev => prev.map(v => v.id === activeView.id ? snapshotLive(v.id, v.name, v.isBuiltIn) : v));
+    onAddToast(`View "${activeView.name}" updated.`, 'success');
+  };
+
+  const saveAsNewView = () => {
+    const name = saveAsName.trim();
+    if (!name) return;
+    const id = `view_${Date.now()}`;
+    const created = snapshotLive(id, name, false);
+    setViews(prev => [...prev, created]);
+    setActiveViewId(id);
+    setShowSaveAs(false);
+    setSaveAsName('');
+    onAddToast(`View "${name}" created.`, 'success');
+  };
+
+  const deleteView = (view: TaskView) => {
+    if (view.isBuiltIn) return;
+    if (!confirm(`Delete view "${view.name}"?`)) return;
+    const next = views.filter(v => v.id !== view.id);
+    setViews(next);
+    // If we deleted the active view, switch to the first remaining (built-in).
+    if (view.id === activeViewId) {
+      applyView(next[0] ?? makeDefaultView());
+    }
+    onAddToast(`View "${view.name}" deleted.`, 'info');
+  };
+
+  // ---- Column show/hide helpers --------------------------------------------
+  const toggleColumn = (id: TaskColumnId) => {
+    setVisibleColumns(prev => {
+      const def = COLUMN_DEFS.find(c => c.id === id);
+      if (def && !def.toggleable) return prev; // name is locked
+      if (prev.includes(id)) {
+        // Don't allow hiding the last remaining column.
+        if (prev.length <= 1) return prev;
+        return prev.filter(c => c !== id);
+      }
+      // Re-insert in natural registry order so columns stay left-to-right sane.
+      const next = [...prev, id];
+      return COLUMN_DEFS.map(c => c.id).filter(c => next.includes(c));
+    });
+  };
+
+  // Grid template string derived from the visible columns.
+  const gridTemplateColumns = useMemo(
+    () => visibleColumns
+      .map(id => COLUMN_DEFS.find(c => c.id === id)?.size)
+      .filter(Boolean)
+      .join(' '),
+    [visibleColumns]
+  );
+
+  const adjustFont = (delta: number) => {
+    setFontScale(prev => {
+      const next = Math.round((prev + delta) * 100) / 100;
+      return Math.max(0.8, Math.min(1.5, next));
+    });
   };
 
   // ---- "My Tasks" worklist --------------------------------------------------
@@ -516,153 +705,167 @@ export default function TaskListV2({
               if (e.currentTarget === e.target) setDropTarget({ type: 'into', id: task.id });
             }}
             onDrop={(e) => { e.preventDefault(); applyDrop(); }}
-            style={{ '--tv2-depth': depth } as React.CSSProperties}
+            style={{ '--tv2-depth': depth, gridTemplateColumns } as React.CSSProperties}
           >
-            {/* Left: guide lines + grip + checkbox + expand + name */}
-            <div className="tv2-cell tv2-cell-name" onClick={() => setModalTaskId(task.id)}>
-              <div className="tv2-guides" aria-hidden>
-                {Array.from({ length: depth }).map((_, i) => (
-                  <span key={i} className="tv2-guide-col">
-                    {i < depth - 1 && !depthIsLast[i] && <span className="tv2-guide-v" />}
-                    {i === depth - 1 && <>
-                      <span className={`tv2-guide-v ${isLastSibling ? 'tv2-half' : ''}`} />
-                      <span className="tv2-guide-h" />
-                    </>}
-                  </span>
-                ))}
-              </div>
-              <div className="tv2-name-inner" style={{ paddingLeft: `${depth * 20}px` }}>
-                {canEditTask(activeRole) && (
-                  <span className="tv2-grip" title="Drag to reorder or nest"><GripVertical size={14} /></span>
-                )}
-                {canEditTask(activeRole) && (
-                  <input type="checkbox" className="win-checkbox tv2-check"
-                    checked={isSelected}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => setSelectedIds(prev => e.target.checked ? [...prev, task.id] : prev.filter(id => id !== task.id))}
-                  />
-                )}
-                {taskIsParent ? (
-                  <button type="button" className="tv2-toggle" onClick={(e) => { e.stopPropagation(); toggleExpand(task.id); }}>
-                    {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                  </button>
-                ) : (
-                  <span className="tv2-toggle-spacer" />
-                )}
-                <span className="tv2-wbs">{taskNumber}</span>
-                <span className={`tv2-name-text ${taskIsParent ? 'tv2-name-parent' : ''}`}>{task.name}</span>
-                <span className="tv2-tags">
-                  {task.pinkNumber && <span className="tv2-chip tv2-chip-pink" title="Pink Number">Pink #{task.pinkNumber}</span>}
-                  {!taskIsParent && (
-                    <span className={`tv2-chip ${isCustomerOwned ? 'tv2-chip-owner-customer' : 'tv2-chip-owner'}`} title="Task owner">
-                      {isCustomerOwned ? 'Customer' : owner === 'Pinnacle/Customer' ? 'Pinn/Cust' : 'Pinnacle'}
-                    </span>
-                  )}
-                  {durationDerived && <span className="tv2-chip tv2-chip-dep" title="Duration derived from due date">Due→</span>}
-                  {isOverdue && <span className="tv2-chip tv2-chip-overdue" title={`Was due ${task.dueDate}`}><AlertTriangle size={11} /> Overdue</span>}
-                  {blockedBy.length > 0 && <span className="tv2-chip tv2-chip-dep" title={`Depends on: ${blockedBy.map(b => b.name).join(', ')}`}><Link2 size={11} /> {blockedBy.length}</span>}
-                  {blockingCount > 0 && <span className="tv2-chip tv2-chip-blocks" title={`Blocks ${blockingCount} other task(s)`}>⛓ {blockingCount}</span>}
-                </span>
-              </div>
-            </div>
-
-            {/* Assignee */}
-            <div className="tv2-cell tv2-cell-assignee" data-label="Assignee">
-              {inlineEdit?.id === task.id && inlineEdit.field === 'assignee' ? (
-                <div className="tv2-inline-edit" onClick={(e) => e.stopPropagation()}>
-                  <WinComboBox
-                    value={inlineEdit.value}
-                    menuPosition="top"
-                    onChange={(val) => commitInlineSelect(task.id, 'assignee', val)}
-                    options={[{ label: 'Unassigned', value: '' }, ...consultants.map(c => ({ label: c.name, value: c.id }))]}
-                  />
-                </div>
-              ) : (
-                <button type="button" className="tv2-cell-btn"
-                  disabled={!canEditTask(activeRole)}
-                  onClick={(e) => { e.stopPropagation(); setInlineEdit({ id: task.id, field: 'assignee', value: task.assignedConsultantId || '' }); }}
-                >
-                  {assigned ? (
-                    <>
-                      <span className="tv2-avatar" style={{ backgroundColor: assigned.avatarColor || '#1e3449' }}>
-                        {initials(assigned.name)}
+            {visibleColumns.map(colId => {
+              switch (colId) {
+                case 'name':
+                  return (
+                    <div key="name" className="tv2-cell tv2-cell-name" onClick={() => setModalTaskId(task.id)}>
+                      <div className="tv2-guides" aria-hidden>
+                        {Array.from({ length: depth }).map((_, i) => (
+                          <span key={i} className="tv2-guide-col">
+                            {i < depth - 1 && !depthIsLast[i] && <span className="tv2-guide-v" />}
+                            {i === depth - 1 && <>
+                              <span className={`tv2-guide-v ${isLastSibling ? 'tv2-half' : ''}`} />
+                              <span className="tv2-guide-h" />
+                            </>}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="tv2-name-inner" style={{ paddingLeft: `${depth * 20}px` }}>
+                        {canEditTask(activeRole) && (
+                          <span className="tv2-grip" title="Drag to reorder or nest"><GripVertical size={14} /></span>
+                        )}
+                        {canEditTask(activeRole) && (
+                          <input type="checkbox" className="win-checkbox tv2-check"
+                            checked={isSelected}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => setSelectedIds(prev => e.target.checked ? [...prev, task.id] : prev.filter(id => id !== task.id))}
+                          />
+                        )}
+                        {taskIsParent ? (
+                          <button type="button" className="tv2-toggle" onClick={(e) => { e.stopPropagation(); toggleExpand(task.id); }}>
+                            {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                          </button>
+                        ) : (
+                          <span className="tv2-toggle-spacer" />
+                        )}
+                        <span className="tv2-wbs">{taskNumber}</span>
+                        <span className={`tv2-name-text ${taskIsParent ? 'tv2-name-parent' : ''}`}>{task.name}</span>
+                        <span className="tv2-tags">
+                          {task.pinkNumber && <span className="tv2-chip tv2-chip-pink" title="Pink Number">Pink #{task.pinkNumber}</span>}
+                          {!taskIsParent && (
+                            <span className={`tv2-chip ${isCustomerOwned ? 'tv2-chip-owner-customer' : 'tv2-chip-owner'}`} title="Task owner">
+                              {isCustomerOwned ? 'Customer' : owner === 'Pinnacle/Customer' ? 'Pinn/Cust' : 'Pinnacle'}
+                            </span>
+                          )}
+                          {durationDerived && <span className="tv2-chip tv2-chip-dep" title="Duration derived from due date">Due→</span>}
+                          {isOverdue && <span className="tv2-chip tv2-chip-overdue" title={`Was due ${task.dueDate}`}><AlertTriangle size={11} /> Overdue</span>}
+                          {blockedBy.length > 0 && <span className="tv2-chip tv2-chip-dep" title={`Depends on: ${blockedBy.map(b => b.name).join(', ')}`}><Link2 size={11} /> {blockedBy.length}</span>}
+                          {blockingCount > 0 && <span className="tv2-chip tv2-chip-blocks" title={`Blocks ${blockingCount} other task(s)`}>⛓ {blockingCount}</span>}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                case 'assignee':
+                  return (
+                    <div key="assignee" className="tv2-cell tv2-cell-assignee" data-label="Assignee">
+                      {inlineEdit?.id === task.id && inlineEdit.field === 'assignee' ? (
+                        <div className="tv2-inline-edit" onClick={(e) => e.stopPropagation()}>
+                          <WinComboBox
+                            value={inlineEdit.value}
+                            menuPosition="top"
+                            onChange={(val) => commitInlineSelect(task.id, 'assignee', val)}
+                            options={[{ label: 'Unassigned', value: '' }, ...consultants.map(c => ({ label: c.name, value: c.id }))]}
+                          />
+                        </div>
+                      ) : (
+                        <button type="button" className="tv2-cell-btn"
+                          disabled={!canEditTask(activeRole)}
+                          onClick={(e) => { e.stopPropagation(); setInlineEdit({ id: task.id, field: 'assignee', value: task.assignedConsultantId || '' }); }}
+                        >
+                          {assigned ? (
+                            <>
+                              <span className="tv2-avatar" style={{ backgroundColor: assigned.avatarColor || '#1e3449' }}>
+                                {initials(assigned.name)}
+                              </span>
+                              <span className="tv2-assignee-name">{assigned.name.split(' ')[0]}</span>
+                            </>
+                          ) : (
+                            <span className="tv2-unassigned">Unassigned</span>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  );
+                case 'duration':
+                  return (
+                    <div key="duration" className="tv2-cell tv2-cell-duration" data-label="Duration">
+                      {inlineEdit?.id === task.id && inlineEdit.field === 'duration' ? (
+                        <div className="tv2-inline-edit" onClick={(e) => e.stopPropagation()}>
+                          <input type="number" step="0.5" min="0" autoFocus className="form-input tv2-duration-input"
+                            value={inlineEdit.value}
+                            onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
+                            onBlur={commitInline}
+                            onKeyDown={(e) => { if (e.key === 'Enter') commitInline(); if (e.key === 'Escape') setInlineEdit(null); }}
+                          />
+                        </div>
+                      ) : (
+                        <button type="button" className="tv2-cell-btn tv2-cell-btn-center"
+                          disabled={!canEditTask(activeRole) || taskIsParent}
+                          title={taskIsParent ? 'Parent duration is computed from children' : 'Edit duration (0 = derive from due date)'}
+                          onClick={(e) => { e.stopPropagation(); if (!taskIsParent) setInlineEdit({ id: task.id, field: 'duration', value: String(task.durationDays) }); }}
+                        >
+                          <Clock size={12} /> {durationDerived ? 'Due→' : `${task.durationDays}d`}
+                        </button>
+                      )}
+                    </div>
+                  );
+                case 'start':
+                  return (
+                    <div key="start" className="tv2-cell tv2-cell-start" data-label="Start">
+                      <span className="tv2-readonly">
+                        <Calendar size={12} />
+                        {task.plannedStartDate ? formatDateFriendly(task.plannedStartDate) : <span className="tv2-dash">—</span>}
                       </span>
-                      <span className="tv2-assignee-name">{assigned.name.split(' ')[0]}</span>
-                    </>
-                  ) : (
-                    <span className="tv2-unassigned">Unassigned</span>
-                  )}
-                </button>
-              )}
-            </div>
-
-            {/* Duration */}
-            <div className="tv2-cell tv2-cell-duration" data-label="Duration">
-              {inlineEdit?.id === task.id && inlineEdit.field === 'duration' ? (
-                <div className="tv2-inline-edit" onClick={(e) => e.stopPropagation()}>
-                  <input type="number" step="0.5" min="0" autoFocus className="form-input tv2-duration-input"
-                    value={inlineEdit.value}
-                    onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
-                    onBlur={commitInline}
-                    onKeyDown={(e) => { if (e.key === 'Enter') commitInline(); if (e.key === 'Escape') setInlineEdit(null); }}
-                  />
-                </div>
-              ) : (
-                <button type="button" className="tv2-cell-btn tv2-cell-btn-center"
-                  disabled={!canEditTask(activeRole) || taskIsParent}
-                  title={taskIsParent ? 'Parent duration is computed from children' : 'Edit duration (0 = derive from due date)'}
-                  onClick={(e) => { e.stopPropagation(); if (!taskIsParent) setInlineEdit({ id: task.id, field: 'duration', value: String(task.durationDays) }); }}
-                >
-                  <Clock size={12} /> {durationDerived ? 'Due→' : `${task.durationDays}d`}
-                </button>
-              )}
-            </div>
-
-            {/* Start date (read-only in the row; editable in the modal) */}
-            <div className="tv2-cell tv2-cell-start" data-label="Start">
-              <span className="tv2-readonly">
-                <Calendar size={12} />
-                {task.plannedStartDate ? formatDateFriendly(task.plannedStartDate) : <span className="tv2-dash">—</span>}
-              </span>
-            </div>
-
-            {/* Due date (read-only in the row; editable in the modal) */}
-            <div className="tv2-cell tv2-cell-due" data-label="Due">
-              <span className={`tv2-readonly ${isOverdue ? 'tv2-readonly-overdue' : ''}`} title={isOverdue ? 'Overdue' : undefined}>
-                <Calendar size={12} />
-                {task.dueDate ? formatDateFriendly(task.dueDate) : <span className="tv2-dash">—</span>}
-              </span>
-            </div>
-
-            {/* Progress — parents only: % of sub-tasks completed. */}
-            <div className={`tv2-cell tv2-cell-progress ${taskIsParent ? '' : 'tv2-cell-progress-empty'}`} data-label="Progress">
-              {taskIsParent ? (
-                <span className="tv2-progress-pct" style={{ color: accent }} title={`${prog}% of sub-tasks completed`}>{prog}%</span>
-              ) : (
-                <span className="tv2-progress-na">—</span>
-              )}
-            </div>
-
-            {/* Status */}
-            <div className="tv2-cell tv2-cell-status" data-label="Status">
-              {inlineEdit?.id === task.id && inlineEdit.field === 'status' ? (
-                <div className="tv2-inline-edit" onClick={(e) => e.stopPropagation()}>
-                  <WinComboBox
-                    value={inlineEdit.value}
-                    menuPosition="top"
-                    onChange={(val) => commitInlineSelect(task.id, 'status', val)}
-                    options={STATUS_OPTIONS}
-                  />
-                </div>
-              ) : (
-                <button type="button" className={statusBadgeClass(task.status)}
-                  disabled={!canEditTask(activeRole)}
-                  onClick={(e) => { e.stopPropagation(); setInlineEdit({ id: task.id, field: 'status', value: task.status }); }}
-                >
-                  {statusLabel(task.status)}
-                </button>
-              )}
-            </div>
+                    </div>
+                  );
+                case 'due':
+                  return (
+                    <div key="due" className="tv2-cell tv2-cell-due" data-label="Due">
+                      <span className={`tv2-readonly ${isOverdue ? 'tv2-readonly-overdue' : ''}`} title={isOverdue ? 'Overdue' : undefined}>
+                        <Calendar size={12} />
+                        {task.dueDate ? formatDateFriendly(task.dueDate) : <span className="tv2-dash">—</span>}
+                      </span>
+                    </div>
+                  );
+                case 'progress':
+                  return (
+                    <div key="progress" className={`tv2-cell tv2-cell-progress ${taskIsParent ? '' : 'tv2-cell-progress-empty'}`} data-label="Progress">
+                      {taskIsParent ? (
+                        <span className="tv2-progress-pct" style={{ color: accent }} title={`${prog}% of sub-tasks completed`}>{prog}%</span>
+                      ) : (
+                        <span className="tv2-progress-na">—</span>
+                      )}
+                    </div>
+                  );
+                case 'status':
+                  return (
+                    <div key="status" className="tv2-cell tv2-cell-status" data-label="Status">
+                      {inlineEdit?.id === task.id && inlineEdit.field === 'status' ? (
+                        <div className="tv2-inline-edit" onClick={(e) => e.stopPropagation()}>
+                          <WinComboBox
+                            value={inlineEdit.value}
+                            menuPosition="top"
+                            onChange={(val) => commitInlineSelect(task.id, 'status', val)}
+                            options={STATUS_OPTIONS}
+                          />
+                        </div>
+                      ) : (
+                        <button type="button" className={statusBadgeClass(task.status)}
+                          disabled={!canEditTask(activeRole)}
+                          onClick={(e) => { e.stopPropagation(); setInlineEdit({ id: task.id, field: 'status', value: task.status }); }}
+                        >
+                          {statusLabel(task.status)}
+                        </button>
+                      )}
+                    </div>
+                  );
+                default:
+                  return null;
+              }
+            })}
           </div>
           {/* after drop indicator */}
           <div
@@ -746,7 +949,7 @@ export default function TaskListV2({
   const modalOpen = !!modalTaskId || createParentId !== null;
 
   return (
-    <div className="tv2-root">
+    <div className="tv2-root" style={{ '--tv2-font-scale': fontScale } as React.CSSProperties}>
       {/* My Tasks strip */}
       {myActiveTasks.length > 0 && (
         <div className="tv2-mytasks">
@@ -789,6 +992,70 @@ export default function TaskListV2({
               <Plus size={15} /> Add Task
             </button>
           )}
+        </div>
+        {/* View controls: saved views, columns, font zoom */}
+        <div className="tv2-view-controls">
+          <div className="tv2-view-group">
+            <span className="tv2-view-group-label"><ListChecks size={13} /> View</span>
+            <WinComboBox className="tv2-view-picker" value={activeViewId}
+              onChange={(id) => { const v = views.find(x => x.id === id); if (v) applyView(v); }}
+              options={views.map(v => ({ label: v.name + (v.isBuiltIn ? '' : ''), value: v.id }))}
+            />
+            {isDirty && (
+              <button type="button" className="btn btn-secondary tv2-view-btn-save" onClick={saveView} title="Update this view">
+                <Save size={14} /> Save
+              </button>
+            )}
+            <button type="button" className="btn btn-ghost tv2-view-btn-saveas" onClick={() => { setSaveAsName(activeView?.name ? `${activeView.name} copy` : 'New View'); setShowSaveAs(true); }} title="Save as new view">
+              <Copy size={14} />
+            </button>
+            {!activeView?.isBuiltIn && views.length > 1 && (
+              <button type="button" className="btn btn-ghost tv2-view-btn-del" onClick={() => activeView && deleteView(activeView)} title="Delete this view">
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Columns popover (list view only) */}
+          {viewMode === 'list' && (
+            <div className="tv2-view-group tv2-columns-group">
+              <button type="button" ref={columnsBtnRef} className={`btn btn-ghost tv2-icon-btn ${showColumnsPanel ? 'tv2-icon-btn-active' : ''}`}
+                onClick={() => setShowColumnsPanel(v => !v)} title="Show / hide columns">
+                <Columns3 size={15} /> Columns
+              </button>
+              {showColumnsPanel && (
+                <div ref={columnsPanelRef} className="tv2-columns-panel" role="menu">
+                  <div className="tv2-columns-panel-head">Columns</div>
+                  {COLUMN_DEFS.map(col => (
+                    <label key={col.id} className={`tv2-columns-item ${!col.toggleable ? 'tv2-columns-item-locked' : ''}`}>
+                      <input type="checkbox" className="win-checkbox"
+                        checked={visibleColumns.includes(col.id)}
+                        disabled={!col.toggleable}
+                        onChange={() => toggleColumn(col.id)}
+                      />
+                      <span>{col.label}</span>
+                      {!col.toggleable && <span className="tv2-columns-lock" title="Always shown">·</span>}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Font zoom stepper */}
+          <div className="tv2-view-group tv2-font-group">
+            <button type="button" className="btn btn-ghost tv2-icon-btn" onClick={() => adjustFont(-0.1)}
+              disabled={fontScale <= 0.8} title="Decrease font size">
+              <Minus size={15} />
+            </button>
+            <button type="button" className="tv2-font-pct" onClick={() => setFontScale(1)} title="Reset to 100%">
+              {Math.round(fontScale * 100)}%
+            </button>
+            <button type="button" className="btn btn-ghost tv2-icon-btn" onClick={() => adjustFont(0.1)}
+              disabled={fontScale >= 1.5} title="Increase font size">
+              <Plus size={15} />
+            </button>
+          </div>
         </div>
         <div className="tv2-filters">
           <span className="tv2-filters-label"><Filter size={13} /> Filters</span>
@@ -838,24 +1105,26 @@ export default function TaskListV2({
             </div>
           ) : (
             <div className="tv2-table-scroll">
-              <div className="tv2-head">
-                <div className="tv2-cell tv2-cell-name">
-                  <span className="tv2-head-check">
-                    {canEditTask(activeRole) && (
-                      <input type="checkbox" className="win-checkbox"
-                        checked={leafTasks.length > 0 && selectedIds.length === leafTasks.length}
-                        onChange={(e) => setSelectedIds(e.target.checked ? leafTasks.map(t => t.id) : [])}
-                      />
+              <div className="tv2-head" style={{ gridTemplateColumns }}>
+                {visibleColumns.map(id => (
+                  <div key={id} className={`tv2-cell tv2-cell-${id}`}>
+                    {id === 'name' ? (
+                      <>
+                        <span className="tv2-head-check">
+                          {canEditTask(activeRole) && (
+                            <input type="checkbox" className="win-checkbox"
+                              checked={leafTasks.length > 0 && selectedIds.length === leafTasks.length}
+                              onChange={(e) => setSelectedIds(e.target.checked ? leafTasks.map(t => t.id) : [])}
+                            />
+                          )}
+                        </span>
+                        {COLUMN_DEFS.find(c => c.id === id)?.label}
+                      </>
+                    ) : (
+                      COLUMN_DEFS.find(c => c.id === id)?.label
                     )}
-                  </span>
-                  Task Name
-                </div>
-                <div className="tv2-cell tv2-cell-assignee">Assignee</div>
-                <div className="tv2-cell tv2-cell-duration">Dur.</div>
-                <div className="tv2-cell tv2-cell-start">Start</div>
-                <div className="tv2-cell tv2-cell-due">Due</div>
-                <div className="tv2-cell tv2-cell-progress">Progress</div>
-                <div className="tv2-cell tv2-cell-status">Status</div>
+                  </div>
+                ))}
               </div>
               {renderTree(null, 0, '', [])}
             </div>
@@ -965,6 +1234,30 @@ export default function TaskListV2({
           }}
           renderDependencyTree={renderDependencyTree}
         />
+      )}
+
+      {/* Save as new view — inline prompt */}
+      {showSaveAs && (
+        <div className="tv2-saveas-overlay" onClick={() => setShowSaveAs(false)}>
+          <div className="tv2-saveas" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="tv2-saveas-head">
+              <h4 className="tv2-saveas-title">Save as new view</h4>
+              <button type="button" className="btn btn-ghost btn-icon" onClick={() => setShowSaveAs(false)}><X size={16} /></button>
+            </div>
+            <input className="form-input tv2-saveas-input" autoFocus
+              value={saveAsName}
+              placeholder="View name (e.g. My Open Tasks)"
+              onChange={(e) => setSaveAsName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') saveAsNewView(); if (e.key === 'Escape') setShowSaveAs(false); }}
+            />
+            <div className="tv2-saveas-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setShowSaveAs(false)}>Cancel</button>
+              <button type="button" className="btn btn-primary" disabled={!saveAsName.trim()} onClick={saveAsNewView}>
+                <Plus size={14} /> Create view
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1194,6 +1487,37 @@ function snapHalf(n: number): number {
 
 function initials(name: string): string {
   return name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
+}
+
+/** Equality for two column lists (order-sensitive). */
+function arrayEqual<T>(a: T[], b: T[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+/** Ensure a column list is valid: has at least `name`, deduped, registry-ordered. */
+function sanitizeColumns(cols: TaskColumnId[]): TaskColumnId[] {
+  const order = COLUMN_DEFS.map(c => c.id);
+  const valid = Array.from(new Set(cols.filter(c => order.includes(c))));
+  const result = order.filter(c => valid.includes(c));
+  // `name` must always be present.
+  if (!result.includes('name')) result.unshift('name');
+  return result;
+}
+
+/** Load saved views for a (user, project) key from localStorage, seeding a default. */
+function loadViews(key: string): TaskView[] {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw) as TaskView[];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Guarantee a built-in default exists.
+        if (!parsed.some(v => v.isBuiltIn)) parsed.unshift(makeDefaultView());
+        return parsed;
+      }
+    }
+  } catch { /* corrupt / missing — fall through to seed */ }
+  return [makeDefaultView()];
 }
 
 function isTaskOverdue(task: Task): boolean {

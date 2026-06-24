@@ -93,3 +93,31 @@ export interface O365Config {
   todoListName: string;
   isEnabled: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Task views — saved column / filter / font configurations for the Tasks page.
+// Scoped per user + per project, persisted to localStorage.
+// ---------------------------------------------------------------------------
+
+export type StatusFilter = 'all' | 'not_started' | 'in_progress' | 'on_hold' | 'completed';
+export type OwnerFilter = 'all' | 'pinnacle' | 'customer' | 'shared';
+export type TaskViewMode = 'list' | 'kanban';
+export type KanbanGroupMode = 'status' | 'parent' | 'assignee';
+
+/** Identifiers for the columns rendered in the Tasks list. `name` is always shown. */
+export type TaskColumnId = 'name' | 'assignee' | 'duration' | 'start' | 'due' | 'progress' | 'status';
+
+export interface TaskView {
+  id: string;
+  name: string;
+  columns: TaskColumnId[];        // ordered list of visible columns
+  hideCompleted: boolean;
+  ownerFilter: OwnerFilter;
+  assigneeFilter: string;         // 'all' | 'unassigned' | <consultantId>
+  statusFilter: StatusFilter;
+  onlyMine: boolean;
+  viewMode: TaskViewMode;
+  kanbanGroupMode: KanbanGroupMode;
+  fontScale: number;              // 1 = default; 0.8–1.5 range
+  isBuiltIn?: boolean;            // the seeded "Default View" cannot be deleted
+}
