@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import type { Consultant, O365Config, Project } from '../types';
-import type { Tier } from '../utils/permissions';
-import { canManageUsers, canEditUsers, canManageDatabase } from '../utils/permissions';
+import type { Consultant, Customer, O365Config, Project, Role } from '../types';
+import type { Tier, ActiveUser } from '../utils/permissions';
+import { canManageUsers, canEditUsers, canManageDatabase, canManageCustomers } from '../utils/permissions';
 import { hashPassword } from '../utils/auth';
 import type { AccountInfo } from '@azure/msal-browser';
 import { 
@@ -13,13 +13,17 @@ import { getSupabaseCredentials, testSupabaseConnection, getSupabaseClient, isSu
 
 interface SettingsProps {
   consultants: Consultant[];
+  customers: Customer[];
   o365Config: O365Config;
   microsoftAccount: AccountInfo | null;
   activeUserTier: Tier;
   activeUserId: string;
+  activeUser: ActiveUser | null;
   onAddConsultant: (consultant: Omit<Consultant, 'id'> & { password?: string }) => void;
   onDeleteConsultant: (id: string) => void;
   onUpdateConsultant: (consultant: Consultant) => void;
+  onAddCustomer: (customer: Omit<Customer, 'id' | 'tier'> & { password?: string }) => Promise<boolean>;
+  onDeleteCustomer: (id: string) => void;
   onUpdateO365Config: (config: O365Config) => void;
   onMicrosoftLoginSuccess: (account: AccountInfo | null) => void;
   onImportData: (jsonData: string) => Promise<boolean>;
@@ -32,13 +36,17 @@ interface SettingsProps {
 
 export default function Settings({
   consultants,
+  customers,
   o365Config,
   microsoftAccount,
   activeUserTier,
   activeUserId,
+  activeUser,
   onAddConsultant,
   onDeleteConsultant,
   onUpdateConsultant,
+  onAddCustomer,
+  onDeleteCustomer,
   onUpdateO365Config,
   onMicrosoftLoginSuccess,
   onImportData,
@@ -49,7 +57,9 @@ export default function Settings({
   onDeleteTemplate
 }: SettingsProps) {
   // Consultant Form
-  const [newConsultant, setNewConsultant] = useState({ name: '', email: '', role: 'Consultant', avatarColor: '#0d9488', tier: 'normal' as Tier, password: '' });
+  const [newConsultant, setNewConsultant] = useState<{ name: string; email: string; role: Role; avatarColor: string; tier: Tier; password: string }>({ name: '', email: '', role: 'Consultant', avatarColor: '#0d9488', tier: 'normal', password: '' });
+  // Customer (external) Form
+  const [newCustomer, setNewCustomer] = useState<{ name: string; email: string; company: string; avatarColor: string; password: string }>({ name: '', email: '', company: '', avatarColor: '#0d9488', password: '' });
   const [editingConsultant, setEditingConsultant] = useState<Consultant | null>(null);
   const [resetPasswordId, setResetPasswordId] = useState<string | null>(null);
   const [resetPasswordValue, setResetPasswordValue] = useState('');
@@ -501,15 +511,14 @@ REVOKE ALL ON tasks FROM anon;
               <div className="grid-cols-12" style={{ gap: '1rem' }}>
                 <div className="form-group col-span-12">
                   <label htmlFor="form-field-3" className="form-label">Implementation Role</label>
-                  <select id="form-field-3" 
+                  <select id="form-field-3"
                     className="form-select"
                     value={newConsultant.role}
-                    onChange={(e) => setNewConsultant({ ...newConsultant, role: e.target.value })}
+                    onChange={(e) => setNewConsultant({ ...newConsultant, role: e.target.value as Role })}
                   >
                     <option value="Consultant">Consultant</option>
                     <option value="Project Manager">Project Manager</option>
                     <option value="Manager">Manager</option>
-                    <option value="Lead Consultant">Lead Consultant</option>
                     <option value="Read only">Read only</option>
                   </select>
                 </div>
@@ -739,11 +748,10 @@ REVOKE ALL ON tasks FROM anon;
                       <div className="form-group col-span-12" style={{ margin: 0 }}>
                         <label htmlFor="form-field-7" className="form-label">Role</label>
                         <select id="form-field-7" className="form-select" value={editingConsultant.role}
-                          onChange={e => setEditingConsultant({ ...editingConsultant, role: e.target.value })}>
+                          onChange={e => setEditingConsultant({ ...editingConsultant, role: e.target.value as Role })}>
                           <option value="Consultant">Consultant</option>
                           <option value="Project Manager">Project Manager</option>
                           <option value="Manager">Manager</option>
-                          <option value="Lead Consultant">Lead Consultant</option>
                           <option value="Read only">Read only</option>
                         </select>
                       </div>
@@ -795,6 +803,65 @@ REVOKE ALL ON tasks FROM anon;
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Manage Customers (external parties) — admins only */}
+        {canManageCustomers(activeUser) && (
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Users size={20} /> Customers (External)
+              </h3>
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-tertiary)', margin: 0 }}>
+                External parties with view-only access to their assigned projects. Always tier=normal.
+              </p>
+            </div>
+
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              if (!newCustomer.name || !newCustomer.email) return;
+              const ok = await onAddCustomer(newCustomer);
+              if (ok) {
+                onAddToast(`Customer ${newCustomer.name} created.`, 'success');
+                setNewCustomer({ name: '', email: '', company: '', avatarColor: colors[Math.floor(Math.random() * colors.length)], password: '' });
+              }
+            }} style={{ marginBottom: '1.5rem' }}>
+              <div className="form-group">
+                <label className="form-label">Add Customer</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1fr 0.8fr auto', gap: '0.5rem', alignItems: 'flex-end' }}>
+                  <input className="form-input" placeholder="Full name" value={newCustomer.name} onChange={e => setNewCustomer({ ...newCustomer, name: e.target.value })} required />
+                  <input className="form-input" type="email" placeholder="Email" value={newCustomer.email} onChange={e => setNewCustomer({ ...newCustomer, email: e.target.value })} required />
+                  <input className="form-input" placeholder="Company" value={newCustomer.company} onChange={e => setNewCustomer({ ...newCustomer, company: e.target.value })} />
+                  <input className="form-input" type="password" placeholder="Password (min 8)" value={newCustomer.password} onChange={e => setNewCustomer({ ...newCustomer, password: e.target.value })} required />
+                  <button type="submit" className="btn btn-primary"><Plus size={16} /> Add</button>
+                </div>
+              </div>
+            </form>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {customers.length === 0 && (
+                <p style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem', padding: '0.5rem 0' }}>No customers yet.</p>
+              )}
+              {customers.map(c => (
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 0.75rem', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: c.avatarColor, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.8rem' }}>
+                      {c.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{c.name} {c.company && <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>· {c.company}</span>}</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{c.email}</div>
+                    </div>
+                  </div>
+                  <button className="btn btn-secondary btn-icon" style={{ color: 'var(--danger)' }}
+                    title="Delete customer"
+                    onClick={() => { if (confirm(`Delete customer "${c.name}"? They will lose access.`)) onDeleteCustomer(c.id); }}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         )}

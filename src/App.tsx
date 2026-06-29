@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import PasswordReset from './components/PasswordReset';
-import type { Project, Task, Consultant, O365Config, Communication } from './types';
+import type { Project, Task, Consultant, Customer, O365Config, Communication } from './types';
 import type { AccountInfo } from '@azure/msal-browser';
 import { getMsalInstance } from './utils/o365';
 import { calculateTaskSchedules } from './utils/scheduler';
@@ -22,6 +22,9 @@ import {
 } from 'lucide-react';
 import { api } from './utils/api';
 import { isSupabaseConfigured, getSupabaseClient, createTemporarySupabaseClient } from './utils/supabase';
+import {
+  activeUserFromConsultant, activeUserFromCustomer, canSeeProject
+} from './utils/permissions';
 
 // Toast structure
 interface Toast {
@@ -43,7 +46,7 @@ const DEFAULT_SEED_PASSWORD = 'ChangeMeOnFirstLogin!';
 // no password digest is ever committed to the repository.
 const defaultConsultants: Consultant[] = [
   { id: 'admin', name: 'System Administrator', email: 'admin@pinnacle.local', role: 'Manager', avatarColor: '#2d4a65', tier: 'superuser', passwordHash: undefined, mustResetPassword: true },
-  { id: 'c1', name: 'Sarah Jenkins', email: 'sarah.jenkins@pinnacle.com', role: 'Lead Consultant', avatarColor: '#0d9488', tier: 'normal', passwordHash: undefined, mustResetPassword: true },
+  { id: 'c1', name: 'Sarah Jenkins', email: 'sarah.jenkins@pinnacle.com', role: 'Consultant', avatarColor: '#0d9488', tier: 'normal', passwordHash: undefined, mustResetPassword: true },
   { id: 'c2', name: 'Alex Rivera', email: 'alex.rivera@pinnacle.com', role: 'Consultant', avatarColor: '#6366f1', tier: 'normal', passwordHash: undefined, mustResetPassword: true },
   { id: 'c3', name: 'Marcus Brody', email: 'marcus.brody@pinnacle.com', role: 'Project Manager', avatarColor: '#f59e0b', tier: 'normal', passwordHash: undefined, mustResetPassword: true },
   { id: 'c4', name: 'David Vance', email: 'david.vance@pinnacle.com', role: 'Read only', avatarColor: '#ef4444', tier: 'normal', passwordHash: undefined, mustResetPassword: true }
@@ -138,6 +141,7 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [consultants, setConsultants] = useState<Consultant[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [communications, setCommunications] = useState<Communication[]>([]);
   const [o365Config, setO365Config] = useState<O365Config>(defaultO365Config);
   const [microsoftAccount, setMicrosoftAccount] = useState<AccountInfo | null>(null);
@@ -185,24 +189,20 @@ export default function App() {
         const supabase = getSupabaseClient();
         const { data: { session } } = await supabase!.auth.getSession();
         if (!session) {
+          // No session yet — defer all loading until after sign-in.
           return;
         }
       }
-        if (isSupabaseConfigured()) {
-          const supabase = getSupabaseClient();
-          const { data: { session } } = await supabase!.auth.getSession();
-          if (!session) {
-            // No session yet — defer all loading until after sign-in.
-            return;
-          }
-        }
 
-        const [loadedProjects, loadedTasks, loadedConsultants, loadedCommunications] = await Promise.all([
+        const [loadedProjects, loadedTasks, loadedConsultants, loadedCommunications, loadedCustomers] = await Promise.all([
           api.projects.getAll(),
           api.tasks.getAll(),
           api.consultants.getAll(),
-          api.communications.getAll()
+          api.communications.getAll(),
+          api.customers.getAll()
         ]);
+
+        setCustomers(loadedCustomers);
 
         if (loadedProjects.length === 0 && loadedConsultants.length === 0) {
           // Seed initial defaults — only meaningful in localStorage mode.
@@ -352,12 +352,22 @@ export default function App() {
     }
   }, [o365Config]);
 
-  // Derive active user's tier for RBAC
+  // Derive active user for RBAC. Resolves from consultants (internal) OR
+  // customers (external), producing a unified ActiveUser that permission
+  // helpers consume without needing to know which table it came from.
   const activeConsultant = consultants.find(c => c.id === activeUserId) || null;
-  const activeUserTier = activeConsultant?.tier || 'normal';
+  const activeCustomer = customers.find(c => c.id === activeUserId) || null;
+  const activeUser = activeConsultant
+    ? activeUserFromConsultant(activeConsultant)
+    : activeCustomer
+      ? activeUserFromCustomer(activeCustomer)
+      : null;
+  const activeUserTier = activeUser?.tier || 'normal';
 
-  // Filtered projects list based on access privileges (all projects visible to all users)
-  const activeProjects = projects.filter(p => !p.isTemplate);
+  // Projects visible to the active user (mirrors the projects SELECT RLS
+  // policy). Managers/PMs/read-only see all; consultants see projects they're a
+  // member of; customers see only the project they're the customer of.
+  const activeProjects = projects.filter(p => !p.isTemplate && canSeeProject(activeUser, p));
   const filteredProjects = activeProjects;
   const projectTemplates = projects.filter(p => p.isTemplate);
 
@@ -849,7 +859,7 @@ export default function App() {
   const handleDeleteConsultant = async (id: string) => {
     const nextConsultants = consultants.filter(c => c.id !== id);
     const updatedTasks = tasks.map(t => t.assignedConsultantId === id ? { ...t, assignedConsultantId: null } : t);
-    
+
     setConsultants(nextConsultants);
     setTasks(updatedTasks);
 
@@ -864,6 +874,86 @@ export default function App() {
     } else {
       localStorage.setItem('pinnacle_consultants', JSON.stringify(nextConsultants));
       localStorage.setItem('pinnacle_tasks', JSON.stringify(updatedTasks));
+    }
+  };
+
+  // ---- Customer (external party) management --------------------------------
+  // Customers authenticate via Supabase Auth like consultants, but live in a
+  // separate `customers` table and are always tier='normal' (enforced by a DB
+  // CHECK constraint).
+  const handleAddCustomer = async (cData: Omit<Customer, 'id' | 'tier'> & { password?: string }): Promise<boolean> => {
+    let id = `cust-${Math.random().toString(36).substring(2, 9)}`;
+    const plaintextPassword = cData.password;
+    if (!plaintextPassword || plaintextPassword.length < 8) {
+      addToast('A password of at least 8 characters is required.', 'error');
+      return false;
+    }
+
+    if (isSupabaseConfigured()) {
+      try {
+        const tempClient = createTemporarySupabaseClient();
+        if (tempClient) {
+          const { data: authData, error: signUpError } = await tempClient.auth.signUp({
+            email: cData.email,
+            password: plaintextPassword,
+          });
+          if (signUpError) {
+            console.error('Supabase Auth signUp failed:', signUpError);
+            addToast(`Supabase Auth creation failed: ${signUpError.message}`, 'error');
+            return false;
+          }
+          if (authData.user) {
+            id = authData.user.id;
+          }
+        }
+      } catch (err: any) {
+        console.error('Supabase Auth connection error:', err);
+        addToast(`Supabase Auth error: ${err.message || err}`, 'error');
+        return false;
+      }
+    }
+
+    const newCustomer: Customer = {
+      name: cData.name,
+      email: cData.email,
+      company: cData.company ?? null,
+      avatarColor: cData.avatarColor,
+      tier: 'normal', // forced; customers can never be admin/superuser
+      id
+    };
+
+    try {
+      const next = [...customers, newCustomer];
+      setCustomers(next);
+      if (isSupabaseConfigured()) {
+        await api.customers.save(newCustomer);
+      } else {
+        localStorage.setItem('pinnacle_customers', JSON.stringify(next));
+      }
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  };
+
+  const handleDeleteCustomer = async (id: string) => {
+    const next = customers.filter(c => c.id !== id);
+    setCustomers(next);
+    // Null out customer_id on any projects that referenced them.
+    const updatedProjects = projects.map(p => p.customerId === id ? { ...p, customerId: null } : p);
+    setProjects(updatedProjects);
+    if (isSupabaseConfigured()) {
+      try {
+        await api.customers.delete(id);
+        await api.projects.saveAll(updatedProjects);
+      } catch (err) {
+        console.error(err);
+        addToast('Failed to delete customer from database.', 'error');
+      }
+    } else {
+      localStorage.setItem('pinnacle_customers', JSON.stringify(next));
+      localStorage.setItem('pinnacle_projects', JSON.stringify(updatedProjects));
     }
   };
 
@@ -1016,11 +1106,12 @@ export default function App() {
     switch (activeTab) {
       case 'dashboard':
         return (
-          <Dashboard 
+          <Dashboard
             projects={filteredProjects}
             tasks={tasks}
             consultants={consultants}
             activeUserId={activeUserId}
+            activeUser={activeUser}
             o365Config={o365Config}
             onSelectProject={(id) => {
               setSelectedProjectId(id);
@@ -1087,6 +1178,8 @@ export default function App() {
             onDuplicateProject={handleDuplicateProject}
             onSaveAsTemplate={handleSaveAsTemplate}
             activeUserId={activeUserId}
+            activeUser={activeUser}
+            customers={customers}
             onReorderTasks={handleReorderTasks}
             onSaveCommunication={async (comm) => {
               const updatedComms = [comm, ...communications.filter(c => c.id !== comm.id)];
@@ -1103,17 +1196,21 @@ export default function App() {
         );
       case 'settings':
         return (
-          <Settings 
+          <Settings
             consultants={consultants}
+            customers={customers}
             o365Config={o365Config}
             microsoftAccount={microsoftAccount}
             activeUserTier={activeUserTier}
             activeUserId={activeUserId}
+            activeUser={activeUser}
             onAddConsultant={handleAddConsultant}
             onDeleteConsultant={handleDeleteConsultant}
             onUpdateConsultant={(updated: Consultant) => {
               saveConsultantsState(consultants.map(c => c.id === updated.id ? updated : c));
             }}
+            onAddCustomer={handleAddCustomer}
+            onDeleteCustomer={handleDeleteCustomer}
             onUpdateO365Config={handleUpdateO365Config}
             onMicrosoftLoginSuccess={setMicrosoftAccount}
             onImportData={handleImportData}
@@ -1523,6 +1620,7 @@ export default function App() {
             onCreateProject={handleCreateProject}
             projectTemplates={projects.filter(p => p.isTemplate)}
             consultants={consultants}
+            customers={customers}
           />
         )}
 

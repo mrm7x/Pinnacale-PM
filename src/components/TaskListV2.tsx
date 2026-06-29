@@ -3,7 +3,7 @@ import type {
   Project, Task, Consultant, TaskColumnId, TaskView,
   StatusFilter, OwnerFilter, TaskViewMode, KanbanGroupMode
 } from '../types';
-import { canCreateTask, canEditTask, canDeleteTask } from '../utils/permissions';
+import { canCreateTask, canEditTask, canEditAnyTask, type ActiveUser } from '../utils/permissions';
 import {
   Plus, ChevronDown, ChevronRight, X, Clock, Calendar, Trash2,
   Link2, AlertTriangle, ListChecks, Filter, GripVertical, CornerDownRight,
@@ -36,6 +36,7 @@ interface TaskListV2Props {
   tasks: Task[];
   consultants: Consultant[];
   activeUserId: string;
+  activeUser: ActiveUser | null;
   onCreateTask: (task: Omit<Task, 'id'>) => void;
   onUpdateTask: (task: Task) => void;
   onDeleteTask: (id: string) => void;
@@ -126,6 +127,7 @@ export default function TaskListV2({
   tasks,
   consultants,
   activeUserId,
+  activeUser,
   onCreateTask,
   onUpdateTask,
   onDeleteTask,
@@ -135,8 +137,10 @@ export default function TaskListV2({
   onAddToast
 }: TaskListV2Props) {
   const accent = getProjectAccent(project);
-  const activeConsultant = consultants.find(c => c.id === activeUserId);
-  const activeRole = activeConsultant?.role || 'Read only';
+
+  // Task-level edit predicate: context-aware (role + project + task ownership).
+  // Replaces the old single-arg canEditTask(activeRole) used throughout.
+  const canEditThisTask = useCallback((task: Task) => canEditTask(activeUser, task, project), [activeUser, project]);
 
   const projectTasks = useMemo(
     () => tasks.filter(t => t.projectId === project.id).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
@@ -513,13 +517,13 @@ export default function TaskListV2({
   };
 
   const applyKanbanDrop = (columnId: string) => {
-    if (!kanbanDragId || !canEditTask(activeRole)) {
+    if (!kanbanDragId) {
       setKanbanDragId(null);
       return;
     }
 
     const task = projectTasks.find(t => t.id === kanbanDragId);
-    if (!task) {
+    if (!task || !canEditThisTask(task)) {
       setKanbanDragId(null);
       return;
     }
@@ -694,7 +698,7 @@ export default function TaskListV2({
           </div>
           <div
             className={`tv2-row ${isSelected ? 'tv2-row-selected' : ''} ${isDragging ? 'tv2-row-dragging' : ''} ${isDropInto ? 'tv2-row-dropinto' : ''} tv2-status-${task.status}`}
-            draggable={canEditTask(activeRole)}
+            draggable={canEditThisTask(task)}
             onDragStart={(e) => { setDragId(task.id); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', task.id); } catch { /* noop */ } }}
             onDragEnd={() => { setDragId(null); setDropTarget(null); }}
             onDragOver={(e) => {
@@ -724,10 +728,10 @@ export default function TaskListV2({
                         ))}
                       </div>
                       <div className="tv2-name-inner" style={{ paddingLeft: `${depth * 20}px` }}>
-                        {canEditTask(activeRole) && (
+                        {canEditThisTask(task) && (
                           <span className="tv2-grip" title="Drag to reorder or nest"><GripVertical size={14} /></span>
                         )}
-                        {canEditTask(activeRole) && (
+                        {canEditThisTask(task) && (
                           <input type="checkbox" className="win-checkbox tv2-check"
                             checked={isSelected}
                             onClick={(e) => e.stopPropagation()}
@@ -772,7 +776,7 @@ export default function TaskListV2({
                         </div>
                       ) : (
                         <button type="button" className="tv2-cell-btn"
-                          disabled={!canEditTask(activeRole)}
+                          disabled={!canEditThisTask(task)}
                           onClick={(e) => { e.stopPropagation(); setInlineEdit({ id: task.id, field: 'assignee', value: task.assignedConsultantId || '' }); }}
                         >
                           {assigned ? (
@@ -803,7 +807,7 @@ export default function TaskListV2({
                         </div>
                       ) : (
                         <button type="button" className="tv2-cell-btn tv2-cell-btn-center"
-                          disabled={!canEditTask(activeRole) || taskIsParent}
+                          disabled={!canEditThisTask(task) || taskIsParent}
                           title={taskIsParent ? 'Parent duration is computed from children' : 'Edit duration (0 = derive from due date)'}
                           onClick={(e) => { e.stopPropagation(); if (!taskIsParent) setInlineEdit({ id: task.id, field: 'duration', value: String(task.durationDays) }); }}
                         >
@@ -854,7 +858,7 @@ export default function TaskListV2({
                         </div>
                       ) : (
                         <button type="button" className={statusBadgeClass(task.status)}
-                          disabled={!canEditTask(activeRole)}
+                          disabled={!canEditThisTask(task)}
                           onClick={(e) => { e.stopPropagation(); setInlineEdit({ id: task.id, field: 'status', value: task.status }); }}
                         >
                           {statusLabel(task.status)}
@@ -900,7 +904,7 @@ export default function TaskListV2({
       <div
         key={task.id}
         className={`tv2-kanban-card tv2-status-${task.status}`}
-        draggable={canEditTask(activeRole)}
+        draggable={canEditThisTask(task)}
         onDragStart={(e) => { setKanbanDragId(task.id); e.dataTransfer.effectAllowed = 'move'; }}
         onDragEnd={() => setKanbanDragId(null)}
         onClick={() => setModalTaskId(task.id)}
@@ -984,7 +988,7 @@ export default function TaskListV2({
               <Columns3 size={14} /> Kanban
             </button>
           </div>
-          {canCreateTask(activeRole) && (
+          {canCreateTask(activeUser, project) && (
             <button className="btn btn-primary tv2-add-btn"
               style={{ backgroundColor: accent, color: 'white', border: '1px solid rgba(0,0,0,0.1)' }}
               onClick={() => openCreate(null)}
@@ -1111,7 +1115,7 @@ export default function TaskListV2({
                     {id === 'name' ? (
                       <>
                         <span className="tv2-head-check">
-                          {canEditTask(activeRole) && (
+                          {canEditAnyTask(activeUser, project) && (
                             <input type="checkbox" className="win-checkbox"
                               checked={leafTasks.length > 0 && selectedIds.length === leafTasks.length}
                               onChange={(e) => setSelectedIds(e.target.checked ? leafTasks.map(t => t.id) : [])}
@@ -1146,7 +1150,7 @@ export default function TaskListV2({
                 <section
                   key={column.id}
                   className={`tv2-kanban-column ${kanbanDragId ? 'tv2-kanban-column-droppable' : ''}`}
-                  onDragOver={(e) => { if (kanbanDragId && canEditTask(activeRole)) e.preventDefault(); }}
+                  onDragOver={(e) => { if (kanbanDragId && canEditAnyTask(activeUser, project)) e.preventDefault(); }}
                   onDrop={(e) => { e.preventDefault(); applyKanbanDrop(column.id); }}
                 >
                   <header className="tv2-kanban-column-head">
@@ -1165,8 +1169,8 @@ export default function TaskListV2({
         </div>
       )}
 
-      {/* Floating bulk-action bar */}
-      {selectedIds.length > 0 && (
+      {/* Floating bulk-action bar — managers/leads only (bulk operations). */}
+      {selectedIds.length > 0 && canEditAnyTask(activeUser, project) && (
         <div className="tv2-bulkbar">
           <span className="tv2-bulkbar-count">{selectedIds.length} selected</span>
           <span className="tv2-bulkbar-divider" />
@@ -1191,7 +1195,7 @@ export default function TaskListV2({
               options={[{ label: 'Change…', value: '' }, { label: 'Unassigned', value: 'unassigned' }, ...consultants.map(c => ({ label: c.name, value: c.id }))]}
             />
           </div>
-          {canDeleteTask(activeRole) && (
+          {canEditAnyTask(activeUser, project) && (
             <button className="btn btn-danger tv2-bulkbar-delete"
               onClick={() => { if (confirm(`Delete ${selectedIds.length} selected task(s)? Subtasks will also be deleted.`)) { onBulkDeleteTasks(selectedIds); setSelectedIds([]); } }}
             >
@@ -1212,7 +1216,7 @@ export default function TaskListV2({
           tasks={projectTasks}
           consultants={consultants}
           accent={accent}
-          canEdit={canEditTask(activeRole)}
+          canEdit={modalTask ? canEditThisTask(modalTask) : canCreateTask(activeUser, project)}
           isParent={isParent}
           progressFor={progressFor}
           onClose={() => { setModalTaskId(null); setCreateParentId(null); }}
@@ -1296,13 +1300,16 @@ function TaskModal(props: TaskModalProps) {
   const [form, setForm] = useState(() => buildForm(task, creating, presetParentId));
   // For edit mode, auto-persist on every change (the parent re-schedules). For
   // create mode we wait for the explicit Save button.
+  // SECURITY: never persist when canEdit is false (e.g. read-only / customer
+  // viewing a Pinnacle-owned task). Previously update() wrote on every keystroke
+  // regardless of canEdit, letting users bypass the edit gate.
   const update = (patch: Partial<typeof form>) => {
     setForm(prev => {
       const next = { ...prev, ...patch };
       // Snap duration to half-days; auto-set progress on complete.
       if (patch.durationDays !== undefined) next.durationDays = snapHalf(patch.durationDays);
       if (patch.status === 'completed') next.progress = 100;
-      if (!creating && task) {
+      if (!creating && task && canEdit) {
         onUpdate({ ...task, ...toTaskPatch(next, task) });
       }
       return next;

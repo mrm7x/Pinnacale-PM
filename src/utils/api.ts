@@ -1,5 +1,5 @@
 import { getSupabaseClient, isSupabaseConfigured } from './supabase';
-import type { Project, Task, Consultant, Communication } from '../types';
+import type { Project, Task, Consultant, Communication, Customer } from '../types';
 
 // Helper translations: database (snake_case) <-> client (camelCase)
 
@@ -161,6 +161,28 @@ function mapConsultantToDb(c: Consultant) {
   };
 }
 
+function mapCustomerFromDb(db: any): Customer {
+  return {
+    id: db.id,
+    name: db.name,
+    email: db.email,
+    company: db.company || null,
+    avatarColor: db.avatar_color || '#0d9488',
+    tier: 'normal' // forced by DB CHECK constraint; always 'normal'
+  };
+}
+
+function mapCustomerToDb(c: Customer) {
+  return {
+    id: c.id,
+    name: c.name,
+    email: c.email,
+    company: c.company || null,
+    avatar_color: c.avatarColor,
+    tier: 'normal'
+  };
+}
+
 // Service definition
 export const api = {
   projects: {
@@ -272,6 +294,41 @@ export const api = {
       if (isSupabaseConfigured()) {
         const client = getSupabaseClient() as any;
         const { error } = await client.from('consultants').delete().eq('id', id);
+        if (error) throw error;
+      }
+    }
+  },
+
+  customers: {
+    getAll: async (): Promise<Customer[]> => {
+      if (isSupabaseConfigured()) {
+        const client = getSupabaseClient() as any;
+        const { data, error } = await client.from('customers').select('*').order('name', { ascending: true });
+        if (error) throw error;
+        return (data || []).map(mapCustomerFromDb);
+      } else {
+        const saved = localStorage.getItem('pinnacle_customers');
+        return saved ? JSON.parse(saved) : [];
+      }
+    },
+    save: async (customer: Customer): Promise<void> => {
+      if (isSupabaseConfigured()) {
+        const client = getSupabaseClient() as any;
+        const { error } = await client.from('customers').upsert(mapCustomerToDb(customer));
+        if (error) throw error;
+      }
+    },
+    saveAll: async (customersList: Customer[]): Promise<void> => {
+      if (isSupabaseConfigured()) {
+        const client = getSupabaseClient() as any;
+        const { error } = await client.from('customers').upsert(customersList.map(mapCustomerToDb));
+        if (error) throw error;
+      }
+    },
+    delete: async (id: string): Promise<void> => {
+      if (isSupabaseConfigured()) {
+        const client = getSupabaseClient() as any;
+        const { error } = await client.from('customers').delete().eq('id', id);
         if (error) throw error;
       }
     }

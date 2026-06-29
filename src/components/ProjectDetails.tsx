@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import type { FormEvent, FC } from 'react';
-import type { Project, Task, Consultant, O365Config, Communication } from '../types';
-import { canEditProject, canCreateTask, canEditTask, canDeleteTask } from '../utils/permissions';
+import type { Project, Task, Consultant, Customer, O365Config, Communication } from '../types';
+import {
+  canEditProject, canCreateTask, canEditTask, canDeleteTask, canEditGantt,
+  isCustomer as isCustomerUser, type ActiveUser
+} from '../utils/permissions';
 import {
   Plus, Calendar, Trash2, Edit2, ChevronDown, ChevronRight, ChevronUp,
   RefreshCw, MailCheck, User, X, Clock, FolderKanban, Pencil,
@@ -38,6 +41,8 @@ interface ProjectDetailsProps {
   onDuplicateProject: (projectId: string, config: { name: string; clientName: string; startDate: string; copyAssignments: boolean }) => void;
   onSaveAsTemplate: (projectId: string, templateName: string) => void;
   activeUserId: string;
+  activeUser: ActiveUser | null;
+  customers: Customer[];
   onReorderTasks: (updates: { id: string; sortOrder: number; parentId?: string | null }[]) => void;
   onSaveCommunication: (comm: Communication) => Promise<void>;
   onDeleteCommunication: (id: string) => Promise<void>;
@@ -83,13 +88,15 @@ export default function ProjectDetails({
   onDuplicateProject,
   onSaveAsTemplate,
   activeUserId,
+  activeUser,
+  customers,
   onReorderTasks,
   onSaveCommunication,
   onDeleteCommunication,
   setIsNewProjectModalOpen
 }: ProjectDetailsProps) {
-  const activeConsultant = consultants.find(c => c.id === activeUserId);
-  const activeRole = activeConsultant?.role || 'Read only';
+  // activeUser (unified, customer-aware) is the source of truth for RBAC.
+  const userIsCustomer = isCustomerUser(activeUser);
 
   const [activeProjectTab, setActiveProjectTab] = useState<'overview' | 'tasks' | 'tasks-v2' | 'gantt' | 'rag' | 'communications'>('overview');
   const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false);
@@ -704,7 +711,7 @@ export default function ProjectDetails({
 
             {/* Col 6: Actions — hidden by default, visible on hover */}
             <div className="task-node-actions" onClick={e => e.stopPropagation()}>
-              {canEditTask(activeRole) && (
+              {activeProject && canEditTask(activeUser, task, activeProject) && (
                 <>
                   {!isTaskParent && (
                     <>
@@ -727,7 +734,7 @@ export default function ProjectDetails({
                       </button>
                     </>
                   )}
-                  {canCreateTask(activeRole) && (
+                  {activeProject && canCreateTask(activeUser, activeProject) && (
                     <button className="btn btn-secondary btn-icon" onClick={(e) => { e.stopPropagation(); handleAddSubtask(task); }} title="Add Subtask" style={{ padding: '0.25rem' }}>
                       <Plus size={13} />
                     </button>
@@ -739,7 +746,7 @@ export default function ProjectDetails({
                   )}
                 </>
               )}
-              {canDeleteTask(activeRole) && (
+              {activeProject && canDeleteTask(activeUser, task, activeProject) && (
                 <button
                   className="btn btn-secondary btn-icon"
                   style={{ color: 'var(--danger)', padding: '0.25rem' }}
@@ -826,9 +833,9 @@ export default function ProjectDetails({
                 { id: 'overview', label: 'Overview' },
                 { id: 'tasks-v2', label: 'Tasks' },
                 { id: 'gantt', label: 'Gantt' },
-                { id: 'rag', label: 'RAG' },
+                { id: 'rag', label: 'RAG', customerHidden: true },
                 { id: 'communications', label: 'Project Notes' }
-              ] as const).map(tab => (
+              ] as const).filter(tab => !('customerHidden' in tab && tab.customerHidden && userIsCustomer)).map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveProjectTab(tab.id as any)}
@@ -862,7 +869,7 @@ export default function ProjectDetails({
                 >
                   <Download size={15} /> {isExporting ? 'Exporting…' : 'Export'}
                 </button>
-            {canEditProject(activeRole) && (
+            {activeProject && canEditProject(activeUser, activeProject) && (
               <>
                 <button
                   className="btn btn-ghost"
@@ -958,7 +965,7 @@ export default function ProjectDetails({
                           </span>
                         );
                       })()}
-                      {(() => {
+                      {!userIsCustomer && (() => {
                         const rs = getRagStyle(activeProject.ragOverall);
                         return (
                           <span style={{ fontSize: '0.8rem', padding: '0.25rem 0.65rem', borderRadius: 'var(--radius-sm)', backgroundColor: rs.bg, color: rs.text, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -1153,7 +1160,8 @@ export default function ProjectDetails({
                   </div>
                 </div>
 
-                {/* PROJECT HEALTH (RAG) */}
+                {/* PROJECT HEALTH (RAG) — hidden for customers */}
+                {!userIsCustomer && (
                 <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
                     <h3 style={{ fontSize: '1.1rem', margin: 0, color: 'var(--text-primary)' }}>Project Health</h3>
@@ -1202,6 +1210,7 @@ export default function ProjectDetails({
                     })}
                   </div>
                 </div>
+                )}
               </div>
             </div>
           )}
@@ -1212,6 +1221,7 @@ export default function ProjectDetails({
               tasks={tasks}
               consultants={consultants}
               activeUserId={activeUserId}
+              activeUser={activeUser}
               onCreateTask={onCreateTask}
               onUpdateTask={onUpdateTask}
               onDeleteTask={onDeleteTask}
@@ -1229,12 +1239,12 @@ export default function ProjectDetails({
             tasks={tasks}
             consultants={consultants}
             onUpdateTask={onUpdateTask}
-            canEdit={canEditTask(activeRole)}
+            canEdit={canEditGantt(activeUser)}
           />
         </div>
       )}
 
-      {activeProjectTab === 'rag' && (
+      {activeProjectTab === 'rag' && !userIsCustomer && (
         (() => {
           const RAG_META: Record<string, { color: string; label: string }> = {
             green: { color: '#10b981', label: 'On Track' },
@@ -1435,7 +1445,8 @@ export default function ProjectDetails({
 
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {/* Capture bar */}
+            {/* Capture bar — hidden for customers (they may not post notes) */}
+            {!userIsCustomer && (
             <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 {Object.entries(NOTE_TYPES).map(([key, nt]) => {
@@ -1457,6 +1468,7 @@ export default function ProjectDetails({
                 </button>
               </div>
             </div>
+            )}
 
             {/* Toolbar */}
             <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1551,6 +1563,7 @@ export default function ProjectDetails({
         <EditProjectModal
           project={activeProject}
           consultants={consultants}
+          customers={customers}
           onUpdateProject={onUpdateProject}
           onClose={() => setIsEditProjectModalOpen(false)}
         />

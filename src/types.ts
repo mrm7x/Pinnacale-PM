@@ -1,12 +1,49 @@
+/** Internal user roles. Drives project/task capabilities (see permissions.ts). */
+export type Role = 'Manager' | 'Project Manager' | 'Consultant' | 'Read only';
+
+/** Admin-power axis (orthogonal to role). Customers are always 'normal'. */
+export type Tier = 'superuser' | 'admin' | 'normal';
+
+/** Which profile table the signed-in user resolves to. */
+export type ActorType = 'internal' | 'customer';
+
+/**
+ * Unified view of the active user, regardless of which table they came from.
+ * Permission helpers consume this so callers don't need to branch on actorType.
+ */
+export interface ActiveUser {
+  id: string;
+  name: string;
+  email: string;
+  role: Role | 'Customer';   // 'Customer' only when actorType === 'customer'
+  tier: Tier;
+  actorType: ActorType;
+  avatarColor: string;       // for UI rendering (avatar badges, hero)
+}
+
 export interface Consultant {
   id: string;
   name: string;
   email: string;
-  role: string;
+  role: Role;
   avatarColor: string;
-  tier: 'superuser' | 'admin' | 'normal';
+  tier: Tier;
   passwordHash?: string;
   mustResetPassword?: boolean;
+}
+
+/**
+ * External party. Lives in a separate `customers` table; authenticates via the
+ * same Supabase Auth flow as consultants. tier is forced to 'normal' by a DB
+ * CHECK constraint — a customer can never be admin/superuser.
+ */
+export interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  company?: string | null;
+  avatarColor: string;
+  tier: Tier;                // always 'normal'
 }
 
 export interface Project {

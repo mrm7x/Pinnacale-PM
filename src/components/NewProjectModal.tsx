@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import type { Project, Consultant } from '../types';
+import type { Project, Consultant, Customer } from '../types';
 import { X } from 'lucide-react';
 import { WinComboBox } from './winui/WinComboBox';
 import { PHASES } from '../utils/phases';
@@ -10,9 +10,10 @@ interface NewProjectModalProps {
   onCreateProject: (project: Omit<Project, 'id' | 'createdAt' | 'isTemplate'>, templateId?: string) => void;
   projectTemplates: Project[];
   consultants: Consultant[];
+  customers: Customer[];
 }
 
-export default function NewProjectModal({ onClose, onCreateProject, projectTemplates, consultants }: NewProjectModalProps) {
+export default function NewProjectModal({ onClose, onCreateProject, projectTemplates, consultants, customers }: NewProjectModalProps) {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [newProject, setNewProject] = useState({
     name: '',
@@ -220,7 +221,10 @@ export default function NewProjectModal({ onClose, onCreateProject, projectTempl
                   className="form-select"
                   value={newProject.customerId}
                   onChange={(val) => setNewProject({ ...newProject, customerId: val })}
-                  options={consultantOptions}
+                  options={[
+                    { label: '-- Unassigned --', value: '' },
+                    ...customers.map(c => ({ label: c.company ? `${c.name} (${c.company})` : c.name, value: c.id }))
+                  ]}
                 />
               </div>
               <div className="form-group">

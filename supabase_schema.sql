@@ -141,3 +141,24 @@ REVOKE ALL ON communications FROM anon;
 -- Supabase Dashboard → Authentication → Users → "Add user", then insert the
 -- matching consultants row with the Supabase Auth user id as `id`.
 --------------------------------------------------------------------------------
+
+-- ============================================================================
+-- RBAC (Phase 2) — summary of what the migrations add. See:
+--   20260701120000_add_rbac_project_columns.sql
+--   20260701120100_create_customers_table.sql
+--   20260701120200_rls_role_aware.sql
+-- ----------------------------------------------------------------------------
+-- Two actor tables, both keyed by auth.users.id:
+--   consultants  — internal staff (role drives project/task powers;
+--                  tier drives admin powers: superuser|admin|normal)
+--   customers    — external parties (tier FORCED to 'normal' by CHECK)
+--
+-- projects role columns: project_manager_id, lead_consultant_id (FK consultants),
+--   customer_id (FK customers), project_resource_ids TEXT[]. Plus RAG columns.
+--
+-- Role-aware RLS uses helper functions (is_admin, is_internal_manager,
+-- is_project_lead, is_project_member, is_project_customer, can_see_project)
+-- so policies read like the capability matrix. Key rule: a customer on a
+-- project may UPDATE tasks only where task_owner IN ('Customer','Pinnacle/Customer').
+-- ============================================================================
+

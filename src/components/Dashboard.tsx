@@ -6,6 +6,7 @@ import {
   BarChart3, Activity, Gauge, Flag, PieChart, Layers, AlertCircle, CalendarClock
 } from 'lucide-react';
 import { syncTaskToO365 } from '../utils/o365';
+import { isCustomer as isCustomerUser, type ActiveUser } from '../utils/permissions';
 import { getProjectAccent, resolvePhase, resolvePhaseMeta, PHASE_ORDER } from '../utils/phases';
 
 // Status metadata shared across analytics/health views
@@ -130,17 +131,19 @@ interface DashboardProps {
   tasks: Task[];
   consultants: Consultant[];
   activeUserId: string;
+  activeUser: ActiveUser | null;
   o365Config: O365Config;
   onSelectProject: (projectId: string) => void;
   onUpdateTask: (task: Task) => void;
   onAddToast: (msg: string, type: 'success' | 'error' | 'warning' | 'info') => void;
 }
 
-export default function Dashboard({ 
-  projects, 
-  tasks, 
-  consultants, 
+export default function Dashboard({
+  projects,
+  tasks,
+  consultants,
   activeUserId,
+  activeUser,
   o365Config,
   onSelectProject,
   onUpdateTask,
@@ -163,10 +166,19 @@ export default function Dashboard({
   const [inlineEditForm, setInlineEditForm] = useState<{ pinkNumber: string }>({ pinkNumber: '' });
   const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null);
 
-  const activeUser = consultants.find(c => c.id === activeUserId) || null;
+  const userIsCustomer = isCustomerUser(activeUser);
 
-  // Active User Agenda & KPIs
-  const myProjects = projects.filter(p => p.consultantIds.includes(activeUserId));
+  // Active User Agenda & KPIs.
+  // myProjects uses the unified membership predicate so it reflects RBAC: a
+  // user sees projects where they're PM, lead, a resource, or the customer.
+  const myProjects = projects.filter(p => {
+    if (p.projectManagerId === activeUserId) return true;
+    if (p.leadConsultantId === activeUserId) return true;
+    if ((p.projectResourceIds ?? []).includes(activeUserId)) return true;
+    if ((p.consultantIds ?? []).includes(activeUserId)) return true;
+    if (p.customerId === activeUserId) return true;
+    return false;
+  });
   const myTasks = tasks.filter(t => 
     t.assignedConsultantId === activeUserId && 
     !tasks.some(c => c.parentId === t.id) // Only leaf tasks
@@ -322,15 +334,17 @@ export default function Dashboard({
       {/* Dashboard Toggle — pill tab bar */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '2rem', backgroundColor: 'var(--bg-secondary)', padding: '0.35rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)', width: 'fit-content', maxWidth: '100%' }}>
         {([
-          { id: 'team', icon: <Users size={17} />, label: 'Team Overview' },
-          { id: 'analytics', icon: <BarChart3 size={17} />, label: 'Analytics' },
-          { id: 'health', icon: <Activity size={17} />, label: 'Health' },
-          { id: 'resource', icon: <Gauge size={17} />, label: 'Resources' },
-          { id: 'timeline', icon: <Flag size={17} />, label: 'Timeline' },
+          { id: 'team', icon: <Users size={17} />, label: 'Team Overview', internalOnly: true },
+          { id: 'analytics', icon: <BarChart3 size={17} />, label: 'Analytics', internalOnly: true },
+          { id: 'health', icon: <Activity size={17} />, label: 'Health', internalOnly: true },
+          { id: 'resource', icon: <Gauge size={17} />, label: 'Resources', internalOnly: true },
+          { id: 'timeline', icon: <Flag size={17} />, label: 'Timeline', internalOnly: true },
           { id: 'projects', icon: <FolderKanban size={17} />, label: 'Projects' },
-          { id: 'calendar', icon: <Calendar size={17} />, label: 'Calendar' },
-          ...(isConsultant ? [{ id: 'personal', icon: <User size={17} />, label: 'My Agenda' }] : [])
-        ] as { id: string; icon: React.ReactNode; label: string }[]).map(tab => (
+          { id: 'calendar', icon: <Calendar size={17} />, label: 'Calendar', internalOnly: true },
+          ...(isConsultant ? [{ id: 'personal', icon: <User size={17} />, label: 'My Agenda', internalOnly: false }] : [])
+        ] as { id: string; icon: React.ReactNode; label: string; internalOnly?: boolean }[])
+        .filter(tab => !userIsCustomer || !tab.internalOnly)
+        .map(tab => (
           <button
             key={tab.id}
             onClick={() => setDashboardMode(tab.id as typeof dashboardMode)}

@@ -46,25 +46,37 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
           return;
         }
 
-        // Fetch corresponding consultant record
-        const { data, error: dbError } = await supabase
+        // Resolve the profile row: try internal consultants first, then
+        // external customers. Either table may hold the authenticated user.
+        let profile: { id: string; name: string } | null = null;
+
+        const { data: consultantData } = await supabase
           .from('consultants')
-          .select('*')
+          .select('id, name')
           .eq('email', cleanUser)
-          .single();
+          .maybeSingle() as { data: any };
 
-        const consultantData = data as any;
+        if (consultantData) {
+          profile = consultantData as { id: string; name: string };
+        } else {
+          const { data: customerData } = await supabase
+            .from('customers')
+            .select('id, name')
+            .eq('email', cleanUser)
+            .maybeSingle() as { data: any };
+          if (customerData) profile = customerData as { id: string; name: string };
+        }
 
-        if (dbError || !consultantData) {
-          console.warn('Authenticated via Supabase, but consultant profile row not found:', dbError);
+        if (!profile) {
+          console.warn('Authenticated via Supabase, but no consultant or customer profile row found.');
           setError('User profile not found in database. Please contact your administrator.');
           await supabase.auth.signOut();
           setIsLoading(false);
           return;
         }
 
-        onAddToast(`Welcome back, ${consultantData.name.split(' ')[0]}.`, 'success');
-        onLoginSuccess(consultantData.id);
+        onAddToast(`Welcome back, ${profile.name.split(' ')[0]}.`, 'success');
+        onLoginSuccess(profile.id);
       } catch (err: any) {
         setError(err.message || 'An error occurred during authentication.');
       } finally {
