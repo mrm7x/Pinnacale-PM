@@ -17,13 +17,21 @@
 -- ---------------------------------------------------------------------------
 -- Helper predicates (STABLE functions usable inside USING / WITH CHECK)
 -- ---------------------------------------------------------------------------
+-- auth.uid() returns a uuid, but our profile tables (consultants/customers) and
+-- the projects role columns store ids as TEXT. This helper casts once so every
+-- comparison below is text = text and avoids "operator does not exist: text =
+-- uuid" errors.
+CREATE OR REPLACE FUNCTION public.auth_uid_text()
+RETURNS text LANGUAGE sql STABLE AS $$
+  SELECT auth.uid()::text;
+$$;
 
 -- Is the current user a superuser or admin (internal)?
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS boolean LANGUAGE sql STABLE AS $$
   SELECT EXISTS (
     SELECT 1 FROM consultants c
-    WHERE c.id = auth.uid() AND c.tier IN ('superuser', 'admin')
+    WHERE c.id = auth_uid_text() AND c.tier IN ('superuser', 'admin')
   );
 $$;
 
@@ -32,7 +40,7 @@ CREATE OR REPLACE FUNCTION public.is_internal_manager()
 RETURNS boolean LANGUAGE sql STABLE AS $$
   SELECT EXISTS (
     SELECT 1 FROM consultants c
-    WHERE c.id = auth.uid() AND c.role IN ('Manager', 'Project Manager')
+    WHERE c.id = auth_uid_text() AND c.role IN ('Manager', 'Project Manager')
   );
 $$;
 
@@ -42,20 +50,20 @@ RETURNS boolean LANGUAGE sql STABLE AS $$
   SELECT EXISTS (
     SELECT 1 FROM projects p
     WHERE p.id = p_id
-      AND (p.lead_consultant_id = auth.uid() OR p.project_manager_id = auth.uid())
+      AND (p.lead_consultant_id = auth_uid_text() OR p.project_manager_id = auth_uid_text())
   );
 $$;
 
--- Is the current user a member (resource) of project p_id? Includes lead/PM.
+-- Is the current user a member (resource/lead/PM) of project p_id? Includes lead/PM.
 CREATE OR REPLACE FUNCTION public.is_project_member(p_id TEXT)
 RETURNS boolean LANGUAGE sql STABLE AS $$
   SELECT EXISTS (
     SELECT 1 FROM projects p
     WHERE p.id = p_id AND (
-      p.lead_consultant_id    = auth.uid() OR
-      p.project_manager_id    = auth.uid() OR
-      auth.uid() = ANY(p.project_resource_ids) OR
-      auth.uid() = ANY(p.consultant_ids)
+      p.lead_consultant_id    = auth_uid_text() OR
+      p.project_manager_id    = auth_uid_text() OR
+      auth_uid_text() = ANY(p.project_resource_ids) OR
+      auth_uid_text() = ANY(p.consultant_ids)
     )
   );
 $$;
@@ -65,7 +73,7 @@ CREATE OR REPLACE FUNCTION public.is_project_customer(p_id TEXT)
 RETURNS boolean LANGUAGE sql STABLE AS $$
   SELECT EXISTS (
     SELECT 1 FROM projects p
-    WHERE p.id = p_id AND p.customer_id = auth.uid()
+    WHERE p.id = p_id AND p.customer_id = auth_uid_text()
   );
 $$;
 
@@ -80,7 +88,7 @@ RETURNS boolean LANGUAGE sql STABLE AS $$
       -- Internal read-only users can see all projects (read-only role).
       OR EXISTS (
         SELECT 1 FROM consultants c
-        WHERE c.id = auth.uid() AND c.role = 'Read only'
+        WHERE c.id = auth_uid_text() AND c.role = 'Read only'
       );
 $$;
 
@@ -123,7 +131,7 @@ DROP POLICY IF EXISTS "customers_delete_authenticated" ON customers;
 -- the project-creation customer selector).
 CREATE POLICY "customers_select"
   ON customers FOR SELECT TO authenticated
-  USING (id = auth.uid() OR is_admin() OR is_internal_manager());
+  USING (id = auth_uid_text() OR is_admin() OR is_internal_manager());
 
 -- Only admins can manage customers. A customer may never edit their own row
 -- (tier is forced by constraint; even self-edit is denied to prevent name/email
@@ -201,7 +209,7 @@ CREATE POLICY "tasks_update"
   USING (
     is_internal_manager()
     OR is_project_lead(project_id)
-    OR (assigned_consultant_id = auth.uid() AND is_project_member(project_id))
+    OR (assigned_consultant_id = auth_uid_text() AND is_project_member(project_id))
     OR (
       is_project_customer(project_id)
       AND COALESCE(task_owner, 'Pinnacle') IN ('Customer', 'Pinnacle/Customer')
@@ -210,7 +218,7 @@ CREATE POLICY "tasks_update"
   WITH CHECK (
     is_internal_manager()
     OR is_project_lead(project_id)
-    OR (assigned_consultant_id = auth.uid() AND is_project_member(project_id))
+    OR (assigned_consultant_id = auth_uid_text() AND is_project_member(project_id))
     OR (
       is_project_customer(project_id)
       AND COALESCE(task_owner, 'Pinnacle') IN ('Customer', 'Pinnacle/Customer')
