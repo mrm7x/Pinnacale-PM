@@ -1,20 +1,7 @@
 import React, { useState } from 'react';
 import type { Consultant } from '../types';
 import { verifyPassword } from '../utils/auth';
-import { isSupabaseEnabled } from '../utils/supabase';
 
-// Guaranteed admin fallback. These match the seed in App.tsx; kept here too so
-// that `admin`/`manager` always works in local mode even if localStorage is in
-// a corrupted or partially-seeded state.
-const ADMIN_HASH = '6ee4a469cd4e91053847f5d3fcb61dbcc91e8f0ef10be7748da4c4a1ba382d17'; // 'manager'
-const ADMIN_FALLBACK = {
-  id: 'admin',
-  name: 'System Administrator',
-  email: 'mohammad.jenabi@gmail.com',
-  role: 'Manager',
-  avatarColor: '#2d4a65',
-  tier: 'superuser' as const
-};
 import Logo from './Logo';
 import { KeyRound, User, AlertCircle, ArrowRight, CheckCircle } from 'lucide-react';
 import { isSupabaseConfigured, getSupabaseClient } from '../utils/supabase';
@@ -87,23 +74,13 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
     }
 
     // 2. Fallback Local Storage authentication flow
+    // NOTE: the previous "guaranteed admin" backdoor (admin/manager) has been
+    // removed. Authentication now requires a matching consultant record with a
+    // valid password hash, regardless of username. There is no hardcoded
+    // fallback credential.
     const consultant = consultants.find(
-      c => c.email.trim().toLowerCase() === cleanUser || (c.id === 'admin' && cleanUser === 'admin')
+      c => c.email.trim().toLowerCase() === cleanUser
     );
-
-    // Guaranteed admin fallback: if Supabase is NOT enabled and the user is
-    // trying the admin account, accept it as long as the password is 'manager'.
-    // This guarantees access even when localStorage consultants are missing or
-    // the seeded hash has been corrupted.
-    if (!isSupabaseEnabled() && (cleanUser === 'admin' || cleanUser === ADMIN_FALLBACK.email)) {
-      const adminValid = await verifyPassword(password, ADMIN_HASH);
-      if (adminValid) {
-        onAddToast(`Welcome back, ${ADMIN_FALLBACK.name.split(' ')[0]}.`, 'success');
-        onLoginSuccess(ADMIN_FALLBACK.id);
-        setIsLoading(false);
-        return;
-      }
-    }
 
     if (!consultant || !consultant.passwordHash) {
       setError('Invalid username or password.');

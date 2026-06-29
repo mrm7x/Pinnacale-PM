@@ -1,7 +1,16 @@
--- Pinnacle Projects Supabase Database Schema
--- Run this script in your Supabase SQL Editor to configure your database tables.
+-- ============================================================================
+-- Pinnacle Projects Supabase Database Schema (reference)
+-- ----------------------------------------------------------------------------
+-- This file documents the intended schema + RLS posture. The source of truth
+-- for the live database is the ordered migrations under /supabase/migrations,
+-- which are applied automatically via the GitHub "Deploy Migrations" workflow.
+--
+-- SECURITY: RLS is ENABLED on every table and locked to the `authenticated`
+-- role. The `anon` role is revoked. Do NOT weaken these policies, and do NOT
+-- seed default credentials in SQL. Users are created exclusively via Supabase
+-- Auth (email/password) by an administrator.
+-- ============================================================================
 
--- Enable UUID extension if needed
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 --------------------------------------------------------------------------------
@@ -13,20 +22,19 @@ CREATE TABLE IF NOT EXISTS consultants (
     email TEXT UNIQUE NOT NULL,
     role TEXT NOT NULL DEFAULT 'Consultant',
     avatar_color TEXT NOT NULL DEFAULT '#0d9488',
-    tier TEXT NOT NULL DEFAULT 'normal', -- 'superuser' | 'admin' | 'normal' (must match client-side Consultant.tier union)
-    password_hash TEXT, -- Fallback plaintext hash when Supabase Auth is inactive
+    tier TEXT NOT NULL DEFAULT 'normal',            -- 'superuser' | 'admin' | 'normal'
+    password_hash TEXT,                             -- legacy local-mode hash; unused in Supabase Auth mode
     must_reset_password BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Enable Row Level Security (RLS)
 ALTER TABLE consultants ENABLE ROW LEVEL SECURITY;
 
--- Create policies. NOTE: WITH USING(true)/CHECK(true) these are intentionally
--- permissive (full public read AND write). Tighten to auth.role() = 'authenticated'
--- if you need to restrict writes to signed-in users.
-CREATE POLICY "Allow read access for anyone" ON consultants FOR SELECT USING (true);
-CREATE POLICY "Allow full write access" ON consultants FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "consultants_select_authenticated" ON consultants FOR SELECT TO authenticated USING (true);
+CREATE POLICY "consultants_insert_authenticated" ON consultants FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "consultants_update_authenticated" ON consultants FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "consultants_delete_authenticated" ON consultants FOR DELETE TO authenticated USING (true);
+REVOKE ALL ON consultants FROM anon;
 
 --------------------------------------------------------------------------------
 -- 2. PROJECTS TABLE
@@ -37,9 +45,9 @@ CREATE TABLE IF NOT EXISTS projects (
     client_name TEXT NOT NULL,
     description TEXT,
     budget_days NUMERIC NOT NULL DEFAULT 0,
-    start_date TEXT NOT NULL, -- Format YYYY-MM-DD
-    target_go_live_date TEXT NOT NULL, -- Format YYYY-MM-DD
-    consultant_ids TEXT[] NOT NULL DEFAULT '{}', -- Array of consultant IDs
+    start_date TEXT NOT NULL,                       -- YYYY-MM-DD
+    target_go_live_date TEXT NOT NULL,              -- YYYY-MM-DD
+    consultant_ids TEXT[] NOT NULL DEFAULT '{}',
     project_manager_id TEXT REFERENCES consultants(id),
     lead_consultant_id TEXT REFERENCES consultants(id),
     customer_id TEXT REFERENCES consultants(id),
@@ -52,8 +60,8 @@ CREATE TABLE IF NOT EXISTS projects (
     rag_costs TEXT DEFAULT 'green',
     rag_benefits TEXT DEFAULT 'green',
     rag_overall TEXT DEFAULT 'green',
-    status TEXT NOT NULL DEFAULT 'new', -- 'new', 'in progress', 'on hold', 'completed', 'cancelled'
-    phase TEXT, -- Human-readable delivery phase (e.g. 'Discovery', 'Implementation', 'Hypercare')
+    status TEXT NOT NULL DEFAULT 'new',
+    phase TEXT,
     is_template BOOLEAN NOT NULL DEFAULT false,
     icon TEXT,
     color_theme TEXT,
@@ -61,11 +69,13 @@ CREATE TABLE IF NOT EXISTS projects (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Enable RLS
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow read access for anyone" ON projects FOR SELECT USING (true);
-CREATE POLICY "Allow full write access" ON projects FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "projects_select_authenticated" ON projects FOR SELECT TO authenticated USING (true);
+CREATE POLICY "projects_insert_authenticated" ON projects FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "projects_update_authenticated" ON projects FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "projects_delete_authenticated" ON projects FOR DELETE TO authenticated USING (true);
+REVOKE ALL ON projects FROM anon;
 
 --------------------------------------------------------------------------------
 -- 3. TASKS TABLE
@@ -79,7 +89,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     duration_days NUMERIC NOT NULL DEFAULT 1.0,
     assigned_consultant_id TEXT REFERENCES consultants(id) ON DELETE SET NULL,
     predecessor_ids TEXT[] NOT NULL DEFAULT '{}',
-    status TEXT NOT NULL DEFAULT 'not_started', -- 'not_started' | 'in_progress' | 'completed' | 'blocked'
+    status TEXT NOT NULL DEFAULT 'not_started',
     o365_task_id TEXT,
     o365_calendar_event_id TEXT,
     planned_start_date TEXT,
@@ -90,16 +100,18 @@ CREATE TABLE IF NOT EXISTS tasks (
     sort_order INTEGER DEFAULT 0,
     custom_start_date TEXT,
     progress INTEGER DEFAULT 0,
-    due_date TEXT, -- YYYY-MM-DD; when set & duration_days = 0, duration is derived from start->due
-    task_owner TEXT NOT NULL DEFAULT 'Pinnacle', -- 'Pinnacle' | 'Customer' | 'Pinnacle/Customer'
+    due_date TEXT,
+    task_owner TEXT NOT NULL DEFAULT 'Pinnacle',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Enable RLS
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow read access for anyone" ON tasks FOR SELECT USING (true);
-CREATE POLICY "Allow full write access" ON tasks FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "tasks_select_authenticated" ON tasks FOR SELECT TO authenticated USING (true);
+CREATE POLICY "tasks_insert_authenticated" ON tasks FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "tasks_update_authenticated" ON tasks FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "tasks_delete_authenticated" ON tasks FOR DELETE TO authenticated USING (true);
+REVOKE ALL ON tasks FROM anon;
 
 --------------------------------------------------------------------------------
 -- 4. COMMUNICATIONS TABLE
@@ -108,57 +120,24 @@ CREATE TABLE IF NOT EXISTS communications (
     id TEXT PRIMARY KEY,
     project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
     subject TEXT NOT NULL,
-    type TEXT NOT NULL, -- 'Teams call', 'email', 'in person meeting'
+    type TEXT NOT NULL,
     description TEXT,
     creator_id TEXT REFERENCES consultants(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Enable RLS
 ALTER TABLE communications ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow read access for anyone" ON communications FOR SELECT USING (true);
-CREATE POLICY "Allow full write access" ON communications FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "communications_select_authenticated" ON communications FOR SELECT TO authenticated USING (true);
+CREATE POLICY "communications_insert_authenticated" ON communications FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "communications_update_authenticated" ON communications FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "communications_delete_authenticated" ON communications FOR DELETE TO authenticated USING (true);
+REVOKE ALL ON communications FROM anon;
 
 --------------------------------------------------------------------------------
--- 5. INITIAL SEED DATA
+-- 5. SEED DATA — none.
+-- Project/template seed rows belong in the migration that creates them, not
+-- here. Do NOT seed users or credentials in SQL. Create the first admin via
+-- Supabase Dashboard → Authentication → Users → "Add user", then insert the
+-- matching consultants row with the Supabase Auth user id as `id`.
 --------------------------------------------------------------------------------
-
--- Seed default consultants (Note: admin email is customized to mohammad.jenabi@gmail.com)
-INSERT INTO consultants (id, name, email, role, avatar_color, tier, password_hash, must_reset_password)
-VALUES
-  ('admin', 'System Administrator', 'mohammad.jenabi@gmail.com', 'Manager', '#2d4a65', 'superuser', '6ee4a469cd4e91053847f5d3fcb61dbcc91e8f0ef10be7748da4c4a1ba382d17', false),
-  ('c1', 'Sarah Jenkins', 'sarah.jenkins@pinnacle.com', 'Lead Consultant', '#0d9488', 'normal', '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8', true),
-  ('c2', 'Alex Rivera', 'alex.rivera@pinnacle.com', 'Consultant', '#6366f1', 'normal', '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8', true),
-  ('c3', 'Marcus Brody', 'marcus.brody@pinnacle.com', 'Project Manager', '#f59e0b', 'normal', '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8', true),
-  ('c4', 'David Vance', 'david.vance@pinnacle.com', 'Read only', '#ef4444', 'normal', '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8', true)
-ON CONFLICT (email) DO UPDATE
-SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_hash = EXCLUDED.password_hash;
-
--- Seed default project (Horizon Logistics implementation)
-INSERT INTO projects (id, name, client_name, description, budget_days, start_date, target_go_live_date, consultant_ids, is_template)
-VALUES (
-    'p1',
-    'Sage Intacct Financials Implementation',
-    'Horizon Logistics Corp',
-    'Core financial ledger setups, Accounts Payable, Accounts Receivable, Cash Management, and custom dimensional configurations.',
-    25,
-    CURRENT_DATE::TEXT,
-    (CURRENT_DATE + INTERVAL '90 days')::DATE::TEXT,
-    ARRAY['c1', 'c2']::TEXT[],
-    false
-) ON CONFLICT (id) DO NOTHING;
-
--- Seed template project
-INSERT INTO projects (id, name, client_name, description, budget_days, start_date, target_go_live_date, consultant_ids, is_template)
-VALUES (
-    'tmpl_sage_intacct',
-    'Sage Intacct Implementation',
-    'Template Reference',
-    'Generate a standardized, multi-stage project management structure for enterprise accounting software deployment.',
-    25,
-    CURRENT_DATE::TEXT,
-    (CURRENT_DATE + INTERVAL '90 days')::DATE::TEXT,
-    ARRAY[]::TEXT[],
-    true
-) ON CONFLICT (id) DO NOTHING;

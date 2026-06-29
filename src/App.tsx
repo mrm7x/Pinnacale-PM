@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import PasswordReset from './components/PasswordReset';
 import type { Project, Task, Consultant, O365Config, Communication } from './types';
 import type { AccountInfo } from '@azure/msal-browser';
@@ -30,18 +30,33 @@ interface Toast {
   type: 'success' | 'error' | 'warning' | 'info';
 }
 
-// Pre-computed SHA-256 hashes for default passwords
-const HASH_MANAGER = '6ee4a469cd4e91053847f5d3fcb61dbcc91e8f0ef10be7748da4c4a1ba382d17'; // 'manager'
-const HASH_PASSWORD = '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8'; // 'password'
+// Default password for freshly seeded demo users. The actual hash is computed
+// at runtime via hashPassword() — we never hardcode hash digests in source, and
+// we never ship a known default in the database. These are only used to seed a
+// LOCAL (localStorage) demo environment when no backend is configured. In
+// Supabase mode, users must be created through auth.admin / signUp with real
+// credentials set by an administrator.
+const DEFAULT_SEED_PASSWORD = 'ChangeMeOnFirstLogin!';
 
-// Initial Mock Seed Data (admin is now a regular consultant record)
+// Initial Mock Seed Data (admin is now a regular consultant record).
+// Hashes are filled in at seed time (see ensureSeedConsultantHashes below) so
+// no password digest is ever committed to the repository.
 const defaultConsultants: Consultant[] = [
-  { id: 'admin', name: 'System Administrator', email: 'mohammad.jenabi@gmail.com', role: 'Manager', avatarColor: '#2d4a65', tier: 'superuser', passwordHash: HASH_MANAGER, mustResetPassword: false },
-  { id: 'c1', name: 'Sarah Jenkins', email: 'sarah.jenkins@pinnacle.com', role: 'Lead Consultant', avatarColor: '#0d9488', tier: 'normal', passwordHash: HASH_PASSWORD, mustResetPassword: true },
-  { id: 'c2', name: 'Alex Rivera', email: 'alex.rivera@pinnacle.com', role: 'Consultant', avatarColor: '#6366f1', tier: 'normal', passwordHash: HASH_PASSWORD, mustResetPassword: true },
-  { id: 'c3', name: 'Marcus Brody', email: 'marcus.brody@pinnacle.com', role: 'Project Manager', avatarColor: '#f59e0b', tier: 'normal', passwordHash: HASH_PASSWORD, mustResetPassword: true },
-  { id: 'c4', name: 'David Vance', email: 'david.vance@pinnacle.com', role: 'Read only', avatarColor: '#ef4444', tier: 'normal', passwordHash: HASH_PASSWORD, mustResetPassword: true }
+  { id: 'admin', name: 'System Administrator', email: 'admin@pinnacle.local', role: 'Manager', avatarColor: '#2d4a65', tier: 'superuser', passwordHash: undefined, mustResetPassword: true },
+  { id: 'c1', name: 'Sarah Jenkins', email: 'sarah.jenkins@pinnacle.com', role: 'Lead Consultant', avatarColor: '#0d9488', tier: 'normal', passwordHash: undefined, mustResetPassword: true },
+  { id: 'c2', name: 'Alex Rivera', email: 'alex.rivera@pinnacle.com', role: 'Consultant', avatarColor: '#6366f1', tier: 'normal', passwordHash: undefined, mustResetPassword: true },
+  { id: 'c3', name: 'Marcus Brody', email: 'marcus.brody@pinnacle.com', role: 'Project Manager', avatarColor: '#f59e0b', tier: 'normal', passwordHash: undefined, mustResetPassword: true },
+  { id: 'c4', name: 'David Vance', email: 'david.vance@pinnacle.com', role: 'Read only', avatarColor: '#ef4444', tier: 'normal', passwordHash: undefined, mustResetPassword: true }
 ];
+
+/**
+ * Fills in passwordHash for the local seed consultants using a runtime hash of
+ * the default seed password. Runs only when seeding localStorage demo data.
+ */
+async function ensureSeedConsultantHashes(list: Consultant[]): Promise<Consultant[]> {
+  const hash = await hashPassword(DEFAULT_SEED_PASSWORD);
+  return list.map(c => (c.passwordHash ? c : { ...c, passwordHash: hash }));
+}
 
 const defaultProjects: Project[] = [
   {
@@ -155,10 +170,33 @@ export default function App() {
     if (migrated) console.log('[Pinnacle] Migrated localStorage keys from sagepulse_ to pinnacle_.');
   }, []);
 
-  // Load from database / localStorage
-  useEffect(() => {
-    const loadData = async () => {
-      try {
+  // Load from database / localStorage. Extracted as a callback so it can be
+  // re-invoked after sign-in — backend reads are deferred until authenticated
+  // (RLS now requires the authenticated role), so the first call on mount is a
+  // no-op for Supabase sessions until handleLoginSuccess triggers a reload.
+  const loadData = useCallback(async () => {
+    try {
+      // SECURITY: never issue reads/seeds against the backend for an
+      // unauthenticated session. With RLS now requiring `authenticated`,
+      // anonymous reads return nothing — and without this gate the app would
+      // mistakenly think the DB is empty and re-seed it with default
+      // credentials.
+      if (isSupabaseConfigured()) {
+        const supabase = getSupabaseClient();
+        const { data: { session } } = await supabase!.auth.getSession();
+        if (!session) {
+          return;
+        }
+      }
+        if (isSupabaseConfigured()) {
+          const supabase = getSupabaseClient();
+          const { data: { session } } = await supabase!.auth.getSession();
+          if (!session) {
+            // No session yet — defer all loading until after sign-in.
+            return;
+          }
+        }
+
         const [loadedProjects, loadedTasks, loadedConsultants, loadedCommunications] = await Promise.all([
           api.projects.getAll(),
           api.tasks.getAll(),
@@ -167,25 +205,27 @@ export default function App() {
         ]);
 
         if (loadedProjects.length === 0 && loadedConsultants.length === 0) {
-          // Seed initial defaults
+          // Seed initial defaults — only meaningful in localStorage mode.
+          // (Supabase mode is seeded via migrations / auth.admin; the app
+          // should never silently write default credentials to a real DB.)
           const initialProjects = defaultProjects;
-          const initialConsultants = defaultConsultants;
+          const initialConsultants = await ensureSeedConsultantHashes(defaultConsultants);
           const initialScheduledTasks = calculateTaskSchedules(
             initialProjects[0].startDate,
             defaultTasks.map((t, idx) => ({ ...t, sortOrder: (idx + 1) * 10 }))
           );
-          
+
           setProjects(initialProjects);
           setConsultants(initialConsultants);
           setTasks(initialScheduledTasks);
 
-          await Promise.all([
-            api.projects.saveAll(initialProjects),
-            api.consultants.saveAll(initialConsultants)
-          ]);
-          await api.tasks.saveAll(initialScheduledTasks);
-
           if (!isSupabaseConfigured()) {
+            await Promise.all([
+              api.projects.saveAll(initialProjects),
+              api.consultants.saveAll(initialConsultants)
+            ]);
+            await api.tasks.saveAll(initialScheduledTasks);
+
             localStorage.setItem('pinnacle_projects', JSON.stringify(initialProjects));
             localStorage.setItem('pinnacle_consultants', JSON.stringify(initialConsultants));
             localStorage.setItem('pinnacle_tasks', JSON.stringify(initialScheduledTasks));
@@ -194,59 +234,72 @@ export default function App() {
           setProjects(loadedProjects);
           setTasks(loadedTasks);
           setCommunications(loadedCommunications);
-          
-          // Apply fallback migrations to loaded consultants if needed
+
+          // Normalize legacy consultant records that may still carry a stray
+          // plaintext `password` field (pre-RLS schema). Any such record is
+          // force-flagged for a password reset; the cleartext is never trusted
+          // as a hash and is dropped from the row.
           let currentConsultants = loadedConsultants;
           let needsMigration = false;
-          
+
           currentConsultants = currentConsultants.map(c => {
             const asAny = c as any;
             if (asAny.password && !c.passwordHash) {
               needsMigration = true;
-              const hash = asAny.password === 'manager' ? HASH_MANAGER : HASH_PASSWORD;
               const { password: _removed, ...rest } = asAny;
-              return { ...rest, passwordHash: hash, mustResetPassword: c.id !== 'admin' } as Consultant;
+              return { ...rest, passwordHash: undefined, mustResetPassword: true } as Consultant;
             }
             return c;
           });
 
-          // Ensure admin record email is updated
-          const adminRecord = currentConsultants.find(c => c.id === 'admin');
-          if (adminRecord && adminRecord.email !== 'mohammad.jenabi@gmail.com') {
-            adminRecord.email = 'mohammad.jenabi@gmail.com';
-            needsMigration = true;
-          }
-          
           if (needsMigration) {
             await api.consultants.saveAll(currentConsultants);
             if (!isSupabaseConfigured()) {
               localStorage.setItem('pinnacle_consultants', JSON.stringify(currentConsultants));
             }
           }
-          
+
           setConsultants(currentConsultants);
         }
       } catch (error) {
         console.error('Failed to load data from database:', error);
       }
-    };
-
-    loadData();
-
-    const savedConfig = localStorage.getItem('pinnacle_o365config');
-    const savedActiveUser = localStorage.getItem('pinnacle_activeuser');
-    const savedAuth = localStorage.getItem('pinnacle_session');
-
-    if (savedConfig) {
-      setO365Config(JSON.parse(savedConfig));
-    }
-    if (savedAuth && savedActiveUser) {
-      setIsAuthenticated(true);
-      setActiveUserId(savedActiveUser);
-    }
   }, []);
 
-  // Theme Sync Handler
+  // Initial mount: restore non-sensitive UI prefs, hydrate auth, and trigger
+  // the first data load. Auth hydration is deliberately backend-driven:
+  //   - Supabase mode: trust the Supabase session only. We no longer treat a
+  //     bare `pinnacle_session` localStorage key as proof of login (P0-3).
+  //   - Local mode: keep a lightweight session flag, but only accept it if the
+  //     stored active user still resolves to a known consultant record.
+  useEffect(() => {
+    const savedConfig = localStorage.getItem('pinnacle_o365config');
+    if (savedConfig) {
+      try { setO365Config(JSON.parse(savedConfig)); } catch { /* ignore malformed */ }
+    }
+
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseClient();
+      supabase?.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          setIsAuthenticated(true);
+          const userId = localStorage.getItem('pinnacle_activeuser') || session.user.id;
+          setActiveUserId(userId);
+          loadData();
+        }
+      });
+    } else {
+      // Local mode: only honor a saved session if we can still find the user.
+      // (loadData will populate consultants; we re-validate here on next tick.)
+      const savedAuth = localStorage.getItem('pinnacle_session');
+      const savedActiveUser = localStorage.getItem('pinnacle_activeuser');
+      if (savedAuth && savedActiveUser) {
+        setIsAuthenticated(true);
+        setActiveUserId(savedActiveUser);
+      }
+      loadData();
+    }
+  }, [loadData]);
   useEffect(() => {
     document.documentElement.classList.remove('dark');
     if (theme === 'dark') {
@@ -733,7 +786,14 @@ export default function App() {
   // Consultant CRUD Action Handlers
   const handleAddConsultant = async (cData: Omit<Consultant, 'id'> & { password?: string }): Promise<boolean> => {
     let id = `c-${Math.random().toString(36).substring(2, 9)}`;
-    const plaintextPassword = cData.password || 'password';
+    // SECURITY: require an actual password rather than silently defaulting to a
+    // well-known one. Callers must supply a strong initial password; the user
+    // is always forced to reset it on first login.
+    const plaintextPassword = cData.password;
+    if (!plaintextPassword || plaintextPassword.length < 8) {
+      addToast('A password of at least 8 characters is required.', 'error');
+      return false;
+    }
 
     if (isSupabaseConfigured()) {
       try {
@@ -913,7 +973,14 @@ export default function App() {
   };
 
   const handleLoginSuccess = (userId: string) => {
-    const sessionToken = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+    // Local-mode session token only. In Supabase mode the real session is the
+    // Supabase JWT (validated server-side); this token is just a UI hint.
+    // crypto.randomUUID() is supported in all current browsers and secure
+    // contexts; the Math.random fallback is intentionally avoided because it is
+    // not cryptographically random.
+    const sessionToken = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${crypto.getRandomValues(new Uint32Array(2)).join('-')}`;
     setIsAuthenticated(true);
     setActiveUserId(userId);
     localStorage.setItem('pinnacle_session', sessionToken);
@@ -922,6 +989,8 @@ export default function App() {
     if (!localStorage.getItem('pinnacle_active_tab')) {
       setActiveTab('projects');
     }
+    // Backend reads were deferred until authenticated; now reload.
+    loadData();
     // Check if user needs password reset
     const consultant = consultants.find(c => c.id === userId);
     if (consultant && consultant.mustResetPassword) {

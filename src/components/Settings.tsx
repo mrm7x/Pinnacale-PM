@@ -153,8 +153,16 @@ export default function Settings({
   };
 
   const handleDownloadSchema = () => {
+    // SECURITY: this template MUST stay in sync with the locked-down migrations
+    // under supabase/migrations. It must NEVER contain:
+    //   * open RLS policies (USING(true)/WITH CHECK(true) with no auth check)
+    //   * hardcoded password hashes or default credentials
+    //   * a real administrator email
     const sqlContent = `-- Pinnacle Projects Supabase Database Schema
 -- Run this script in your Supabase SQL Editor to configure your database tables.
+-- RLS is ENABLED and locked to the authenticated role on every table. The anon
+-- role is revoked. Do NOT weaken these policies without reviewing the security
+-- model. Do NOT seed default credentials here — create users via Supabase Auth.
 
 CREATE TABLE IF NOT EXISTS consultants (
     id TEXT PRIMARY KEY,
@@ -169,8 +177,11 @@ CREATE TABLE IF NOT EXISTS consultants (
 );
 
 ALTER TABLE consultants ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow read access for anyone" ON consultants FOR SELECT USING (true);
-CREATE POLICY "Allow write access for authenticated users" ON consultants FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "consultants_select_authenticated" ON consultants FOR SELECT TO authenticated USING (true);
+CREATE POLICY "consultants_insert_authenticated" ON consultants FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "consultants_update_authenticated" ON consultants FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "consultants_delete_authenticated" ON consultants FOR DELETE TO authenticated USING (true);
+REVOKE ALL ON consultants FROM anon;
 
 CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
@@ -186,8 +197,11 @@ CREATE TABLE IF NOT EXISTS projects (
 );
 
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow read access for anyone" ON projects FOR SELECT USING (true);
-CREATE POLICY "Allow write access for authenticated users" ON projects FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "projects_select_authenticated" ON projects FOR SELECT TO authenticated USING (true);
+CREATE POLICY "projects_insert_authenticated" ON projects FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "projects_update_authenticated" ON projects FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "projects_delete_authenticated" ON projects FOR DELETE TO authenticated USING (true);
+REVOKE ALL ON projects FROM anon;
 
 CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
@@ -214,14 +228,11 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow read access for anyone" ON tasks FOR SELECT USING (true);
-CREATE POLICY "Allow write access for authenticated users" ON tasks FOR ALL USING (true) WITH CHECK (true);
-
-INSERT INTO consultants (id, name, email, role, avatar_color, tier, password_hash, must_reset_password)
-VALUES 
-  ('admin', 'System Administrator', 'mohammad.jenabi@gmail.com', 'Manager', '#2d4a65', 'superuser', '6ee4a469cd4e91053847f5d3fcb61dbcc91e8f0ef10be7748da4c4a1ba382d17', false)
-ON CONFLICT (email) DO UPDATE 
-SET name = EXCLUDED.name, role = EXCLUDED.role, tier = EXCLUDED.tier, password_hash = EXCLUDED.password_hash;
+CREATE POLICY "tasks_select_authenticated" ON tasks FOR SELECT TO authenticated USING (true);
+CREATE POLICY "tasks_insert_authenticated" ON tasks FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "tasks_update_authenticated" ON tasks FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "tasks_delete_authenticated" ON tasks FOR DELETE TO authenticated USING (true);
+REVOKE ALL ON tasks FROM anon;
 `;
 
     const blob = new Blob([sqlContent], { type: 'text/plain' });
