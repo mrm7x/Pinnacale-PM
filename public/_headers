@@ -2,16 +2,15 @@
 # Security headers for Cloudflare Pages
 # ----------------------------------------------------------------------------
 # Applied to every route. The Content-Security-Policy is intentionally tight:
-# the only external origins are the project's own Supabase host and the
-# Microsoft identity + Graph endpoints used by the O365 integration. No CDN,
-# font, or analytics third-parties are loaded, so everything else is 'self'.
+# the only external origin is the project's own Supabase host. No CDN, font,
+# analytics, or other third-parties are loaded, so everything else is 'self'.
 #
 # If the Supabase project ref changes, update both occurrences of the host
 # below (https + wss) to match.
 # ============================================================================
 
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://zhpoknwadnxauuyqffgt.supabase.co wss://zhpoknwadnxauuyqffgt.supabase.co https://login.microsoftonline.com https://graph.microsoft.com; form-action 'self' https://login.microsoftonline.com; frame-ancestors 'none'; base-uri 'self'; object-src 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://zhpoknwadnxauuyqffgt.supabase.co wss://zhpoknwadnxauuyqffgt.supabase.co; form-action 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'
   Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

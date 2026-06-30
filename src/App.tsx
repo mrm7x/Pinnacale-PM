@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import PasswordReset from './components/PasswordReset';
-import type { Project, Task, Consultant, Customer, O365Config, Communication } from './types';
-import type { AccountInfo } from '@azure/msal-browser';
-import { getMsalInstance } from './utils/o365';
+import type { Project, Task, Consultant, Customer, Communication } from './types';
 import { calculateTaskSchedules } from './utils/scheduler';
 import { defaultTasks } from './defaultTasks';
 import Dashboard from './components/Dashboard';
@@ -16,7 +14,7 @@ import NewProjectModal from './components/NewProjectModal';
 import { WinComboBox } from './components/winui/WinComboBox';
 import {
   FolderKanban, LayoutDashboard, Settings as SettingsIcon, 
-  Sun, Moon, ShieldCheck, X, LogOut, Menu, ChevronLeft, ChevronRight,
+  Sun, Moon, X, LogOut, Menu, ChevronLeft, ChevronRight,
   ArrowLeft
 } from 'lucide-react';
 import { api } from './utils/api';
@@ -78,14 +76,6 @@ const defaultProjects: Project[] = [
 
 // defaultTasks is imported from defaultTasks.ts
 
-const defaultO365Config: O365Config = {
-  clientId: '',
-  tenantId: '',
-  redirectUri: window.location.origin,
-  todoListName: 'Pinnacle Projects Tasks',
-  isEnabled: false
-};
-
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'projects' | 'settings'>(() => {
     const saved = localStorage.getItem('pinnacle_active_tab');
@@ -126,8 +116,6 @@ export default function App() {
   const [consultants, setConsultants] = useState<Consultant[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [communications, setCommunications] = useState<Communication[]>([]);
-  const [o365Config, setO365Config] = useState<O365Config>(defaultO365Config);
-  const [microsoftAccount, setMicrosoftAccount] = useState<AccountInfo | null>(null);
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(() => {
     return localStorage.getItem('pinnacle_selected_project_id');
@@ -231,11 +219,6 @@ export default function App() {
   //   - Local mode: keep a lightweight session flag, but only accept it if the
   //     stored active user still resolves to a known consultant record.
   useEffect(() => {
-    const savedConfig = localStorage.getItem('pinnacle_o365config');
-    if (savedConfig) {
-      try { setO365Config(JSON.parse(savedConfig)); } catch { /* ignore malformed */ }
-    }
-
     if (isSupabaseConfigured()) {
       const supabase = getSupabaseClient();
       supabase?.auth.getSession().then(({ data: { session } }) => {
@@ -290,25 +273,6 @@ export default function App() {
       }
     }
   }, []);
-
-  // MSAL Active Login Check
-  useEffect(() => {
-    if (o365Config.isEnabled && o365Config.clientId && o365Config.tenantId) {
-      const msal = getMsalInstance(o365Config);
-      if (msal) {
-        msal.initialize().then(() => {
-          const accounts = msal.getAllAccounts();
-          if (accounts.length > 0) {
-            setMicrosoftAccount(accounts[0]);
-          }
-        }).catch(err => {
-          console.warn('Silent MSAL init error:', err);
-        });
-      }
-    } else {
-      setMicrosoftAccount(null);
-    }
-  }, [o365Config]);
 
   // Derive active user for RBAC. Resolves from consultants (internal) OR
   // customers (external), producing a unified ActiveUser that permission
@@ -426,9 +390,7 @@ export default function App() {
         id: taskIdMap.get(t.id) || t.id,
         projectId: newProjectId,
         parentId: t.parentId ? (taskIdMap.get(t.parentId) || null) : null,
-        predecessorIds: t.predecessorIds.map(id => taskIdMap.get(id) || id),
-        o365TaskId: null,
-        o365CalendarEventId: null
+        predecessorIds: t.predecessorIds.map(id => taskIdMap.get(id) || id)
       }));
 
       const scheduledTasks = calculateTaskSchedules(projData.startDate, newTasks);
@@ -481,9 +443,7 @@ export default function App() {
       projectId: newProjectId,
       parentId: t.parentId ? (taskIdMap.get(t.parentId) || null) : null,
       predecessorIds: t.predecessorIds.map(id => taskIdMap.get(id) || id),
-      assignedConsultantId: config.copyAssignments ? t.assignedConsultantId : null,
-      o365TaskId: null,
-      o365CalendarEventId: null
+      assignedConsultantId: config.copyAssignments ? t.assignedConsultantId : null
     }));
 
     const scheduledDuplicatedTasks = calculateTaskSchedules(config.startDate, duplicatedTasks);
@@ -519,9 +479,7 @@ export default function App() {
       id: taskIdMap.get(t.id) || t.id,
       projectId: newTemplateId,
       parentId: t.parentId ? (taskIdMap.get(t.parentId) || null) : null,
-      predecessorIds: t.predecessorIds.map(id => taskIdMap.get(id) || id),
-      o365TaskId: null,
-      o365CalendarEventId: null
+      predecessorIds: t.predecessorIds.map(id => taskIdMap.get(id) || id)
     }));
 
     const scheduledTemplateTasks = calculateTaskSchedules(sourceProject.startDate, duplicatedTasks);
@@ -912,19 +870,12 @@ export default function App() {
   // resetPasswordForEmail flow (invoked from Login.tsx). There is no local
   // password store to reset anymore.
 
-  // Configuration Setup Handlers
-  const handleUpdateO365Config = (config: O365Config) => {
-    setO365Config(config);
-    localStorage.setItem('pinnacle_o365config', JSON.stringify(config));
-  };
-
   // Database backups: JSON imports / exports
   const handleExportData = () => {
     const db = {
       projects,
       tasks,
-      consultants,
-      o365Config
+      consultants
     };
     const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -938,13 +889,12 @@ export default function App() {
   const handleImportData = async (jsonData: string): Promise<boolean> => {
     try {
       const db = JSON.parse(jsonData);
-      if (db.projects && db.tasks && db.consultants && db.o365Config) {
+      if (db.projects && db.tasks && db.consultants) {
         await Promise.all([
           saveProjectsState(db.projects),
           saveConsultantsState(db.consultants),
           saveTasksState(db.tasks)
         ]);
-        handleUpdateO365Config(db.o365Config);
         return true;
       }
       return false;
@@ -991,12 +941,10 @@ export default function App() {
     localStorage.removeItem('pinnacle_tasks');
     localStorage.removeItem('pinnacle_supabase_url');
     localStorage.removeItem('pinnacle_supabase_anon_key');
-    
-    localStorage.setItem('pinnacle_o365config', JSON.stringify(defaultO365Config));
+
+    localStorage.removeItem('pinnacle_o365config');
     localStorage.setItem('pinnacle_theme', 'light');
 
-    setO365Config(defaultO365Config);
-    setMicrosoftAccount(null);
     setTheme('light');
     setIsAuthenticated(false);
     setActiveUserId('admin');
@@ -1051,7 +999,6 @@ export default function App() {
             consultants={consultants}
             activeUserId={activeUserId}
             activeUser={activeUser}
-            o365Config={o365Config}
             onSelectProject={(id) => {
               setSelectedProjectId(id);
               setActiveTab('projects');
@@ -1102,7 +1049,6 @@ export default function App() {
             tasks={tasks}
             consultants={consultants}
             communications={communications}
-            o365Config={o365Config}
             selectedProjectId={selectedProjectId}
             onSelectProject={setSelectedProjectId}
             onUpdateProject={handleUpdateProject}
@@ -1138,8 +1084,6 @@ export default function App() {
           <Settings
             consultants={consultants}
             customers={customers}
-            o365Config={o365Config}
-            microsoftAccount={microsoftAccount}
             activeUserTier={activeUserTier}
             activeUserId={activeUserId}
             activeUser={activeUser}
@@ -1150,8 +1094,6 @@ export default function App() {
             }}
             onAddCustomer={handleAddCustomer}
             onDeleteCustomer={handleDeleteCustomer}
-            onUpdateO365Config={handleUpdateO365Config}
-            onMicrosoftLoginSuccess={setMicrosoftAccount}
             onImportData={handleImportData}
             onExportData={handleExportData}
             onResetData={handleResetData}
@@ -1401,13 +1343,6 @@ export default function App() {
 
           {/* Microsoft authentication badge indicator and bottom controls */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
-            {microsoftAccount && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'flex-start', gap: '0.5rem', color: 'var(--success)', fontSize: '0.75rem', fontWeight: 600, padding: '0 0.5rem' }} title="O365 Synced">
-                <ShieldCheck size={14} />
-                {!isSidebarCollapsed && <span className="bottom-section-text">O365 Synced</span>}
-              </div>
-            )}
-
             {/* Bottom Settings navigation item */}
             <div 
               className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}

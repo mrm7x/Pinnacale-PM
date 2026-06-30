@@ -1,20 +1,16 @@
 import React, { useState } from 'react';
-import type { Consultant, Customer, O365Config, Project, Role } from '../types';
+import type { Consultant, Customer, Project, Role } from '../types';
 import type { Tier, ActiveUser } from '../utils/permissions';
 import { canManageUsers, canEditUsers, canManageDatabase, canManageCustomers } from '../utils/permissions';
-import type { AccountInfo } from '@azure/msal-browser';
-import { 
-  Users, Key, ShieldCheck, Download, Upload, Trash2, Plus, 
-  HelpCircle, RefreshCw, LogIn, LogOut, CheckCircle, Database, FolderKanban, Edit2, Lock 
+import {
+  Users, ShieldCheck, Download, Upload, Trash2, Plus,
+  RefreshCw, CheckCircle, Database, FolderKanban, Edit2, Lock
 } from 'lucide-react';
-import { signInMicrosoft, signOutMicrosoft } from '../utils/o365';
 import { getSupabaseCredentials, testSupabaseConnection, getSupabaseClient, isSupabaseConfigured, setSupabaseEnabled } from '../utils/supabase';
 
 interface SettingsProps {
   consultants: Consultant[];
   customers: Customer[];
-  o365Config: O365Config;
-  microsoftAccount: AccountInfo | null;
   activeUserTier: Tier;
   activeUserId: string;
   activeUser: ActiveUser | null;
@@ -23,8 +19,6 @@ interface SettingsProps {
   onUpdateConsultant: (consultant: Consultant) => void;
   onAddCustomer: (customer: Omit<Customer, 'id' | 'tier'> & { password?: string }) => Promise<boolean>;
   onDeleteCustomer: (id: string) => void;
-  onUpdateO365Config: (config: O365Config) => void;
-  onMicrosoftLoginSuccess: (account: AccountInfo | null) => void;
   onImportData: (jsonData: string) => Promise<boolean>;
   onExportData: () => void;
   onResetData: () => void;
@@ -36,8 +30,6 @@ interface SettingsProps {
 export default function Settings({
   consultants,
   customers,
-  o365Config,
-  microsoftAccount,
   activeUserTier,
   activeUserId,
   activeUser,
@@ -46,8 +38,6 @@ export default function Settings({
   onUpdateConsultant,
   onAddCustomer,
   onDeleteCustomer,
-  onUpdateO365Config,
-  onMicrosoftLoginSuccess,
   onImportData,
   onExportData,
   onResetData,
@@ -101,19 +91,9 @@ export default function Settings({
       setIsChangingPassword(false);
     }
   };
-  
-  // O365 Credentials Edit Form
-  const [clientForm, setClientForm] = useState({
-    clientId: o365Config.clientId || '',
-    tenantId: o365Config.tenantId || '',
-    redirectUri: o365Config.redirectUri || window.location.origin,
-    todoListName: o365Config.todoListName || 'Pinnacle Projects',
-    isEnabled: o365Config.isEnabled
-  });
 
   const [importJson, setImportJson] = useState('');
   const [showImportArea, setShowImportArea] = useState(false);
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Supabase Database Form State
   const creds = getSupabaseCredentials();
@@ -218,8 +198,6 @@ CREATE TABLE IF NOT EXISTS tasks (
     assigned_consultant_id TEXT REFERENCES consultants(id) ON DELETE SET NULL,
     predecessor_ids TEXT[] NOT NULL DEFAULT '{}',
     status TEXT NOT NULL DEFAULT 'not_started',
-    o365_task_id TEXT,
-    o365_calendar_event_id TEXT,
     planned_start_date TEXT,
     planned_end_date TEXT,
     start_half_day INTEGER NOT NULL DEFAULT 0,
@@ -278,59 +256,6 @@ REVOKE ALL ON tasks FROM anon;
     }
     setResetPasswordId(null);
     setResetPasswordValue('');
-  };
-
-  const handleSaveO365Config = (e: React.FormEvent) => {
-    e.preventDefault();
-    onUpdateO365Config({
-      clientId: clientForm.clientId.trim(),
-      tenantId: clientForm.tenantId.trim(),
-      redirectUri: clientForm.redirectUri.trim(),
-      todoListName: clientForm.todoListName.trim(),
-      isEnabled: clientForm.isEnabled
-    });
-    onAddToast('Office 365 configuration saved successfully.', 'success');
-  };
-
-  const handleMicrosoftLogin = async () => {
-    if (!clientForm.clientId || !clientForm.tenantId) {
-      onAddToast('Please input and save Microsoft Client ID and Tenant ID first.', 'warning');
-      return;
-    }
-    
-    setIsLoggingIn(true);
-    try {
-      const account = await signInMicrosoft({
-        clientId: clientForm.clientId.trim(),
-        tenantId: clientForm.tenantId.trim(),
-        redirectUri: clientForm.redirectUri.trim(),
-        todoListName: clientForm.todoListName.trim(),
-        isEnabled: clientForm.isEnabled
-      });
-      onMicrosoftLoginSuccess(account);
-      onAddToast(`Logged in successfully as ${account?.username}`, 'success');
-    } catch (err: any) {
-      onAddToast(err.message || 'Microsoft login failed.', 'error');
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
-  const handleMicrosoftLogout = async () => {
-    try {
-      await signOutMicrosoft({
-        clientId: clientForm.clientId.trim(),
-        tenantId: clientForm.tenantId.trim(),
-        redirectUri: clientForm.redirectUri.trim(),
-        todoListName: clientForm.todoListName.trim(),
-        isEnabled: clientForm.isEnabled
-      });
-      onMicrosoftLoginSuccess(null);
-      onAddToast('Logged out of Microsoft Account.', 'info');
-    } catch (err: any) {
-      console.error(err);
-      onAddToast('Microsoft logout failed.', 'error');
-    }
   };
 
   const handleImportSubmit = async (e: React.FormEvent) => {
@@ -1094,158 +1019,6 @@ REVOKE ALL ON tasks FROM anon;
             )}
           </div>
 
-          {/* Office 365 Config */}
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Key size={20} /> Office 365 (Business) Integration
-              </h3>
-            </div>
-
-            <form onSubmit={handleSaveO365Config} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem' }}>
-                <input 
-                  type="checkbox"
-                  checked={clientForm.isEnabled}
-                  onChange={(e) => setClientForm({ ...clientForm, isEnabled: e.target.checked })}
-                />
-                <span>Enable Microsoft Integration</span>
-              </label>
-
-              {clientForm.isEnabled && (
-                <>
-                  <div className="form-group">
-                    <label htmlFor="form-field-11" className="form-label">Directory (tenant) ID</label>
-                    <input id="form-field-11" 
-                      type="text" 
-                      className="form-input" 
-                      placeholder="e.g. 8a9d821a-..."
-                      value={clientForm.tenantId}
-                      onChange={(e) => setClientForm({ ...clientForm, tenantId: e.target.value })}
-                      required={clientForm.isEnabled}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="form-field-12" className="form-label">Application (client) ID</label>
-                    <input id="form-field-12" 
-                      type="text" 
-                      className="form-input" 
-                      placeholder="e.g. 5d9d832b-..."
-                      value={clientForm.clientId}
-                      onChange={(e) => setClientForm({ ...clientForm, clientId: e.target.value })}
-                      required={clientForm.isEnabled}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="form-field-13" className="form-label">Authorized Redirect URI</label>
-                    <input id="form-field-13" 
-                      type="text" 
-                      className="form-input" 
-                      value={clientForm.redirectUri}
-                      onChange={(e) => setClientForm({ ...clientForm, redirectUri: e.target.value })}
-                      required={clientForm.isEnabled}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="form-field-14" className="form-label">Microsoft To-Do List Folder Name</label>
-                    <input id="form-field-14" 
-                      type="text" 
-                      className="form-input" 
-                      value={clientForm.todoListName}
-                      onChange={(e) => setClientForm({ ...clientForm, todoListName: e.target.value })}
-                      required={clientForm.isEnabled}
-                    />
-                  </div>
-
-                  {/* Connection Status Section */}
-                  <div 
-                    style={{ 
-                      border: '1px solid var(--border-color)', 
-                      borderRadius: 'var(--radius-md)', 
-                      padding: '1rem',
-                      backgroundColor: 'var(--bg-primary)'
-                    }}
-                  >
-                    <h4 style={{ fontSize: '0.85rem', marginBottom: '0.5rem', fontWeight: 600 }}>Connection Status</h4>
-                    {microsoftAccount ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--success)', fontSize: '0.85rem', fontWeight: 600 }}>
-                          <CheckCircle size={16} />
-                          <span>Connected to Microsoft Cloud</span>
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                          User Account: <b>{microsoftAccount.name}</b> ({microsoftAccount.username})
-                        </div>
-                        <button type="button" className="btn btn-secondary" style={{ display: 'flex', gap: '0.35rem', alignSelf: 'flex-start' }} onClick={handleMicrosoftLogout}>
-                          <LogOut size={14} /> Disconnect Account
-                        </button>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>
-                          <ShieldCheck size={16} />
-                          <span>O365 Sync Disabled (Simulated Actions Enabled)</span>
-                        </div>
-                        <button 
-                          type="button" 
-                          className="btn btn-accent" 
-                          style={{ display: 'flex', gap: '0.35rem', alignSelf: 'flex-start' }}
-                          onClick={handleMicrosoftLogin}
-                          disabled={isLoggingIn}
-                        >
-                          {isLoggingIn ? <RefreshCw size={14} className="animate-spin" /> : <LogIn size={14} />}
-                          Connect Business Account
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-
-              <button type="submit" className="btn btn-primary" style={{ alignSelf: 'flex-end' }}>
-                Save API Config
-              </button>
-            </form>
-          </div>
-
-          {/* Guide */}
-          {clientForm.isEnabled && (
-            <div className="card" style={{ borderLeft: '4px solid var(--accent)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                <HelpCircle size={18} style={{ color: 'var(--accent)' }} />
-                <h4 style={{ fontSize: '0.9rem', fontWeight: 600 }}>Microsoft Azure Registration Guide</h4>
-              </div>
-              
-              <ol style={{ paddingLeft: '1.25rem', fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <li>
-                  Log into the <b><a href="https://portal.azure.com/" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>Azure Portal</a></b> with your Microsoft 365 Business Admin account.
-                </li>
-                <li>
-                  Navigate to <b>Microsoft Entra ID</b> (formerly Azure Active Directory) &gt; <b>App registrations</b> &gt; click <b>New registration</b>.
-                </li>
-                <li>
-                  Set the app name to <code>Pinnacle Projects</code>, select <b>Single-page application (SPA)</b> as the platform type, and add <code>{clientForm.redirectUri}</code> as the Redirect URI.
-                </li>
-                <li>
-                  Click <b>Register</b>. In the overview page, copy your <b>Application (client) ID</b> and <b>Directory (tenant) ID</b>. Paste them in the fields above.
-                </li>
-                <li>
-                  Navigate to <b>API Permissions</b> &gt; <b>Add a permission</b> &gt; <b>Microsoft Graph</b> &gt; <b>Delegated permissions</b>. Add the following permissions:
-                  <ul style={{ paddingLeft: '1rem', marginTop: '0.25rem', listStyleType: 'disc' }}>
-                    <li><code>User.Read</code> (Read User Info)</li>
-                    <li><code>Tasks.ReadWrite</code> (Access To-Do lists)</li>
-                    <li><code>Calendars.ReadWrite</code> (Manage Calendar Schedules)</li>
-                  </ul>
-                </li>
-                <li>
-                  Click <b>Grant admin consent</b> for your directory (if required) and hit Save. Connect your business account!
-                </li>
-              </ol>
-            </div>
-          )}
         </div>
       )}
     </div>

@@ -102,8 +102,6 @@ Scope agreed with the maintainer: **keep two axes** (`role` for job function,
 ## Phase 3 — Hardening
 
 - Add `public/_headers` (CSP, X-Frame-Options, Referrer-Policy, Permissions-Policy).
-- Move MSAL token cache from `localStorage` → `sessionStorage`.
-- Switch Outlook calendar event body to `contentType: 'text'` (`src/utils/o365.ts`).
 - `npm audit fix` to resolve the `uuid` CVE via an `exceljs` bump.
 - Strip `console.*` in production builds (`vite.config.ts` → `esbuild.drop`).
 - Add login rate-limiting (client throttle + Supabase Auth limits).

@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
-import type { Project, Task, Consultant, O365Config } from '../types';
+import type { Project, Task, Consultant } from '../types';
 import {
   FolderKanban, Clock, CheckSquare, Users, AlertTriangle,
-  User, Calendar, RefreshCw, CheckCircle2, Circle, ChevronLeft, ChevronRight,
+  User, Calendar, CheckCircle2, Circle, ChevronLeft, ChevronRight,
   BarChart3, Activity, Gauge, Flag, PieChart, Layers, AlertCircle, CalendarClock
 } from 'lucide-react';
-import { syncTaskToO365 } from '../utils/o365';
 import { isCustomer as isCustomerUser, type ActiveUser } from '../utils/permissions';
 import { getProjectAccent, resolvePhase, resolvePhaseMeta, PHASE_ORDER } from '../utils/phases';
 
@@ -132,7 +131,6 @@ interface DashboardProps {
   consultants: Consultant[];
   activeUserId: string;
   activeUser: ActiveUser | null;
-  o365Config: O365Config;
   onSelectProject: (projectId: string) => void;
   onUpdateTask: (task: Task) => void;
   onAddToast: (msg: string, type: 'success' | 'error' | 'warning' | 'info') => void;
@@ -144,14 +142,12 @@ export default function Dashboard({
   consultants,
   activeUserId,
   activeUser,
-  o365Config,
   onSelectProject,
   onUpdateTask,
   onAddToast
 }: DashboardProps) {
   const isConsultant = activeUserId !== 'admin';
   const [dashboardMode, setDashboardMode] = useState<'team' | 'personal' | 'projects' | 'calendar' | 'analytics' | 'health' | 'resource' | 'timeline'>(isConsultant ? 'personal' : 'team');
-  const [syncingTaskId, setSyncingTaskId] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
@@ -234,23 +230,6 @@ export default function Dashboard({
       taskCount: assignedTasks.length
     };
   });
-
-  // MS To-Do Quick Sync Action for Agenda items
-  const handleQuickSync = async (task: Task) => {
-    if (!o365Config.isEnabled) {
-      onAddToast('O365 Integration is disabled. Simulating To-Do Sync.', 'info');
-    }
-    setSyncingTaskId(task.id);
-    const result = await syncTaskToO365(task, o365Config, !o365Config.isEnabled);
-    setSyncingTaskId(null);
-
-    if (result.success) {
-      onUpdateTask({ ...task, o365TaskId: result.taskId });
-      onAddToast(result.message, 'success');
-    } else {
-      onAddToast(result.message, 'error');
-    }
-  };
 
   const getDaysLeft = (targetDateStr?: string) => {
     if (!targetDateStr) return { days: 0, text: 'Not set', status: 'info' };
@@ -419,16 +398,6 @@ export default function Dashboard({
                 <span className="kpi-label">My Tasks Done</span>
               </div>
             </div>
-
-            <div className="card kpi-card">
-              <div className="kpi-icon-wrapper" style={{ backgroundColor: 'color-mix(in srgb, #0ea5e9 16%, transparent)', color: '#0ea5e9' }}>
-                <CheckCircle2 size={24} />
-              </div>
-              <div className="kpi-details">
-                <span className="kpi-value">{myTasks.filter(t => t.o365TaskId).length} / {myTasks.length}</span>
-                <span className="kpi-label">Tasks Synced to O365</span>
-              </div>
-            </div>
           </div>
 
           {/* User Agenda Calendar List */}
@@ -594,15 +563,6 @@ export default function Dashboard({
                                   {task.status.replace('_', ' ')}
                                 </span>
 
-                                <button 
-                                  className="btn btn-secondary btn-icon"
-                                  title="Sync task to Microsoft To-Do" aria-label="Sync task to Microsoft To-Do"
-                                  disabled={syncingTaskId === task.id}
-                                  onClick={() => handleQuickSync(task)}
-                                  style={{ color: task.o365TaskId ? 'var(--success)' : 'inherit' }}
-                                >
-                                  <RefreshCw size={14} className={syncingTaskId === task.id ? 'animate-spin' : ''} />
-                                </button>
                               </div>
                             </div>
                           ))}

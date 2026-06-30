@@ -1590,8 +1590,6 @@ function toTaskPatch(form: DrawerForm, existing: Task | null): Omit<Task, 'id'> 
     taskOwner: form.taskOwner,
     progress: form.progress,
     ...(existing ? {
-      o365TaskId: existing.o365TaskId,
-      o365CalendarEventId: existing.o365CalendarEventId,
       sortOrder: existing.sortOrder
     } : {})
   };

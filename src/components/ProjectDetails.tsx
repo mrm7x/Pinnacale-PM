@@ -1,18 +1,17 @@
 import { useState, useEffect } from 'react';
 import type { FormEvent, FC } from 'react';
-import type { Project, Task, Consultant, Customer, O365Config, Communication } from '../types';
+import type { Project, Task, Consultant, Customer, Communication } from '../types';
 import {
   canEditProject, canCreateTask, canEditTask, canDeleteTask, canEditGantt,
   isCustomer as isCustomerUser, type ActiveUser
 } from '../utils/permissions';
 import {
   Plus, Calendar, Trash2, Edit2, ChevronDown, ChevronRight, ChevronUp,
-  RefreshCw, MailCheck, User, X, Clock, FolderKanban, Pencil,
+  RefreshCw, User, X, Clock, FolderKanban, Pencil,
   Folder, Briefcase, Target, Rocket, Star, Layout, Check, Download,
   Pin, AlertTriangle, Lightbulb, Zap, Bell, CheckCircle, Search
 } from 'lucide-react';
 import { exportProjectToExcel } from '../utils/exportToExcel';
-import { syncTaskToO365, createOutlookCalendarEvent } from '../utils/o365';
 import { WinComboBox } from './winui/WinComboBox';
 import { WinDatePicker } from './winui/WinDatePicker';
 import GanttChart from './GanttChart';
@@ -26,7 +25,6 @@ interface ProjectDetailsProps {
   tasks: Task[];
   consultants: Consultant[];
   communications: Communication[];
-  o365Config: O365Config;
   selectedProjectId: string | null;
   onSelectProject: (id: string | null) => void;
   onUpdateProject: (project: Project) => void;
@@ -73,7 +71,6 @@ export default function ProjectDetails({
   tasks,
   consultants,
   communications,
-  o365Config,
   selectedProjectId,
   onSelectProject,
   onUpdateProject,
@@ -101,7 +98,6 @@ export default function ProjectDetails({
   const [activeProjectTab, setActiveProjectTab] = useState<'overview' | 'tasks' | 'tasks-v2' | 'gantt' | 'rag' | 'communications'>('overview');
   const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-  const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
   const [isTemplateSaveModalOpen, setIsTemplateSaveModalOpen] = useState(false);
 
@@ -136,19 +132,7 @@ export default function ProjectDetails({
     setBulkDuration('');
   }, [selectedProjectId]);
 
-  // Calendar Event Form State
-  const [calendarTask, setCalendarTask] = useState<Task | null>(null);
-  const [calendarForm, setCalendarForm] = useState({
-    title: '',
-    startTime: '09:00',
-    endTime: '17:00',
-    description: '',
-    sendInvites: true
-  });
-
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
-  const [syncingTaskId, setSyncingTaskId] = useState<string | null>(null);
-  const [schedulingEvent, setSchedulingEvent] = useState(false);
   const [editMode, _setEditMode] = useState(true);
   const [applyToSubtasks, setApplyToSubtasks] = useState(false);
 
@@ -307,68 +291,6 @@ export default function ProjectDetails({
       onAddToast('Task created successfully!', 'success');
     }
     setIsTaskModalOpen(false);
-  };
-
-  // Office 365 Sync Action
-  const handleSyncToO365 = async (task: Task) => {
-    if (!o365Config.isEnabled) {
-      onAddToast('O365 Integration is disabled. Set it up in Settings to sync with a real account. Simulating sync instead.', 'info');
-    }
-
-    setSyncingTaskId(task.id);
-    const result = await syncTaskToO365(task, o365Config, !o365Config.isEnabled);
-    setSyncingTaskId(null);
-
-    if (result.success) {
-      onUpdateTask({ ...task, o365TaskId: result.taskId });
-      onAddToast(result.message, 'success');
-    } else {
-      onAddToast(result.message, 'error');
-    }
-  };
-
-  // Open Calendar Appointment Modal
-  const handleOpenCalendarModal = (task: Task) => {
-    setCalendarTask(task);
-    setCalendarForm({
-      title: `Sage Intacct: ${task.name}`,
-      startTime: '09:00',
-      endTime: task.durationDays <= 0.5 ? '13:00' : '17:00',
-      description: task.description || `Task implementation scheduled for Sage Intacct project.`,
-      sendInvites: true
-    });
-    setIsCalendarModalOpen(true);
-  };
-
-  // Handle Calendar Scheduling Submit
-  const handleCalendarSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!calendarTask) return;
-
-    if (!o365Config.isEnabled) {
-      onAddToast('Office 365 Integration is disabled. Simulating calendar event creation.', 'info');
-    }
-
-    setSchedulingEvent(true);
-    const consultant = consultants.find(c => c.id === calendarTask.assignedConsultantId);
-    const invitedConsultants = consultant ? [consultant] : [];
-
-    const result = await createOutlookCalendarEvent(
-      calendarTask,
-      invitedConsultants,
-      o365Config,
-      calendarForm,
-      !o365Config.isEnabled
-    );
-    setSchedulingEvent(false);
-    setIsCalendarModalOpen(false);
-
-    if (result.success) {
-      onUpdateTask({ ...calendarTask, o365CalendarEventId: result.eventId });
-      onAddToast(result.message, 'success');
-    } else {
-      onAddToast(result.message, 'error');
-    }
   };
 
   // Bulk Action Handlers
@@ -713,27 +635,6 @@ export default function ProjectDetails({
             <div className="task-node-actions" onClick={e => e.stopPropagation()}>
               {activeProject && canEditTask(activeUser, task, activeProject) && (
                 <>
-                  {!isTaskParent && (
-                    <>
-                      <button
-                        className="btn btn-secondary btn-icon"
-                        title="Sync to MS To-Do" aria-label="Sync to MS To-Do"
-                        disabled={syncingTaskId === task.id}
-                        onClick={() => handleSyncToO365(task)}
-                        style={{ color: task.o365TaskId ? 'var(--success)' : 'inherit', padding: '0.25rem' }}
-                      >
-                        <RefreshCw size={13} className={syncingTaskId === task.id ? 'animate-spin' : ''} />
-                      </button>
-                      <button
-                        className="btn btn-secondary btn-icon"
-                        title="Schedule Calendar Event" aria-label="Schedule Calendar Event"
-                        onClick={() => handleOpenCalendarModal(task)}
-                        style={{ color: task.o365CalendarEventId ? 'var(--accent)' : 'inherit', padding: '0.25rem' }}
-                      >
-                        <Calendar size={13} />
-                      </button>
-                    </>
-                  )}
                   {activeProject && canCreateTask(activeUser, activeProject) && (
                     <button className="btn btn-secondary btn-icon" onClick={(e) => { e.stopPropagation(); handleAddSubtask(task); }} title="Add Subtask" style={{ padding: '0.25rem' }}>
                       <Plus size={13} />
@@ -1794,107 +1695,6 @@ export default function ProjectDetails({
         </div>
       )}
 
-      {/* SCHEDULE OUTLOOK CALENDAR APPOINTMENT MODAL */}
-      {isCalendarModalOpen && calendarTask && (
-        <div className="modal-overlay">
-          <div className="modal-container">
-            <div className="modal-header">
-              <h3>Schedule Outlook Calendar Invite</h3>
-              <button className="btn btn-secondary btn-icon" onClick={() => setIsCalendarModalOpen(false)}>
-                <X size={18} />
-              </button>
-            </div>
-            <form onSubmit={handleCalendarSubmit}>
-              <div className="modal-body">
-                <div
-                  style={{
-                    backgroundColor: 'var(--accent-light)',
-                    color: 'var(--accent)',
-                    padding: '0.75rem 1rem',
-                    borderRadius: 'var(--radius-md)',
-                    fontSize: '0.85rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    marginBottom: '1.25rem'
-                  }}
-                >
-                  <MailCheck size={16} />
-                  <span>Will create a Microsoft Teams invite inside your Outlook Business Calendar.</span>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="form-field-12" className="form-label">Subject</label>
-                  <input id="form-field-12"
-                    type="text"
-                    className="form-input"
-                    value={calendarForm.title}
-                    onChange={(e) => setCalendarForm({ ...calendarForm, title: e.target.value })}
-                    required
-                  />
-                </div>
-
-                <div className="grid-cols-12" style={{ alignItems: 'end' }}>
-                  <div className="form-group col-span-6">
-                    <label htmlFor="form-field-13" className="form-label">Start Time</label>
-                    <input id="form-field-13"
-                      type="time"
-                      className="form-input"
-                      value={calendarForm.startTime}
-                      onChange={(e) => setCalendarForm({ ...calendarForm, startTime: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="form-group col-span-6">
-                    <label htmlFor="form-field-14" className="form-label">End Time</label>
-                    <input id="form-field-14"
-                      type="time"
-                      className="form-input"
-                      value={calendarForm.endTime}
-                      onChange={(e) => setCalendarForm({ ...calendarForm, endTime: e.target.value })}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="form-field-15" className="form-label">Description / Agenda</label>
-                  <textarea id="form-field-15"
-                    className="form-textarea"
-                    rows={4}
-                    value={calendarForm.description}
-                    onChange={(e) => setCalendarForm({ ...calendarForm, description: e.target.value })}
-                  />
-                </div>
-
-                <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '0.75rem', backgroundColor: 'var(--bg-tertiary)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 500 }}>
-                      <User size={14} />
-                      Invited Assignee: <b>
-                        {consultants.find(c => c.id === calendarTask.assignedConsultantId)?.name || 'Unassigned'}
-                      </b>
-                    </span>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
-                      <input type="checkbox" className="win-checkbox"
-                        checked={calendarForm.sendInvites}
-                        onChange={(e) => setCalendarForm({ ...calendarForm, sendInvites: e.target.checked })}
-                      />
-                      <span>Send email invite</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setIsCalendarModalOpen(false)}>Cancel</button>
-                <button type="submit" className="btn btn-accent" disabled={schedulingEvent}>
-                  {schedulingEvent ? 'Sending invite...' : 'Create Invite'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* DUPLICATE PROJECT MODAL */}
       {isDuplicateModalOpen && (
