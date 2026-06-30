@@ -28,8 +28,6 @@ export interface Consultant {
   role: Role;
   avatarColor: string;
   tier: Tier;
-  passwordHash?: string;
-  mustResetPassword?: boolean;
 }
 
 /**

@@ -4,7 +4,6 @@ import type { Project, Task, Consultant, Customer, O365Config, Communication } f
 import type { AccountInfo } from '@azure/msal-browser';
 import { getMsalInstance } from './utils/o365';
 import { calculateTaskSchedules } from './utils/scheduler';
-import { hashPassword } from './utils/auth';
 import { defaultTasks } from './defaultTasks';
 import Dashboard from './components/Dashboard';
 import ProjectDetails from './components/ProjectDetails';
@@ -33,33 +32,17 @@ interface Toast {
   type: 'success' | 'error' | 'warning' | 'info';
 }
 
-// Default password for freshly seeded demo users. The actual hash is computed
-// at runtime via hashPassword() — we never hardcode hash digests in source, and
-// we never ship a known default in the database. These are only used to seed a
-// LOCAL (localStorage) demo environment when no backend is configured. In
-// Supabase mode, users must be created through auth.admin / signUp with real
-// credentials set by an administrator.
-const DEFAULT_SEED_PASSWORD = 'ChangeMeOnFirstLogin!';
-
-// Initial Mock Seed Data (admin is now a regular consultant record).
-// Hashes are filled in at seed time (see ensureSeedConsultantHashes below) so
-// no password digest is ever committed to the repository.
+// Initial Mock Seed Data. Only used to seed a LOCAL (localStorage) dev/demo
+// environment when no backend is configured. In production (and any dev build
+// with VITE_SUPABASE_* env vars), users are created exclusively through
+// Supabase Auth; the app never seeds default credentials into a real DB.
 const defaultConsultants: Consultant[] = [
-  { id: 'admin', name: 'System Administrator', email: 'admin@pinnacle.local', role: 'Manager', avatarColor: '#2d4a65', tier: 'superuser', passwordHash: undefined, mustResetPassword: true },
-  { id: 'c1', name: 'Sarah Jenkins', email: 'sarah.jenkins@pinnacle.com', role: 'Consultant', avatarColor: '#0d9488', tier: 'normal', passwordHash: undefined, mustResetPassword: true },
-  { id: 'c2', name: 'Alex Rivera', email: 'alex.rivera@pinnacle.com', role: 'Consultant', avatarColor: '#6366f1', tier: 'normal', passwordHash: undefined, mustResetPassword: true },
-  { id: 'c3', name: 'Marcus Brody', email: 'marcus.brody@pinnacle.com', role: 'Project Manager', avatarColor: '#f59e0b', tier: 'normal', passwordHash: undefined, mustResetPassword: true },
-  { id: 'c4', name: 'David Vance', email: 'david.vance@pinnacle.com', role: 'Read only', avatarColor: '#ef4444', tier: 'normal', passwordHash: undefined, mustResetPassword: true }
+  { id: 'admin', name: 'System Administrator', email: 'admin@pinnacle.local', role: 'Manager', avatarColor: '#2d4a65', tier: 'superuser' },
+  { id: 'c1', name: 'Sarah Jenkins', email: 'sarah.jenkins@pinnacle.com', role: 'Consultant', avatarColor: '#0d9488', tier: 'normal' },
+  { id: 'c2', name: 'Alex Rivera', email: 'alex.rivera@pinnacle.com', role: 'Consultant', avatarColor: '#6366f1', tier: 'normal' },
+  { id: 'c3', name: 'Marcus Brody', email: 'marcus.brody@pinnacle.com', role: 'Project Manager', avatarColor: '#f59e0b', tier: 'normal' },
+  { id: 'c4', name: 'David Vance', email: 'david.vance@pinnacle.com', role: 'Read only', avatarColor: '#ef4444', tier: 'normal' }
 ];
-
-/**
- * Fills in passwordHash for the local seed consultants using a runtime hash of
- * the default seed password. Runs only when seeding localStorage demo data.
- */
-async function ensureSeedConsultantHashes(list: Consultant[]): Promise<Consultant[]> {
-  const hash = await hashPassword(DEFAULT_SEED_PASSWORD);
-  return list.map(c => (c.passwordHash ? c : { ...c, passwordHash: hash }));
-}
 
 const defaultProjects: Project[] = [
   {
@@ -209,7 +192,7 @@ export default function App() {
           // (Supabase mode is seeded via migrations / auth.admin; the app
           // should never silently write default credentials to a real DB.)
           const initialProjects = defaultProjects;
-          const initialConsultants = await ensureSeedConsultantHashes(defaultConsultants);
+          const initialConsultants = defaultConsultants;
           const initialScheduledTasks = calculateTaskSchedules(
             initialProjects[0].startDate,
             defaultTasks.map((t, idx) => ({ ...t, sortOrder: (idx + 1) * 10 }))
@@ -234,32 +217,7 @@ export default function App() {
           setProjects(loadedProjects);
           setTasks(loadedTasks);
           setCommunications(loadedCommunications);
-
-          // Normalize legacy consultant records that may still carry a stray
-          // plaintext `password` field (pre-RLS schema). Any such record is
-          // force-flagged for a password reset; the cleartext is never trusted
-          // as a hash and is dropped from the row.
-          let currentConsultants = loadedConsultants;
-          let needsMigration = false;
-
-          currentConsultants = currentConsultants.map(c => {
-            const asAny = c as any;
-            if (asAny.password && !c.passwordHash) {
-              needsMigration = true;
-              const { password: _removed, ...rest } = asAny;
-              return { ...rest, passwordHash: undefined, mustResetPassword: true } as Consultant;
-            }
-            return c;
-          });
-
-          if (needsMigration) {
-            await api.consultants.saveAll(currentConsultants);
-            if (!isSupabaseConfigured()) {
-              localStorage.setItem('pinnacle_consultants', JSON.stringify(currentConsultants));
-            }
-          }
-
-          setConsultants(currentConsultants);
+          setConsultants(loadedConsultants);
         }
       } catch (error) {
         console.error('Failed to load data from database:', error);
@@ -831,20 +789,13 @@ export default function App() {
       }
     }
 
-    let passwordHash = cData.passwordHash;
-    if (!passwordHash) {
-      passwordHash = await hashPassword(plaintextPassword);
-    }
-
     const newConsultant: Consultant = {
       name: cData.name,
       email: cData.email,
       role: cData.role,
       avatarColor: cData.avatarColor,
       tier: cData.tier,
-      id,
-      passwordHash,
-      mustResetPassword: true
+      id
     };
 
     try {
@@ -957,18 +908,9 @@ export default function App() {
     }
   };
 
-  const handleLocalForgotPassword = async (email: string): Promise<boolean> => {
-    const emailClean = email.trim().toLowerCase();
-    const consultant = consultants.find(c => c.email.trim().toLowerCase() === emailClean);
-    if (!consultant) return false;
-
-    const hash = await hashPassword('password1234!');
-    const updatedConsultants = consultants.map(c =>
-      c.email.trim().toLowerCase() === emailClean ? { ...c, passwordHash: hash, mustResetPassword: true } : c
-    );
-    await saveConsultantsState(updatedConsultants);
-    return true;
-  };
+  // In production, password resets are handled by Supabase Auth's
+  // resetPasswordForEmail flow (invoked from Login.tsx). There is no local
+  // password store to reset anymore.
 
   // Configuration Setup Handlers
   const handleUpdateO365Config = (config: O365Config) => {
@@ -1081,12 +1023,9 @@ export default function App() {
     }
     // Backend reads were deferred until authenticated; now reload.
     loadData();
-    // Check if user needs password reset
-    const consultant = consultants.find(c => c.id === userId);
-    if (consultant && consultant.mustResetPassword) {
-      setResetUserId(userId);
-      setShowPasswordReset(true);
-    }
+    // Note: forced password resets are handled by Supabase Auth's own flows
+    // (e.g. recovery links / invite expiry). The app no longer stores a local
+    // mustResetPassword flag.
   };
 
   const handleLogout = async () => {
@@ -1229,11 +1168,10 @@ export default function App() {
     if (!isAuthenticated) {
       return (
         <>
-          <Login 
-            consultants={consultants} 
-            onLoginSuccess={handleLoginSuccess} 
-            onAddToast={addToast} 
-            onLocalForgotPassword={handleLocalForgotPassword}
+          <Login
+            consultants={consultants}
+            onLoginSuccess={handleLoginSuccess}
+            onAddToast={addToast}
           />
           {/* Dynamic Toast Container */}
           <div className="toast-container">
@@ -1262,28 +1200,22 @@ export default function App() {
             userId={resetUserId}
             consultants={consultants}
             onPasswordReset={(newPass) => {
-              // Hash the new password before storing
-              hashPassword(newPass).then(hash => {
-                const updatedConsultants = consultants.map(c =>
-                  c.id === resetUserId ? { ...c, passwordHash: hash, mustResetPassword: false } : c
-                );
-                saveConsultantsState(updatedConsultants);
-                
-                // If Supabase is active, update Supabase Auth password for the current user
-                if (isSupabaseConfigured()) {
-                  const supabase = getSupabaseClient()!;
-                  supabase.auth.updateUser({ password: newPass }).then(({ error }) => {
-                    if (error) {
-                      console.error('Failed to reset Supabase password:', error);
-                      addToast(`Failed to update Supabase Auth password: ${error.message}`, 'error');
-                    } else {
-                      addToast('Password reset successfully and synced to Supabase Auth.', 'success');
-                    }
-                  });
-                } else {
-                  addToast('Password reset successfully.', 'success');
-                }
-              });
+              // Passwords are owned by Supabase Auth. An admin resetting another
+              // user's password must use the Supabase dashboard / invite flow;
+              // this modal only handles the signed-in user updating their own.
+              if (isSupabaseConfigured()) {
+                const supabase = getSupabaseClient()!;
+                supabase.auth.updateUser({ password: newPass }).then(({ error }) => {
+                  if (error) {
+                    console.error('Failed to reset Supabase password:', error);
+                    addToast(`Failed to update Supabase Auth password: ${error.message}`, 'error');
+                  } else {
+                    addToast('Password updated successfully via Supabase Auth.', 'success');
+                  }
+                });
+              } else {
+                addToast('Offline dev mode: passwords are managed by Supabase Auth in production.', 'info');
+              }
               setShowPasswordReset(false);
             }}
             onCancel={() => setShowPasswordReset(false)}

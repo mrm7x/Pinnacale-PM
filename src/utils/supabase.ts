@@ -1,24 +1,28 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Credentials may come from build-time env vars (preferred) or, when the user
-// has EXPLICITLY enabled Supabase in Settings, from localStorage.
+// Credentials may come from build-time env vars (preferred) or, in DEVELOPMENT
+// ONLY, from localStorage when a developer has explicitly enabled Supabase via
+// the Settings panel. In production builds the localStorage opt-in is ignored,
+// so credentials must come from env vars — this prevents a runtime-configurable
+// host and lets the CSP lock connect-src to the real Supabase project.
 const envUrl = import.meta.env.VITE_SUPABASE_URL;
 const envAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// True only under `vite dev`. Production builds hard-fail the localStorage path.
+const IS_DEV = import.meta.env.DEV;
+
 // Opt-in flag. Env vars always win; localStorage config is only honored when the
-// user has set this flag through the Settings panel. This prevents stale
-// localStorage credentials from silently routing login to the Supabase branch
-// (and blocking the local admin/manager fallback).
+// user has set this flag through the Settings panel AND we are in a dev build.
 const OPT_IN_KEY = 'pinnacle_supabase_enabled';
 
 /**
  * Whether Supabase should be used at all.
  * - Env vars present → yes (server-provided config).
- * - No env vars → only if the user explicitly opted in via Settings.
+ * - No env vars → only in dev, and only if the developer opted in via Settings.
  */
 export function isSupabaseEnabled(): boolean {
   if (envUrl && envAnonKey) return true;
-  return localStorage.getItem(OPT_IN_KEY) === 'true';
+  return IS_DEV && localStorage.getItem(OPT_IN_KEY) === 'true';
 }
 
 export function setSupabaseEnabled(enabled: boolean) {

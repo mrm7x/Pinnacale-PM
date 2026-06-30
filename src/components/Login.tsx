@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import type { Consultant } from '../types';
-import { verifyPassword } from '../utils/auth';
 
 import Logo from './Logo';
 import { KeyRound, User, AlertCircle, ArrowRight, CheckCircle } from 'lucide-react';
@@ -10,10 +9,15 @@ interface LoginProps {
   consultants: Consultant[];
   onLoginSuccess: (userId: string) => void;
   onAddToast: (msg: string, type: 'success' | 'error' | 'warning' | 'info') => void;
-  onLocalForgotPassword: (email: string) => Promise<boolean>;
 }
 
-export default function Login({ consultants, onLoginSuccess, onAddToast, onLocalForgotPassword }: LoginProps) {
+// Dev-only offline login: when no backend is configured in a dev build, we
+// accept any known seed consultant so the UI can be exercised locally. This
+// path is compiled out of reach in production (isSupabaseEnabled() is true
+// whenever env vars are present, and the localStorage opt-in is dev-gated).
+const IS_DEV = import.meta.env.DEV;
+
+export default function Login({ consultants, onLoginSuccess, onAddToast }: LoginProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +35,7 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
 
     const cleanUser = username.trim().toLowerCase();
 
-    // 1. Supabase Authentication flow (if active)
+    // 1. Supabase Authentication flow (production + dev-with-config)
     if (isSupabaseConfigured()) {
       const supabase = getSupabaseClient()!;
       try {
@@ -85,30 +89,27 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
       return;
     }
 
-    // 2. Fallback Local Storage authentication flow
-    // NOTE: the previous "guaranteed admin" backdoor (admin/manager) has been
-    // removed. Authentication now requires a matching consultant record with a
-    // valid password hash, regardless of username. There is no hardcoded
-    // fallback credential.
-    const consultant = consultants.find(
-      c => c.email.trim().toLowerCase() === cleanUser
-    );
-
-    if (!consultant || !consultant.passwordHash) {
-      setError('Invalid username or password.');
+    // 2. Dev-only offline login. No credentials are checked — any seed
+    //    consultant can be picked to drive the local UI. This branch is only
+    //    reachable when isSupabaseConfigured() is false, which in production
+    //    is impossible (env vars are required; the localStorage opt-in is
+    //    dev-gated in supabase.ts).
+    if (IS_DEV) {
+      const consultant = consultants.find(
+        c => c.email.trim().toLowerCase() === cleanUser
+      );
+      if (consultant) {
+        onAddToast(`Welcome back, ${consultant.name.split(' ')[0]}.`, 'success');
+        onLoginSuccess(consultant.id);
+      } else {
+        setError('No matching local demo user. Use a seed email (e.g. admin@pinnacle.local).');
+      }
       setIsLoading(false);
       return;
     }
 
-    const isValid = await verifyPassword(password, consultant.passwordHash);
-
-    if (isValid) {
-      onAddToast(`Welcome back, ${consultant.name.split(' ')[0]}.`, 'success');
-      onLoginSuccess(consultant.id);
-    } else {
-      setError('Invalid username or password.');
-    }
-
+    // 3. Production without a configured backend — refuse to authenticate.
+    setError('This application requires a configured backend. Contact your administrator.');
     setIsLoading(false);
   };
 
@@ -142,15 +143,14 @@ export default function Login({ consultants, onLoginSuccess, onAddToast, onLocal
       return;
     }
 
-    // 2. Fallback local storage password reset
-    const success = await onLocalForgotPassword(emailClean);
-    if (success) {
-      setSuccessMessage("A temporary password has been sent to your email address. Please check your inbox.");
-      onAddToast("Password reset successfully. Temp password emailed to you.", "success");
-      console.log(`[Email Simulation] Sent password reset email to ${emailClean} with temporary password: password1234!`);
-    } else {
-      setError('No user with this email address was found.');
+    // 2. Dev-only offline: no real password reset is possible. Surface a note.
+    if (IS_DEV) {
+      setSuccessMessage('Offline dev mode: passwords are not stored. Restart the dev server to reset a local user.');
+      setIsLoading(false);
+      return;
     }
+
+    setError('This application requires a configured backend. Contact your administrator.');
     setIsLoading(false);
   };
 

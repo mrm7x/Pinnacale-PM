@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import type { Consultant, Customer, O365Config, Project, Role } from '../types';
 import type { Tier, ActiveUser } from '../utils/permissions';
 import { canManageUsers, canEditUsers, canManageDatabase, canManageCustomers } from '../utils/permissions';
-import { hashPassword } from '../utils/auth';
 import type { AccountInfo } from '@azure/msal-browser';
 import { 
   Users, Key, ShieldCheck, Download, Upload, Trash2, Plus, 
@@ -79,22 +78,20 @@ export default function Settings({
     }
     setIsChangingPassword(true);
     try {
-      const hash = await hashPassword(newPassword);
-      const updated = { ...currentUser, passwordHash: hash, mustResetPassword: false };
-      onUpdateConsultant(updated);
-      
-      if (isSupabaseConfigured() && currentUser.id === activeUserId) {
+      // Passwords are owned by Supabase Auth. Update it there directly; there
+      // is no local password hash to maintain.
+      if (isSupabaseConfigured()) {
         const supabase = getSupabaseClient();
         if (supabase) {
           const { error } = await supabase.auth.updateUser({ password: newPassword });
           if (error) {
-            onAddToast(`Failed to update Supabase auth password: ${error.message}`, 'error');
+            onAddToast(`Failed to update Supabase Auth password: ${error.message}`, 'error');
           } else {
-            onAddToast('Password updated and synced to Supabase Auth.', 'success');
+            onAddToast('Password updated via Supabase Auth.', 'success');
           }
         }
       } else {
-        onAddToast('Password updated successfully.', 'success');
+        onAddToast('Offline dev mode: passwords are managed by Supabase Auth.', 'info');
       }
       setNewPassword('');
       setConfirmPassword('');
@@ -181,8 +178,6 @@ CREATE TABLE IF NOT EXISTS consultants (
     role TEXT NOT NULL DEFAULT 'Consultant',
     avatar_color TEXT NOT NULL DEFAULT '#0d9488',
     tier TEXT NOT NULL DEFAULT 'consultant',
-    password_hash TEXT,
-    must_reset_password BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -260,21 +255,15 @@ REVOKE ALL ON tasks FROM anon;
   const handleAddConsultantSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newConsultant.name || !newConsultant.email) return;
-    
-    // Hash the password if provided, otherwise App.tsx will use a default
-    let passwordHash: string | undefined;
-    if (newConsultant.password) {
-      passwordHash = await hashPassword(newConsultant.password);
-    }
-    
+
+    // The password is forwarded to App.tsx, which uses it to create the
+    // Supabase Auth user. We do not store or hash passwords locally.
     onAddConsultant({
       name: newConsultant.name,
       email: newConsultant.email,
       role: newConsultant.role,
       avatarColor: newConsultant.avatarColor,
       tier: newConsultant.tier,
-      passwordHash,
-      mustResetPassword: true,
       password: newConsultant.password
     });
     setNewConsultant({ name: '', email: '', role: 'Consultant', avatarColor: colors[Math.floor(Math.random() * colors.length)], tier: 'normal', password: '' });
@@ -283,11 +272,9 @@ REVOKE ALL ON tasks FROM anon;
 
   const handleResetPassword = async (consultantId: string) => {
     if (!resetPasswordValue) return;
-    const hash = await hashPassword(resetPasswordValue);
     const consultant = consultants.find(c => c.id === consultantId);
     if (consultant) {
-      onUpdateConsultant({ ...consultant, passwordHash: hash, mustResetPassword: true });
-      onAddToast(`Password reset for ${consultant.name}. They will be prompted to change it on next login.`, 'success');
+      onAddToast(`Password reset is handled via Supabase Auth. Invite ${consultant.email} from the Supabase dashboard to set a new password.`, 'info');
     }
     setResetPasswordId(null);
     setResetPasswordValue('');
@@ -972,7 +959,10 @@ REVOKE ALL ON tasks FROM anon;
             </div>
           </div>
 
-          {/* Hosted Supabase Database Config */}
+          {/* Hosted Supabase Database Config.
+              In production the host is fixed by build-time env vars (never
+              runtime-configurable), so the editable form is dev-only. In
+              production we show a read-only connection status instead. */}
           <div className="card">
             <div className="card-header">
               <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -980,24 +970,39 @@ REVOKE ALL ON tasks FROM anon;
               </h3>
             </div>
 
+            {creds.isFromEnv ? (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                backgroundColor: 'rgba(13, 148, 136, 0.1)',
+                color: 'var(--primary)',
+                padding: '0.75rem 1rem',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.8rem',
+                fontWeight: 500,
+                border: '1px solid rgba(13, 148, 136, 0.15)'
+              }}>
+                <ShieldCheck size={16} />
+                <span>Connected via build environment variables. The host is fixed and cannot be changed at runtime.</span>
+              </div>
+            ) : import.meta.env.DEV ? (
             <form onSubmit={handleSaveSupabaseConfig} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              {creds.isFromEnv && (
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  backgroundColor: 'rgba(13, 148, 136, 0.1)',
-                  color: 'var(--primary)',
-                  padding: '0.75rem 1rem',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: '0.8rem',
-                  fontWeight: 500,
-                  border: '1px solid rgba(13, 148, 136, 0.15)'
-                }}>
-                  <ShieldCheck size={16} />
-                  <span>Connected via local environment variables (<code>.env</code>)</span>
-                </div>
-              )}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                backgroundColor: 'var(--warning-light, rgba(245, 158, 11, 0.1))',
+                color: 'var(--warning, #b45309)',
+                padding: '0.75rem 1rem',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.8rem',
+                fontWeight: 500,
+                border: '1px solid rgba(245, 158, 11, 0.2)'
+              }}>
+                <ShieldCheck size={16} />
+                <span>Dev mode: credentials are stored in localStorage for local testing only. Production uses build env vars.</span>
+              </div>
 
               <div className="form-group">
                 <label htmlFor="form-field-9" className="form-label">Supabase Project URL</label>
@@ -1074,6 +1079,19 @@ REVOKE ALL ON tasks FROM anon;
                 )}
               </div>
             </form>
+            ) : (
+              <div style={{
+                padding: '0.75rem 1rem',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.8rem',
+                fontWeight: 500,
+                backgroundColor: 'var(--danger-light)',
+                color: 'var(--danger)',
+                border: '1px solid rgba(239, 68, 68, 0.2)'
+              }}>
+                No backend configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in the build environment.
+              </div>
+            )}
           </div>
 
           {/* Office 365 Config */}

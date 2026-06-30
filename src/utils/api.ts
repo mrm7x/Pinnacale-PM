@@ -142,9 +142,7 @@ function mapConsultantFromDb(db: any): Consultant {
     email: db.email,
     role: db.role,
     avatarColor: db.avatar_color,
-    tier: db.tier as any,
-    passwordHash: db.password_hash || undefined,
-    mustResetPassword: !!db.must_reset_password
+    tier: db.tier as any
   };
 }
 
@@ -155,9 +153,7 @@ function mapConsultantToDb(c: Consultant) {
     email: c.email,
     role: c.role,
     avatar_color: c.avatarColor,
-    tier: c.tier,
-    password_hash: c.passwordHash || null,
-    must_reset_password: c.mustResetPassword
+    tier: c.tier
   };
 }
 
