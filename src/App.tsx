@@ -336,7 +336,7 @@ export default function App() {
       }
     } catch (err: any) {
       console.error('Failed to save projects:', err);
-      addToast(`Failed to save projects: ${err?.message || err}`, 'error');
+      addToast('We could not save your project changes. Please try again.', 'error');
     }
   };
 
@@ -349,7 +349,7 @@ export default function App() {
       }
     } catch (err) {
       console.error(err);
-      addToast('Failed to save consultants to database.', 'error');
+      addToast('We could not save your team changes. Please try again.', 'error');
     }
   };
 
@@ -362,7 +362,7 @@ export default function App() {
       }
     } catch (err) {
       console.error(err);
-      addToast('Failed to save tasks to database.', 'error');
+      addToast('We could not save your task changes. Please try again.', 'error');
     }
   };
 
@@ -522,7 +522,7 @@ export default function App() {
         await api.projects.delete(id);
       } catch (err) {
         console.error(err);
-        addToast('Failed to delete template from database.', 'error');
+        addToast('We could not delete that template. Please try again.', 'error');
       }
     } else {
       localStorage.setItem('pinnacle_projects', JSON.stringify(nextProjects));
@@ -542,7 +542,7 @@ export default function App() {
         await api.projects.delete(id);
       } catch (err) {
         console.error(err);
-        addToast('Failed to delete project from database.', 'error');
+        addToast('We could not delete that project. Please try again.', 'error');
       }
     } else {
       localStorage.setItem('pinnacle_projects', JSON.stringify(nextProjects));
@@ -601,7 +601,7 @@ export default function App() {
         setTasks([...otherTasks, ...rescheduled]);
       } catch (err) {
         console.error(err);
-        addToast('Failed to delete task from database.', 'error');
+        addToast('We could not delete that task. Please try again.', 'error');
       }
     } else {
       await rescheduleProjectTasks(taskToDelete.projectId, activeProj.startDate, filteredTasksList);
@@ -723,7 +723,7 @@ export default function App() {
         setTasks([...otherTasks, ...rescheduled]);
       } catch (err) {
         console.error(err);
-        addToast('Failed to delete tasks from database.', 'error');
+        addToast('We could not delete those tasks. Please try again.', 'error');
       }
     } else {
       await rescheduleProjectTasks(firstTask.projectId, activeProj.startDate, filteredTasksList);
@@ -740,7 +740,7 @@ export default function App() {
         const { userId, error: inviteError } = await inviteUser(cData.email);
         if (inviteError) {
           console.error('Failed to send invite:', inviteError);
-          addToast(`Failed to send invite: ${inviteError}`, 'error');
+          addToast(`We could not send the invitation email. ${inviteError}`, 'error');
           return false;
         }
         if (userId) {
@@ -749,7 +749,7 @@ export default function App() {
         addToast(`Invite sent to ${cData.email}. They will set their own password.`, 'success');
       } catch (err: any) {
         console.error('Failed to send invite:', err);
-        addToast(`Connection error: ${err.message || err}`, 'error');
+        addToast('We could not reach the server. Please check your connection and try again.', 'error');
         return false;
       }
     }
@@ -785,13 +785,13 @@ export default function App() {
         // the profile row. deleteAuthUser tolerates an already-missing account.
         const { error: authErr } = await deleteAuthUser(id);
         if (authErr) {
-          addToast(`Could not remove auth account: ${authErr}`, 'error');
+          addToast(`The user was removed, but revoking their sign-in access did not complete. ${authErr}`, 'error');
         }
         await api.consultants.delete(id);
         await api.tasks.saveAll(updatedTasks);
       } catch (err) {
         console.error(err);
-        addToast('Failed to delete consultant from database.', 'error');
+        addToast('We could not remove that team member. Please try again.', 'error');
       }
     } else {
       localStorage.setItem('pinnacle_consultants', JSON.stringify(nextConsultants));
@@ -811,7 +811,7 @@ export default function App() {
         const { userId, error: inviteError } = await inviteUser(cData.email);
         if (inviteError) {
           console.error('Failed to send invite:', inviteError);
-          addToast(`Failed to send invite: ${inviteError}`, 'error');
+          addToast(`We could not send the invitation email. ${inviteError}`, 'error');
           return false;
         }
         if (userId) {
@@ -820,7 +820,7 @@ export default function App() {
         addToast(`Invite sent to ${cData.email}. They will set their own password.`, 'success');
       } catch (err: any) {
         console.error('Failed to send invite:', err);
-        addToast(`Connection error: ${err.message || err}`, 'error');
+        addToast('We could not reach the server. Please check your connection and try again.', 'error');
         return false;
       }
     }
@@ -859,13 +859,13 @@ export default function App() {
       try {
         const { error: authErr } = await deleteAuthUser(id);
         if (authErr) {
-          addToast(`Could not remove auth account: ${authErr}`, 'error');
+          addToast(`The user was removed, but revoking their sign-in access did not complete. ${authErr}`, 'error');
         }
         await api.customers.delete(id);
         await api.projects.saveAll(updatedProjects);
       } catch (err) {
         console.error(err);
-        addToast('Failed to delete customer from database.', 'error');
+        addToast('We could not remove that customer. Please try again.', 'error');
       }
     } else {
       localStorage.setItem('pinnacle_customers', JSON.stringify(next));
@@ -982,7 +982,7 @@ export default function App() {
     setActiveUserId('admin');
     localStorage.removeItem('pinnacle_session');
     localStorage.removeItem('pinnacle_activeuser');
-    addToast('Logged out of Pinnacle Projects.', 'info');
+    addToast('You have been signed out of Pinnacle Flow.', 'info');
     if (isSupabaseConfigured()) {
       const supabase = getSupabaseClient();
       supabase?.auth.signOut({ scope: 'local' }).catch(err => {
@@ -1153,7 +1153,7 @@ export default function App() {
                 supabase.auth.updateUser({ password: newPass }).then(({ error }) => {
                   if (error) {
                     console.error('Failed to reset Supabase password:', error);
-                    addToast(`Failed to update password: ${error.message}`, 'error');
+                    addToast('We could not update your password. Please try again.', 'error');
                   } else {
                     addToast('Password updated successfully.', 'success');
                   }

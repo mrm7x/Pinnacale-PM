@@ -75,7 +75,7 @@ export default function Settings({
         if (supabase) {
           const { error } = await supabase.auth.updateUser({ password: newPassword });
           if (error) {
-            onAddToast(`Failed to update Supabase Auth password: ${error.message}`, 'error');
+            onAddToast('We could not update the password. Please try again.', 'error');
           } else {
             onAddToast('Password updated via Supabase Auth.', 'success');
           }
@@ -86,7 +86,7 @@ export default function Settings({
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: any) {
-      onAddToast(err.message || 'Failed to update password.', 'error');
+      onAddToast('We could not update the password. Please try again.', 'error');
     } finally {
       setIsChangingPassword(false);
     }
@@ -252,7 +252,7 @@ REVOKE ALL ON tasks FROM anon;
       if (isSupabaseConfigured()) {
         const { error } = await inviteUser(consultant.email);
         if (error) {
-          onAddToast(`Failed to send invite: ${error}`, 'error');
+          onAddToast(`We could not send the invitation email. ${error}`, 'error');
         } else {
           onAddToast(`Password reset email sent to ${consultant.email}. They can set a new password from the link.`, 'success');
         }
@@ -270,7 +270,7 @@ REVOKE ALL ON tasks FROM anon;
       setImportJson('');
       setShowImportArea(false);
     } else {
-      onAddToast('Import failed. Invalid database structure.', 'error');
+      onAddToast('Import failed — the file does not look like a valid backup.', 'error');
     }
   };
 

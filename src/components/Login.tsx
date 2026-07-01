@@ -17,6 +17,21 @@ interface LoginProps {
 // whenever env vars are present, and the localStorage opt-in is dev-gated).
 const IS_DEV = import.meta.env.DEV;
 
+// Translate raw backend auth errors into friendly, non-technical wording.
+function friendlyAuthError(message: string | undefined): string {
+  const m = (message || '').toLowerCase();
+  if (m.includes('invalid login credentials') || m.includes('invalid') && m.includes('password')) {
+    return 'The email or password you entered is incorrect.';
+  }
+  if (m.includes('email not confirmed')) {
+    return 'Please confirm your email address before signing in.';
+  }
+  if (m.includes('rate') || m.includes('too many')) {
+    return 'Too many attempts. Please wait a moment and try again.';
+  }
+  return 'We could not sign you in. Please try again.';
+}
+
 export default function Login({ consultants, onLoginSuccess, onAddToast }: LoginProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -45,7 +60,7 @@ export default function Login({ consultants, onLoginSuccess, onAddToast }: Login
         });
 
         if (authError) {
-          setError(authError.message);
+          setError(friendlyAuthError(authError.message));
           setIsLoading(false);
           return;
         }
@@ -73,7 +88,7 @@ export default function Login({ consultants, onLoginSuccess, onAddToast }: Login
 
         if (!profile) {
           console.warn('Authenticated via Supabase, but no consultant or customer profile row found.');
-          setError('User profile not found in database. Please contact your administrator.');
+          setError('We could not find your account details. Please contact your administrator.');
           await supabase.auth.signOut();
           setIsLoading(false);
           return;
@@ -82,7 +97,7 @@ export default function Login({ consultants, onLoginSuccess, onAddToast }: Login
         onAddToast(`Welcome back, ${profile.name.split(' ')[0]}.`, 'success');
         onLoginSuccess(profile.id);
       } catch (err: any) {
-        setError(err.message || 'An error occurred during authentication.');
+        setError('Something went wrong while signing you in. Please try again.');
       } finally {
         setIsLoading(false);
       }
@@ -109,7 +124,7 @@ export default function Login({ consultants, onLoginSuccess, onAddToast }: Login
     }
 
     // 3. Production without a configured backend — refuse to authenticate.
-    setError('This application requires a configured backend. Contact your administrator.');
+    setError('This app is not fully set up yet. Please contact your administrator.');
     setIsLoading(false);
   };
 
@@ -130,13 +145,13 @@ export default function Login({ consultants, onLoginSuccess, onAddToast }: Login
         });
 
         if (resetError) {
-          setError(resetError.message);
+          setError('We could not send the reset link. Please try again in a moment.');
         } else {
           setSuccessMessage('A password reset link has been sent to your email address.');
           onAddToast('Password reset link sent.', 'success');
         }
       } catch (err: any) {
-        setError(err.message || 'An error occurred during password reset.');
+        setError('Something went wrong sending the reset link. Please try again.');
       } finally {
         setIsLoading(false);
       }
@@ -150,7 +165,7 @@ export default function Login({ consultants, onLoginSuccess, onAddToast }: Login
       return;
     }
 
-    setError('This application requires a configured backend. Contact your administrator.');
+    setError('This app is not fully set up yet. Please contact your administrator.');
     setIsLoading(false);
   };
 
@@ -396,7 +411,7 @@ export default function Login({ consultants, onLoginSuccess, onAddToast }: Login
               Welcome back
             </h2>
             <p style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>
-              Sign in to your Pinnacle account
+              Sign in to your Pinnacle Flow account
             </p>
           </div>
 

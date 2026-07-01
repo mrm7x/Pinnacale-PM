@@ -605,7 +605,7 @@ export async function exportProjectToExcel(
   const accentMidArgb = lighten(accent, 0.55);
 
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Pinnacle PM';
+  workbook.creator = 'Pinnacle Flow';
   workbook.created = new Date();
   workbook.properties.date1904 = false;
 
