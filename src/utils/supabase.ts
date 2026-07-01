@@ -14,6 +14,7 @@ const AUTH_STORAGE = typeof sessionStorage !== 'undefined' ? sessionStorage : un
 // host and lets the CSP lock connect-src to the real Supabase project.
 const envUrl = import.meta.env.VITE_SUPABASE_URL;
 const envAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const envServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 
 // True only under `vite dev`. Production builds hard-fail the localStorage path.
 const IS_DEV = import.meta.env.DEV;
@@ -40,9 +41,11 @@ export function setSupabaseEnabled(enabled: boolean) {
 export function getSupabaseCredentials() {
   const url = envUrl || (isSupabaseEnabled() ? localStorage.getItem('pinnacle_supabase_url') : '') || '';
   const anonKey = envAnonKey || (isSupabaseEnabled() ? localStorage.getItem('pinnacle_supabase_anon_key') : '') || '';
+  const serviceRoleKey = envServiceRoleKey || (isSupabaseEnabled() ? localStorage.getItem('pinnacle_supabase_service_role_key') : '') || '';
   return {
     url: url.trim(),
     anonKey: anonKey.trim(),
+    serviceRoleKey: serviceRoleKey.trim(),
     isFromEnv: !!(envUrl && envAnonKey)
   };
 }
@@ -114,4 +117,26 @@ export function createTemporarySupabaseClient() {
       detectSessionInUrl: false
     }
   });
+}
+
+/**
+ * Creates a Supabase client authenticated with the service role key.
+ * This bypasses Row Level Security and is used for admin operations such as
+ * creating users or sending invite emails.
+ */
+export function createAdminSupabaseClient() {
+  if (!isSupabaseConfigured()) return null;
+  const { url, serviceRoleKey } = getSupabaseCredentials();
+  if (!serviceRoleKey) return null;
+  return createClient(url, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false
+    }
+  });
+}
+
+export function hasServiceRoleKey(): boolean {
+  return !!getSupabaseCredentials().serviceRoleKey;
 }

@@ -18,7 +18,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { api } from './utils/api';
-import { isSupabaseConfigured, getSupabaseClient, createTemporarySupabaseClient } from './utils/supabase';
+import { isSupabaseConfigured, getSupabaseClient, createAdminSupabaseClient } from './utils/supabase';
 import {
   activeUserFromConsultant, activeUserFromCustomer, canSeeProject
 } from './utils/permissions';
@@ -712,38 +712,26 @@ export default function App() {
   };
 
   // Consultant CRUD Action Handlers
-  const handleAddConsultant = async (cData: Omit<Consultant, 'id'> & { password?: string }): Promise<boolean> => {
+  const handleAddConsultant = async (cData: Omit<Consultant, 'id'>): Promise<boolean> => {
     let id = `c-${Math.random().toString(36).substring(2, 9)}`;
-    // SECURITY: require an actual password rather than silently defaulting to a
-    // well-known one. Callers must supply a strong initial password; the user
-    // is always forced to reset it on first login.
-    const plaintextPassword = cData.password;
-    if (!plaintextPassword || plaintextPassword.length < 8) {
-      addToast('A password of at least 8 characters is required.', 'error');
-      return false;
-    }
 
     if (isSupabaseConfigured()) {
       try {
-        const tempClient = createTemporarySupabaseClient();
-        if (tempClient) {
-          const { data: authData, error: signUpError } = await tempClient.auth.signUp({
-            email: cData.email,
-            password: plaintextPassword,
-          });
-          
-          if (signUpError) {
-            console.error('Supabase Auth signUp failed:', signUpError);
-            addToast(`Account creation failed: ${signUpError.message}`, 'error');
+        const adminClient = createAdminSupabaseClient();
+        if (adminClient) {
+          const { data, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(cData.email);
+          if (inviteError) {
+            console.error('Failed to send invite:', inviteError);
+            addToast(`Failed to send invite: ${inviteError.message}`, 'error');
             return false;
           }
-
-          if (authData.user) {
-            id = authData.user.id;
+          if (data.user) {
+            id = data.user.id;
           }
+          addToast(`Invite sent to ${cData.email}. They will set their own password.`, 'success');
         }
       } catch (err: any) {
-        console.error('Supabase Auth connection error:', err);
+        console.error('Failed to send invite:', err);
         addToast(`Connection error: ${err.message || err}`, 'error');
         return false;
       }
@@ -792,33 +780,26 @@ export default function App() {
   // Customers authenticate via Supabase Auth like consultants, but live in a
   // separate `customers` table and are always tier='normal' (enforced by a DB
   // CHECK constraint).
-  const handleAddCustomer = async (cData: Omit<Customer, 'id' | 'tier'> & { password?: string }): Promise<boolean> => {
+  const handleAddCustomer = async (cData: Omit<Customer, 'id' | 'tier'>): Promise<boolean> => {
     let id = `cust-${Math.random().toString(36).substring(2, 9)}`;
-    const plaintextPassword = cData.password;
-    if (!plaintextPassword || plaintextPassword.length < 8) {
-      addToast('A password of at least 8 characters is required.', 'error');
-      return false;
-    }
 
     if (isSupabaseConfigured()) {
       try {
-        const tempClient = createTemporarySupabaseClient();
-        if (tempClient) {
-          const { data: authData, error: signUpError } = await tempClient.auth.signUp({
-            email: cData.email,
-            password: plaintextPassword,
-          });
-          if (signUpError) {
-            console.error('Supabase Auth signUp failed:', signUpError);
-            addToast(`Account creation failed: ${signUpError.message}`, 'error');
+        const adminClient = createAdminSupabaseClient();
+        if (adminClient) {
+          const { data, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(cData.email);
+          if (inviteError) {
+            console.error('Failed to send invite:', inviteError);
+            addToast(`Failed to send invite: ${inviteError.message}`, 'error');
             return false;
           }
-          if (authData.user) {
-            id = authData.user.id;
+          if (data.user) {
+            id = data.user.id;
           }
+          addToast(`Invite sent to ${cData.email}. They will set their own password.`, 'success');
         }
       } catch (err: any) {
-        console.error('Supabase Auth connection error:', err);
+        console.error('Failed to send invite:', err);
         addToast(`Connection error: ${err.message || err}`, 'error');
         return false;
       }

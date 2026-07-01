@@ -6,7 +6,7 @@ import {
   Users, ShieldCheck, Download, Upload, Trash2, Plus,
   RefreshCw, CheckCircle, Database, FolderKanban, Edit2, Lock
 } from 'lucide-react';
-import { getSupabaseCredentials, testSupabaseConnection, getSupabaseClient, isSupabaseConfigured, setSupabaseEnabled } from '../utils/supabase';
+import { getSupabaseCredentials, testSupabaseConnection, getSupabaseClient, isSupabaseConfigured, setSupabaseEnabled, createAdminSupabaseClient } from '../utils/supabase';
 
 interface SettingsProps {
   consultants: Consultant[];
@@ -14,10 +14,10 @@ interface SettingsProps {
   activeUserTier: Tier;
   activeUserId: string;
   activeUser: ActiveUser | null;
-  onAddConsultant: (consultant: Omit<Consultant, 'id'> & { password?: string }) => void;
+  onAddConsultant: (consultant: Omit<Consultant, 'id'>) => void;
   onDeleteConsultant: (id: string) => void;
   onUpdateConsultant: (consultant: Consultant) => void;
-  onAddCustomer: (customer: Omit<Customer, 'id' | 'tier'> & { password?: string }) => Promise<boolean>;
+  onAddCustomer: (customer: Omit<Customer, 'id' | 'tier'>) => Promise<boolean>;
   onDeleteCustomer: (id: string) => void;
   onImportData: (jsonData: string) => Promise<boolean>;
   onExportData: () => void;
@@ -46,9 +46,9 @@ export default function Settings({
   onDeleteTemplate
 }: SettingsProps) {
   // Consultant Form
-  const [newConsultant, setNewConsultant] = useState<{ name: string; email: string; role: Role; avatarColor: string; tier: Tier; password: string }>({ name: '', email: '', role: 'Consultant', avatarColor: '#0d9488', tier: 'normal', password: '' });
+  const [newConsultant, setNewConsultant] = useState<{ name: string; email: string; role: Role; avatarColor: string; tier: Tier }>({ name: '', email: '', role: 'Consultant', avatarColor: '#0d9488', tier: 'normal' });
   // Customer (external) Form
-  const [newCustomer, setNewCustomer] = useState<{ name: string; email: string; company: string; avatarColor: string; password: string }>({ name: '', email: '', company: '', avatarColor: '#0d9488', password: '' });
+  const [newCustomer, setNewCustomer] = useState<{ name: string; email: string; company: string; avatarColor: string }>({ name: '', email: '', company: '', avatarColor: '#0d9488' });
   const [editingConsultant, setEditingConsultant] = useState<Consultant | null>(null);
   const [resetPasswordId, setResetPasswordId] = useState<string | null>(null);
   const [resetPasswordValue, setResetPasswordValue] = useState('');
@@ -234,25 +234,32 @@ REVOKE ALL ON tasks FROM anon;
     e.preventDefault();
     if (!newConsultant.name || !newConsultant.email) return;
 
-    // The password is forwarded to App.tsx, which uses it to create the
-    // Supabase Auth user. We do not store or hash passwords locally.
+    // App.tsx will send an invite email so the user can set their own password.
     onAddConsultant({
       name: newConsultant.name,
       email: newConsultant.email,
       role: newConsultant.role,
       avatarColor: newConsultant.avatarColor,
       tier: newConsultant.tier,
-      password: newConsultant.password
     });
-    setNewConsultant({ name: '', email: '', role: 'Consultant', avatarColor: colors[Math.floor(Math.random() * colors.length)], tier: 'normal', password: '' });
-    onAddToast('Consultant added to directory.', 'success');
+    setNewConsultant({ name: '', email: '', role: 'Consultant', avatarColor: colors[Math.floor(Math.random() * colors.length)], tier: 'normal' });
   };
 
   const handleResetPassword = async (consultantId: string) => {
     if (!resetPasswordValue) return;
     const consultant = consultants.find(c => c.id === consultantId);
     if (consultant) {
-      onAddToast(`Password reset is handled via Supabase Auth. Invite ${consultant.email} from the Supabase dashboard to set a new password.`, 'info');
+      if (isSupabaseConfigured()) {
+        const adminClient = createAdminSupabaseClient();
+        if (adminClient) {
+          const { error } = await adminClient.auth.admin.inviteUserByEmail(consultant.email);
+          if (error) {
+            onAddToast(`Failed to send invite: ${error.message}`, 'error');
+          } else {
+            onAddToast(`Password reset email sent to ${consultant.email}. They can set a new password from the link.`, 'success');
+          }
+        }
+      }
     }
     setResetPasswordId(null);
     setResetPasswordValue('');
@@ -470,20 +477,6 @@ REVOKE ALL ON tasks FROM anon;
                     </label>
                   </div>
                 </div>
-              </div>
-
-              <div className="form-group" style={{ marginTop: '1rem' }}>
-                <label htmlFor="form-field-4" className="form-label">Initial Password</label>
-                <input id="form-field-4" 
-                  type="password" 
-                  className="form-input" 
-                  placeholder="Leave empty for default ('password')"
-                  value={newConsultant.password}
-                  onChange={(e) => setNewConsultant({ ...newConsultant, password: e.target.value })}
-                />
-                <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '0.25rem', display: 'block' }}>
-                  User will be required to reset their password on first login.
-                </span>
               </div>
 
               <div className="grid-cols-12">
@@ -737,16 +730,15 @@ REVOKE ALL ON tasks FROM anon;
               const ok = await onAddCustomer(newCustomer);
               if (ok) {
                 onAddToast(`Customer ${newCustomer.name} created.`, 'success');
-                setNewCustomer({ name: '', email: '', company: '', avatarColor: colors[Math.floor(Math.random() * colors.length)], password: '' });
+                setNewCustomer({ name: '', email: '', company: '', avatarColor: colors[Math.floor(Math.random() * colors.length)] });
               }
             }} style={{ marginBottom: '1.5rem' }}>
               <div className="form-group">
                 <label className="form-label">Add Customer</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1fr 0.8fr auto', gap: '0.5rem', alignItems: 'flex-end' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1fr auto', gap: '0.5rem', alignItems: 'flex-end' }}>
                   <input className="form-input" placeholder="Full name" value={newCustomer.name} onChange={e => setNewCustomer({ ...newCustomer, name: e.target.value })} required />
                   <input className="form-input" type="email" placeholder="Email" value={newCustomer.email} onChange={e => setNewCustomer({ ...newCustomer, email: e.target.value })} required />
                   <input className="form-input" placeholder="Company" value={newCustomer.company} onChange={e => setNewCustomer({ ...newCustomer, company: e.target.value })} />
-                  <input className="form-input" type="password" placeholder="Password (min 8)" value={newCustomer.password} onChange={e => setNewCustomer({ ...newCustomer, password: e.target.value })} required />
                   <button type="submit" className="btn btn-primary"><Plus size={16} /> Add</button>
                 </div>
               </div>
