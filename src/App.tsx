@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import PasswordReset from './components/PasswordReset';
 import type { Project, Task, Consultant, Customer, Communication } from './types';
 import { calculateTaskSchedules } from './utils/scheduler';
@@ -256,15 +256,30 @@ export default function App() {
     localStorage.setItem('pinnacle_activeuser', activeUserId);
   }, [activeUserId]);
 
-  // Listen to Supabase Auth State Changes for password recovery (Reset Password Link)
+  // Whether the app was opened from an invite link. Captured once on first
+  // render, before Supabase's detectSessionInUrl consumes and clears the hash.
+  const inviteLinkRef = useRef<boolean>(
+    typeof window !== 'undefined' && window.location.hash.includes('type=invite')
+  );
+
+  // Listen to Supabase Auth state changes for the two email-link flows that
+  // require the user to set a password:
+  //   - Password reset  → event 'PASSWORD_RECOVERY'
+  //   - New-user invite → event 'SIGNED_IN', but ONLY when the link that opened
+  //     the app carried `type=invite`. A normal sign-in also emits 'SIGNED_IN',
+  //     so the invite flag is what prevents the modal from popping on every login.
   useEffect(() => {
     if (isSupabaseConfigured()) {
       const supabase = getSupabaseClient();
       if (supabase) {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-          if (event === 'PASSWORD_RECOVERY') {
+          const isInvite = event === 'SIGNED_IN' && inviteLinkRef.current;
+          if (event === 'PASSWORD_RECOVERY' || isInvite) {
             if (session?.user) {
+              inviteLinkRef.current = false; // consume so later SIGNED_INs don't re-trigger
               setResetUserId(session.user.id);
+              setActiveUserId(session.user.id);
+              setIsAuthenticated(true); // ensure the modal (in the authed view) renders
               setShowPasswordReset(true);
             }
           }
