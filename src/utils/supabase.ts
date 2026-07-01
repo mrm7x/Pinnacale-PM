@@ -14,7 +14,9 @@ const AUTH_STORAGE = typeof sessionStorage !== 'undefined' ? sessionStorage : un
 // host and lets the CSP lock connect-src to the real Supabase project.
 const envUrl = import.meta.env.VITE_SUPABASE_URL;
 const envAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const envServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+// NOTE: the service_role / secret key is deliberately NOT read here. Admin
+// operations (user invites) run server-side in the `invite-user` Edge Function,
+// which holds the secret key. Never ship an admin key to the browser bundle.
 
 // True only under `vite dev`. Production builds hard-fail the localStorage path.
 const IS_DEV = import.meta.env.DEV;
@@ -41,11 +43,9 @@ export function setSupabaseEnabled(enabled: boolean) {
 export function getSupabaseCredentials() {
   const url = envUrl || (isSupabaseEnabled() ? localStorage.getItem('pinnacle_supabase_url') : '') || '';
   const anonKey = envAnonKey || (isSupabaseEnabled() ? localStorage.getItem('pinnacle_supabase_anon_key') : '') || '';
-  const serviceRoleKey = envServiceRoleKey || (isSupabaseEnabled() ? localStorage.getItem('pinnacle_supabase_service_role_key') : '') || '';
   return {
     url: url.trim(),
     anonKey: anonKey.trim(),
-    serviceRoleKey: serviceRoleKey.trim(),
     isFromEnv: !!(envUrl && envAnonKey)
   };
 }
@@ -120,23 +120,33 @@ export function createTemporarySupabaseClient() {
 }
 
 /**
- * Creates a Supabase client authenticated with the service role key.
- * This bypasses Row Level Security and is used for admin operations such as
- * creating users or sending invite emails.
+ * Sends an auth invite (or password-reset re-invite) to a user by calling the
+ * `invite-user` Edge Function. The function performs the privileged
+ * admin.inviteUserByEmail() call server-side; the caller's session token is
+ * forwarded automatically by supabase-js and must belong to an admin/superuser.
+ *
+ * Returns the new/existing user's id on success, or a human-readable error.
  */
-export function createAdminSupabaseClient() {
-  if (!isSupabaseConfigured()) return null;
-  const { url, serviceRoleKey } = getSupabaseCredentials();
-  if (!serviceRoleKey) return null;
-  return createClient(url, serviceRoleKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false
-    }
-  });
-}
+export async function inviteUser(email: string): Promise<{ userId: string | null; error: string | null }> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return { userId: null, error: 'Supabase is not configured.' };
 
-export function hasServiceRoleKey(): boolean {
-  return !!getSupabaseCredentials().serviceRoleKey;
+  const { data, error } = await supabase.functions.invoke('invite-user', {
+    body: { email }
+  });
+
+  if (error) {
+    // For non-2xx responses supabase-js exposes the raw Response on error.context;
+    // surface the function's { error } message when available.
+    let message = error.message;
+    try {
+      const body = await (error as any).context?.json?.();
+      if (body?.error) message = body.error;
+    } catch {
+      /* keep the generic message */
+    }
+    return { userId: null, error: message };
+  }
+
+  return { userId: (data as any)?.user?.id ?? null, error: null };
 }

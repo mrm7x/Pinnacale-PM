@@ -6,7 +6,7 @@ import {
   Users, ShieldCheck, Download, Upload, Trash2, Plus,
   RefreshCw, CheckCircle, Database, FolderKanban, Edit2, Lock
 } from 'lucide-react';
-import { getSupabaseCredentials, testSupabaseConnection, getSupabaseClient, isSupabaseConfigured, setSupabaseEnabled, createAdminSupabaseClient } from '../utils/supabase';
+import { getSupabaseCredentials, testSupabaseConnection, getSupabaseClient, isSupabaseConfigured, setSupabaseEnabled, inviteUser } from '../utils/supabase';
 
 interface SettingsProps {
   consultants: Consultant[];
@@ -250,14 +250,11 @@ REVOKE ALL ON tasks FROM anon;
     const consultant = consultants.find(c => c.id === consultantId);
     if (consultant) {
       if (isSupabaseConfigured()) {
-        const adminClient = createAdminSupabaseClient();
-        if (adminClient) {
-          const { error } = await adminClient.auth.admin.inviteUserByEmail(consultant.email);
-          if (error) {
-            onAddToast(`Failed to send invite: ${error.message}`, 'error');
-          } else {
-            onAddToast(`Password reset email sent to ${consultant.email}. They can set a new password from the link.`, 'success');
-          }
+        const { error } = await inviteUser(consultant.email);
+        if (error) {
+          onAddToast(`Failed to send invite: ${error}`, 'error');
+        } else {
+          onAddToast(`Password reset email sent to ${consultant.email}. They can set a new password from the link.`, 'success');
         }
       }
     }

@@ -18,7 +18,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { api } from './utils/api';
-import { isSupabaseConfigured, getSupabaseClient, createAdminSupabaseClient } from './utils/supabase';
+import { isSupabaseConfigured, getSupabaseClient, inviteUser } from './utils/supabase';
 import {
   activeUserFromConsultant, activeUserFromCustomer, canSeeProject
 } from './utils/permissions';
@@ -717,19 +717,16 @@ export default function App() {
 
     if (isSupabaseConfigured()) {
       try {
-        const adminClient = createAdminSupabaseClient();
-        if (adminClient) {
-          const { data, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(cData.email);
-          if (inviteError) {
-            console.error('Failed to send invite:', inviteError);
-            addToast(`Failed to send invite: ${inviteError.message}`, 'error');
-            return false;
-          }
-          if (data.user) {
-            id = data.user.id;
-          }
-          addToast(`Invite sent to ${cData.email}. They will set their own password.`, 'success');
+        const { userId, error: inviteError } = await inviteUser(cData.email);
+        if (inviteError) {
+          console.error('Failed to send invite:', inviteError);
+          addToast(`Failed to send invite: ${inviteError}`, 'error');
+          return false;
         }
+        if (userId) {
+          id = userId;
+        }
+        addToast(`Invite sent to ${cData.email}. They will set their own password.`, 'success');
       } catch (err: any) {
         console.error('Failed to send invite:', err);
         addToast(`Connection error: ${err.message || err}`, 'error');
@@ -785,19 +782,16 @@ export default function App() {
 
     if (isSupabaseConfigured()) {
       try {
-        const adminClient = createAdminSupabaseClient();
-        if (adminClient) {
-          const { data, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(cData.email);
-          if (inviteError) {
-            console.error('Failed to send invite:', inviteError);
-            addToast(`Failed to send invite: ${inviteError.message}`, 'error');
-            return false;
-          }
-          if (data.user) {
-            id = data.user.id;
-          }
-          addToast(`Invite sent to ${cData.email}. They will set their own password.`, 'success');
+        const { userId, error: inviteError } = await inviteUser(cData.email);
+        if (inviteError) {
+          console.error('Failed to send invite:', inviteError);
+          addToast(`Failed to send invite: ${inviteError}`, 'error');
+          return false;
         }
+        if (userId) {
+          id = userId;
+        }
+        addToast(`Invite sent to ${cData.email}. They will set their own password.`, 'success');
       } catch (err: any) {
         console.error('Failed to send invite:', err);
         addToast(`Connection error: ${err.message || err}`, 'error');
