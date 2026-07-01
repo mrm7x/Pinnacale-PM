@@ -18,7 +18,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { api } from './utils/api';
-import { isSupabaseConfigured, getSupabaseClient, inviteUser } from './utils/supabase';
+import { isSupabaseConfigured, getSupabaseClient, inviteUser, deleteAuthUser } from './utils/supabase';
 import {
   activeUserFromConsultant, activeUserFromCustomer, canSeeProject
 } from './utils/permissions';
@@ -781,6 +781,12 @@ export default function App() {
 
     if (isSupabaseConfigured()) {
       try {
+        // Remove the auth account first so the user can no longer sign in, then
+        // the profile row. deleteAuthUser tolerates an already-missing account.
+        const { error: authErr } = await deleteAuthUser(id);
+        if (authErr) {
+          addToast(`Could not remove auth account: ${authErr}`, 'error');
+        }
         await api.consultants.delete(id);
         await api.tasks.saveAll(updatedTasks);
       } catch (err) {
@@ -851,6 +857,10 @@ export default function App() {
     setProjects(updatedProjects);
     if (isSupabaseConfigured()) {
       try {
+        const { error: authErr } = await deleteAuthUser(id);
+        if (authErr) {
+          addToast(`Could not remove auth account: ${authErr}`, 'error');
+        }
         await api.customers.delete(id);
         await api.projects.saveAll(updatedProjects);
       } catch (err) {
@@ -965,15 +975,20 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    if (isSupabaseConfigured()) {
-      const supabase = getSupabaseClient()!;
-      await supabase.auth.signOut();
-    }
+    // Clear local UI state immediately so logout feels instant. The token
+    // revocation is done in the background with local scope (clears this
+    // client's session without a blocking round-trip to revoke every device).
     setIsAuthenticated(false);
     setActiveUserId('admin');
     localStorage.removeItem('pinnacle_session');
     localStorage.removeItem('pinnacle_activeuser');
     addToast('Logged out of Pinnacle Projects.', 'info');
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseClient();
+      supabase?.auth.signOut({ scope: 'local' }).catch(err => {
+        console.error('Sign out error:', err);
+      });
+    }
   };
 
   // Render selected view tab

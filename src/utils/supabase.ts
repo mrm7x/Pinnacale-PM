@@ -150,3 +150,34 @@ export async function inviteUser(email: string): Promise<{ userId: string | null
 
   return { userId: (data as any)?.user?.id ?? null, error: null };
 }
+
+/**
+ * Deletes a user's Supabase Auth account via the `delete-user` Edge Function.
+ * The caller's session token is forwarded automatically and must belong to an
+ * admin/superuser. Deleting the profile row (consultants/customers) is handled
+ * separately by the caller; this removes the matching auth.users record so a
+ * deleted user can no longer sign in.
+ *
+ * `userId` must be the auth user id (which equals the profile row id).
+ */
+export async function deleteAuthUser(userId: string): Promise<{ error: string | null }> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return { error: 'Supabase is not configured.' };
+
+  const { error } = await supabase.functions.invoke('delete-user', {
+    body: { userId }
+  });
+
+  if (error) {
+    let message = error.message;
+    try {
+      const body = await (error as any).context?.json?.();
+      if (body?.error) message = body.error;
+    } catch {
+      /* keep the generic message */
+    }
+    return { error: message };
+  }
+
+  return { error: null };
+}
