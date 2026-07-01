@@ -798,6 +798,24 @@ export default function App() {
     }
   };
 
+  // Update a single consultant row. Saves only the changed row (not the whole
+  // list) so a non-admin editing their own profile does not attempt to write
+  // other users' rows, which RLS would reject.
+  const handleUpdateConsultant = async (updated: Consultant) => {
+    const next = consultants.map(c => c.id === updated.id ? updated : c);
+    setConsultants(next);
+    if (isSupabaseConfigured()) {
+      try {
+        await api.consultants.save(updated);
+      } catch (err) {
+        console.error(err);
+        addToast('We could not save the changes. Please try again.', 'error');
+      }
+    } else {
+      localStorage.setItem('pinnacle_consultants', JSON.stringify(next));
+    }
+  };
+
   const handleDeleteConsultant = async (id: string) => {
     const nextConsultants = consultants.filter(c => c.id !== id);
     const updatedTasks = tasks.map(t => t.assignedConsultantId === id ? { ...t, assignedConsultantId: null } : t);
@@ -1120,9 +1138,7 @@ export default function App() {
             activeUser={activeUser}
             onAddConsultant={handleAddConsultant}
             onDeleteConsultant={handleDeleteConsultant}
-            onUpdateConsultant={(updated: Consultant) => {
-              saveConsultantsState(consultants.map(c => c.id === updated.id ? updated : c));
-            }}
+            onUpdateConsultant={handleUpdateConsultant}
             onAddCustomer={handleAddCustomer}
             onDeleteCustomer={handleDeleteCustomer}
             onImportData={handleImportData}
