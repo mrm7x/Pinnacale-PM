@@ -277,8 +277,27 @@ export default function App() {
           if (event === 'PASSWORD_RECOVERY' || isInvite) {
             if (session?.user) {
               inviteLinkRef.current = false; // consume so later SIGNED_INs don't re-trigger
-              setResetUserId(session.user.id);
-              setActiveUserId(session.user.id);
+
+              // Resolve the profile row by email (as the normal login path does)
+              // rather than trusting session.user.id. This keeps the active user
+              // resolvable even if the profile row's id differs from the auth uid
+              // (e.g. legacy rows created before the id linkage was fixed).
+              let resolvedId = session.user.id;
+              const email = session.user.email?.toLowerCase();
+              if (email) {
+                const { data: c } = await supabase
+                  .from('consultants').select('id').eq('email', email).maybeSingle() as { data: any };
+                if (c?.id) {
+                  resolvedId = c.id as string;
+                } else {
+                  const { data: cust } = await supabase
+                    .from('customers').select('id').eq('email', email).maybeSingle() as { data: any };
+                  if (cust?.id) resolvedId = cust.id as string;
+                }
+              }
+
+              setResetUserId(resolvedId);
+              setActiveUserId(resolvedId);
               setIsAuthenticated(true); // ensure the modal (in the authed view) renders
               setShowPasswordReset(true);
               // The mount-time getSession() likely ran before the email-link
@@ -743,9 +762,14 @@ export default function App() {
           addToast(`We could not send the invitation email. ${inviteError}`, 'error');
           return false;
         }
-        if (userId) {
-          id = userId;
+        if (!userId) {
+          // Without the auth id we cannot link the profile row to the login,
+          // which would break sign-in resolution and task permissions. Fail
+          // loudly rather than create a mismatched row.
+          addToast('The invitation was sent, but the account could not be linked. Please try again.', 'error');
+          return false;
         }
+        id = userId;
         addToast(`Invite sent to ${cData.email}. They will set their own password.`, 'success');
       } catch (err: any) {
         console.error('Failed to send invite:', err);
@@ -814,9 +838,11 @@ export default function App() {
           addToast(`We could not send the invitation email. ${inviteError}`, 'error');
           return false;
         }
-        if (userId) {
-          id = userId;
+        if (!userId) {
+          addToast('The invitation was sent, but the account could not be linked. Please try again.', 'error');
+          return false;
         }
+        id = userId;
         addToast(`Invite sent to ${cData.email}. They will set their own password.`, 'success');
       } catch (err: any) {
         console.error('Failed to send invite:', err);
