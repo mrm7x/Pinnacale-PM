@@ -1,5 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 
+// SECURITY: use sessionStorage for auth tokens instead of the default
+// localStorage. This means closing the browser (or all tabs of the app)
+// destroys the session — the user must re-authenticate on the next visit.
+// Refreshing a single tab stays logged in, since sessionStorage persists
+// for the lifetime of the tab. autoRefreshToken still works within a tab.
+const AUTH_STORAGE = typeof sessionStorage !== 'undefined' ? sessionStorage : undefined;
+
 // Credentials may come from build-time env vars (preferred) or, in DEVELOPMENT
 // ONLY, from localStorage when a developer has explicitly enabled Supabase via
 // the Settings panel. In production builds the localStorage opt-in is ignored,
@@ -62,7 +69,8 @@ export function getSupabaseClient() {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true
+        detectSessionInUrl: true,
+        storage: AUTH_STORAGE
       }
     });
   }

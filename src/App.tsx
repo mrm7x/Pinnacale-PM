@@ -224,17 +224,19 @@ export default function App() {
       supabase?.auth.getSession().then(({ data: { session } }) => {
         if (session) {
           setIsAuthenticated(true);
-          const userId = localStorage.getItem('pinnacle_activeuser') || session.user.id;
-          setActiveUserId(userId);
+          // The Supabase session is the single source of truth for identity.
+          // (Auth tokens now live in sessionStorage, so they don't survive a
+          // browser restart — the user must re-authenticate each session.)
+          setActiveUserId(session.user.id);
           loadData();
         }
       });
     } else {
-      // Local mode: only honor a saved session if we can still find the user.
-      // (loadData will populate consultants; we re-validate here on next tick.)
-      const savedAuth = localStorage.getItem('pinnacle_session');
+      // Dev-only local mode: honor a saved active user so the UI can render
+      // without a backend. There is no token check — this path is unreachable
+      // in production (Supabase is always configured via env vars).
       const savedActiveUser = localStorage.getItem('pinnacle_activeuser');
-      if (savedAuth && savedActiveUser) {
+      if (savedActiveUser) {
         setIsAuthenticated(true);
         setActiveUserId(savedActiveUser);
       }
@@ -953,17 +955,11 @@ export default function App() {
   };
 
   const handleLoginSuccess = (userId: string) => {
-    // Local-mode session token only. In Supabase mode the real session is the
-    // Supabase JWT (validated server-side); this token is just a UI hint.
-    // crypto.randomUUID() is supported in all current browsers and secure
-    // contexts; the Math.random fallback is intentionally avoided because it is
-    // not cryptographically random.
-    const sessionToken = typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `${Date.now()}-${crypto.getRandomValues(new Uint32Array(2)).join('-')}`;
     setIsAuthenticated(true);
     setActiveUserId(userId);
-    localStorage.setItem('pinnacle_session', sessionToken);
+    // pinnacle_session was a local-mode UI hint; in Supabase mode the real
+    // session JWT lives in sessionStorage (set by the Supabase client). We
+    // still keep pinnacle_activeuser for the dev-mode local path.
     localStorage.setItem('pinnacle_activeuser', userId);
     // Only set tab if no saved preference (preserves last-visited page on refresh)
     if (!localStorage.getItem('pinnacle_active_tab')) {
@@ -971,9 +967,6 @@ export default function App() {
     }
     // Backend reads were deferred until authenticated; now reload.
     loadData();
-    // Note: forced password resets are handled by Supabase Auth's own flows
-    // (e.g. recovery links / invite expiry). The app no longer stores a local
-    // mustResetPassword flag.
   };
 
   const handleLogout = async () => {
