@@ -12,6 +12,7 @@ import {
   Pin, AlertTriangle, Lightbulb, Zap, Bell, CheckCircle, Search
 } from 'lucide-react';
 import { exportProjectToExcel } from '../utils/exportToExcel';
+import { safeExternalUrl } from '../utils/url';
 import { WinComboBox } from './winui/WinComboBox';
 import { WinDatePicker } from './winui/WinDatePicker';
 import GanttChart from './GanttChart';
@@ -919,10 +920,12 @@ export default function ProjectDetails({
                         />
                       </span>
                     );
+                    // Sanitize to http(s) only — an unsafe/blank value renders
+                    // as a disabled ("not set") button rather than a live href.
                     const links = [
-                      { key: 'trello', label: 'Trello', url: activeProject.trelloLink, icon: TrelloIcon },
-                      { key: 'sharepoint', label: 'SharePoint', url: activeProject.sharepointLink, icon: SharePointIcon },
-                      { key: 'sage', label: 'Sage CRM', url: activeProject.sageCrmLink, icon: SageIcon }
+                      { key: 'trello', label: 'Trello', url: safeExternalUrl(activeProject.trelloLink), icon: TrelloIcon },
+                      { key: 'sharepoint', label: 'SharePoint', url: safeExternalUrl(activeProject.sharepointLink), icon: SharePointIcon },
+                      { key: 'sage', label: 'Sage CRM', url: safeExternalUrl(activeProject.sageCrmLink), icon: SageIcon }
                     ];
                     return (
                       <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>

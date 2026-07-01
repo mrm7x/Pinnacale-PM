@@ -82,6 +82,20 @@ Deno.serve(async (req) => {
     return json({ error: 'You cannot delete your own account' }, 400, cors);
   }
 
+  // Tier hierarchy: only a superuser may delete another superuser. A plain
+  // 'admin' cannot remove a superuser's account. (Customers are always tier
+  // 'normal', so a missing target row / non-consultant target is unaffected.)
+  if (consultant.tier !== 'superuser') {
+    const { data: target } = await admin
+      .from('consultants')
+      .select('tier')
+      .eq('id', userId)
+      .maybeSingle();
+    if (target && (target.tier as string) === 'superuser') {
+      return json({ error: 'Forbidden: only a superuser can delete a superuser' }, 403, cors);
+    }
+  }
+
   // 4. Delete the auth user. Treat "user not found" as success so the app's
   //    profile-row delete still reconciles cleanly for already-missing users.
   const { error } = await admin.auth.admin.deleteUser(userId);
