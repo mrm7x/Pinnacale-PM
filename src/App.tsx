@@ -281,6 +281,11 @@ export default function App() {
               setActiveUserId(session.user.id);
               setIsAuthenticated(true); // ensure the modal (in the authed view) renders
               setShowPasswordReset(true);
+              // The mount-time getSession() likely ran before the email-link
+              // session was established, so its loadData() was skipped. Load now
+              // that we have a session, otherwise consultants/customers stay empty
+              // and the user can't be resolved (name shows "User", Settings blank).
+              loadData();
             }
           }
         });
@@ -289,7 +294,7 @@ export default function App() {
         };
       }
     }
-  }, []);
+  }, [loadData]);
 
   // Derive active user for RBAC. Resolves from consultants (internal) OR
   // customers (external), producing a unified ActiveUser that permission
