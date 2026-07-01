@@ -165,20 +165,24 @@ export default function App() {
         }
       }
 
+        // Load each table independently so one slow/failing query (e.g. an RLS
+        // timeout on projects/tasks) cannot blank the entire app. Each falls
+        // back to an empty list, and we still resolve the signed-in user from
+        // whichever tables succeed (consultants/customers).
         const [loadedProjects, loadedTasks, loadedConsultants, loadedCommunications, loadedCustomers] = await Promise.all([
-          api.projects.getAll(),
-          api.tasks.getAll(),
-          api.consultants.getAll(),
-          api.communications.getAll(),
-          api.customers.getAll()
+          api.projects.getAll().catch((e) => { console.error('Failed to load projects:', e); return [] as Project[]; }),
+          api.tasks.getAll().catch((e) => { console.error('Failed to load tasks:', e); return [] as Task[]; }),
+          api.consultants.getAll().catch((e) => { console.error('Failed to load consultants:', e); return [] as Consultant[]; }),
+          api.communications.getAll().catch((e) => { console.error('Failed to load communications:', e); return [] as Communication[]; }),
+          api.customers.getAll().catch((e) => { console.error('Failed to load customers:', e); return [] as Customer[]; })
         ]);
 
         setCustomers(loadedCustomers);
 
-        if (loadedProjects.length === 0 && loadedConsultants.length === 0) {
-          // Seed initial defaults — only meaningful in localStorage mode.
-          // (Supabase mode is seeded via migrations / auth.admin; the app
-          // should never silently write default credentials to a real DB.)
+        if (!isSupabaseConfigured() && loadedProjects.length === 0 && loadedConsultants.length === 0) {
+          // Seed initial defaults — only in localStorage (offline dev) mode.
+          // Supabase mode must NEVER show or write default demo data: an empty
+          // result there means "no rows for this user", not "fresh install".
           const initialProjects = defaultProjects;
           const initialConsultants = defaultConsultants;
           const initialScheduledTasks = calculateTaskSchedules(
@@ -190,17 +194,15 @@ export default function App() {
           setConsultants(initialConsultants);
           setTasks(initialScheduledTasks);
 
-          if (!isSupabaseConfigured()) {
-            await Promise.all([
-              api.projects.saveAll(initialProjects),
-              api.consultants.saveAll(initialConsultants)
-            ]);
-            await api.tasks.saveAll(initialScheduledTasks);
+          await Promise.all([
+            api.projects.saveAll(initialProjects),
+            api.consultants.saveAll(initialConsultants)
+          ]);
+          await api.tasks.saveAll(initialScheduledTasks);
 
-            localStorage.setItem('pinnacle_projects', JSON.stringify(initialProjects));
-            localStorage.setItem('pinnacle_consultants', JSON.stringify(initialConsultants));
-            localStorage.setItem('pinnacle_tasks', JSON.stringify(initialScheduledTasks));
-          }
+          localStorage.setItem('pinnacle_projects', JSON.stringify(initialProjects));
+          localStorage.setItem('pinnacle_consultants', JSON.stringify(initialConsultants));
+          localStorage.setItem('pinnacle_tasks', JSON.stringify(initialScheduledTasks));
         } else {
           setProjects(loadedProjects);
           setTasks(loadedTasks);
