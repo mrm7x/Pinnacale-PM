@@ -734,17 +734,17 @@ export default function App() {
           
           if (signUpError) {
             console.error('Supabase Auth signUp failed:', signUpError);
-            addToast(`Supabase Auth creation failed: ${signUpError.message}`, 'error');
+            addToast(`Account creation failed: ${signUpError.message}`, 'error');
             return false;
           }
-          
+
           if (authData.user) {
             id = authData.user.id;
           }
         }
       } catch (err: any) {
         console.error('Supabase Auth connection error:', err);
-        addToast(`Supabase Auth error: ${err.message || err}`, 'error');
+        addToast(`Connection error: ${err.message || err}`, 'error');
         return false;
       }
     }
@@ -810,7 +810,7 @@ export default function App() {
           });
           if (signUpError) {
             console.error('Supabase Auth signUp failed:', signUpError);
-            addToast(`Supabase Auth creation failed: ${signUpError.message}`, 'error');
+            addToast(`Account creation failed: ${signUpError.message}`, 'error');
             return false;
           }
           if (authData.user) {
@@ -819,7 +819,7 @@ export default function App() {
         }
       } catch (err: any) {
         console.error('Supabase Auth connection error:', err);
-        addToast(`Supabase Auth error: ${err.message || err}`, 'error');
+        addToast(`Connection error: ${err.message || err}`, 'error');
         return false;
       }
     }
@@ -1143,13 +1143,13 @@ export default function App() {
                 supabase.auth.updateUser({ password: newPass }).then(({ error }) => {
                   if (error) {
                     console.error('Failed to reset Supabase password:', error);
-                    addToast(`Failed to update Supabase Auth password: ${error.message}`, 'error');
+                    addToast(`Failed to update password: ${error.message}`, 'error');
                   } else {
-                    addToast('Password updated successfully via Supabase Auth.', 'success');
+                    addToast('Password updated successfully.', 'success');
                   }
                 });
               } else {
-                addToast('Offline dev mode: passwords are managed by Supabase Auth in production.', 'info');
+                addToast('Offline dev mode: passwords are managed externally in production.', 'info');
               }
               setShowPasswordReset(false);
             }}
