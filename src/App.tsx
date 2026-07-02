@@ -390,11 +390,8 @@ export default function App() {
     try {
       // Persist only the rows the active user is allowed to write. A customer
       // (or a resource consultant) may edit some tasks but not others on the
-      // same project. If we bulk-upsert all project tasks, the rows they cannot
-      // write fail the tasks_update RLS policy and abort the ENTIRE batch — so
-      // even their legitimate edit never persists. Filtering here keeps the
-      // client-side state (incl. rescheduling) in sync while scoping the server
-      // write to what RLS will actually accept.
+      // same project. Filtering keeps the client-side state (incl. rescheduling)
+      // in sync while scoping the server write to what RLS will accept.
       const writable = newTasks.filter(t => {
         const proj = projects.find(p => p.id === t.projectId);
         if (!proj) return false;
@@ -403,7 +400,17 @@ export default function App() {
         // Otherwise only the individual tasks this user may edit.
         return canEditTask(activeUser, t, proj);
       });
-      await api.tasks.saveAll(writable);
+      // Split into existing rows (UPDATE) vs genuinely new rows (INSERT/upsert).
+      // Postgres evaluates the INSERT policy's WITH CHECK for every row of an
+      // `INSERT ... ON CONFLICT DO UPDATE`, so a .upsert() is rejected for users
+      // who have UPDATE rights but not INSERT rights (e.g. a customer editing a
+      // customer-owned task) — even though the row already exists. Existing rows
+      // therefore must go through a real UPDATE; only brand-new rows upsert.
+      const existingIds = new Set(tasks.map(t => t.id));
+      const toUpdate = writable.filter(t => existingIds.has(t.id));
+      const toInsert = writable.filter(t => !existingIds.has(t.id));
+      if (toUpdate.length) await api.tasks.updateMultiple(toUpdate);
+      if (toInsert.length) await api.tasks.saveAll(toInsert);
       if (!isSupabaseConfigured()) {
         localStorage.setItem('pinnacle_tasks', JSON.stringify(newTasks));
       }

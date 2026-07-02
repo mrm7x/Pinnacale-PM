@@ -233,6 +233,30 @@ export const api = {
         if (error) throw error;
       }
     },
+    // Real UPDATE (not upsert) for an existing task row. Required for users who
+    // have UPDATE-but-not-INSERT RLS rights (e.g. a customer editing a
+    // customer-owned task): Postgres evaluates the INSERT policy's WITH CHECK
+    // for every row of an `INSERT ... ON CONFLICT DO UPDATE`, so a .upsert()
+    // is rejected even when the row exists and the UPDATE policy would allow it.
+    update: async (task: Task): Promise<void> => {
+      if (isSupabaseConfigured()) {
+        const client = getSupabaseClient() as any;
+        const { error } = await client.from('tasks').update(mapTaskToDb(task)).eq('id', task.id);
+        if (error) throw error;
+      }
+    },
+    updateMultiple: async (tasksList: Task[]): Promise<void> => {
+      if (!isSupabaseConfigured()) return;
+      const client = getSupabaseClient() as any;
+      // Update rows individually so each is subject to the UPDATE policy only
+      // (an upsert would also evaluate the INSERT policy and fail for users
+      // without insert rights). Sequential keeps it simple and surfaces the
+      // first error; task lists per save are small.
+      for (const t of tasksList) {
+        const { error } = await client.from('tasks').update(mapTaskToDb(t)).eq('id', t.id);
+        if (error) throw error;
+      }
+    },
     saveAll: async (tasksList: Task[]): Promise<void> => {
       if (isSupabaseConfigured()) {
         const client = getSupabaseClient() as any;
