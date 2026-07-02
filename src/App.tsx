@@ -818,7 +818,8 @@ export default function App() {
       email: cData.email,
       role: cData.role,
       avatarColor: cData.avatarColor,
-      tier: cData.tier,
+      // Tier hierarchy: only a superuser may create admin/superuser users.
+      tier: activeUserTier === 'superuser' ? cData.tier : 'normal',
       id
     };
 
@@ -835,11 +836,14 @@ export default function App() {
   // list) so a non-admin editing their own profile does not attempt to write
   // other users' rows, which RLS would reject.
   const handleUpdateConsultant = async (updated: Consultant) => {
-    const next = consultants.map(c => c.id === updated.id ? updated : c);
+    // Tier hierarchy: a non-superuser cannot elevate anyone to admin/superuser.
+    const effectiveTier = activeUserTier === 'superuser' ? updated.tier : 'normal';
+    const clamped = effectiveTier === updated.tier ? updated : { ...updated, tier: effectiveTier };
+    const next = consultants.map(c => c.id === clamped.id ? clamped : c);
     setConsultants(next);
     if (isSupabaseConfigured()) {
       try {
-        await api.consultants.save(updated);
+        await api.consultants.save(clamped);
       } catch (err) {
         console.error(err);
         addToast('We could not save the changes. Please try again.', 'error');

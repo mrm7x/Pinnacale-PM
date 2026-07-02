@@ -460,29 +460,31 @@ REVOKE ALL ON tasks FROM anon;
                 <div className="form-group col-span-6">
                   <label className="form-label" style={{ marginBottom: '0.5rem', display: 'block' }}>Access Level</label>
                   <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', marginTop: '0.25rem' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', fontWeight: 500, fontSize: '0.85rem' }}>
-                      <input 
-                        type="radio" 
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: activeUserTier === 'superuser' ? 'pointer' : 'not-allowed', fontWeight: 500, fontSize: '0.85rem', opacity: activeUserTier === 'superuser' ? 1 : 0.5 }}>
+                      <input
+                        type="radio"
                         name="new_tier"
                         value="superuser"
+                        disabled={activeUserTier !== 'superuser'}
                         checked={newConsultant.tier === 'superuser'}
                         onChange={() => setNewConsultant({ ...newConsultant, tier: 'superuser' })}
                       />
                       <span>Super user</span>
                     </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', fontWeight: 500, fontSize: '0.85rem' }}>
-                      <input 
-                        type="radio" 
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: activeUserTier === 'superuser' ? 'pointer' : 'not-allowed', fontWeight: 500, fontSize: '0.85rem', opacity: activeUserTier === 'superuser' ? 1 : 0.5 }}>
+                      <input
+                        type="radio"
                         name="new_tier"
                         value="admin"
+                        disabled={activeUserTier !== 'superuser'}
                         checked={newConsultant.tier === 'admin'}
                         onChange={() => setNewConsultant({ ...newConsultant, tier: 'admin' })}
                       />
                       <span>Admin</span>
                     </label>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', fontWeight: 500, fontSize: '0.85rem' }}>
-                      <input 
-                        type="radio" 
+                      <input
+                        type="radio"
                         name="new_tier"
                         value="normal"
                         checked={newConsultant.tier === 'normal'}
@@ -679,29 +681,31 @@ REVOKE ALL ON tasks FROM anon;
                       <div className="form-group col-span-12" style={{ margin: 0 }}>
                         <label className="form-label" style={{ marginBottom: '0.5rem', display: 'block' }}>Access Level (Tier)</label>
                         <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', marginTop: '0.25rem' }}>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', fontWeight: 500, fontSize: '0.85rem' }}>
-                            <input 
-                              type="radio" 
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: activeUserTier === 'superuser' ? 'pointer' : 'not-allowed', fontWeight: 500, fontSize: '0.85rem', opacity: activeUserTier === 'superuser' ? 1 : 0.5 }}>
+                            <input
+                              type="radio"
                               name="edit_tier"
                               value="superuser"
+                              disabled={activeUserTier !== 'superuser'}
                               checked={editingConsultant.tier === 'superuser'}
                               onChange={() => setEditingConsultant({ ...editingConsultant, tier: 'superuser' })}
                             />
                             <span>Super user</span>
                           </label>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', fontWeight: 500, fontSize: '0.85rem' }}>
-                            <input 
-                              type="radio" 
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: activeUserTier === 'superuser' ? 'pointer' : 'not-allowed', fontWeight: 500, fontSize: '0.85rem', opacity: activeUserTier === 'superuser' ? 1 : 0.5 }}>
+                            <input
+                              type="radio"
                               name="edit_tier"
                               value="admin"
+                              disabled={activeUserTier !== 'superuser'}
                               checked={editingConsultant.tier === 'admin'}
                               onChange={() => setEditingConsultant({ ...editingConsultant, tier: 'admin' })}
                             />
                             <span>Admin</span>
                           </label>
                           <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', fontWeight: 500, fontSize: '0.85rem' }}>
-                            <input 
-                              type="radio" 
+                            <input
+                              type="radio"
                               name="edit_tier"
                               value="normal"
                               checked={editingConsultant.tier === 'normal'}

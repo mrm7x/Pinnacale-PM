@@ -27,6 +27,9 @@ export const isCustomer = (user: ActiveUser | null | undefined): boolean =>
 export const isAdmin = (user: ActiveUser | null | undefined): boolean =>
   !!user && user.actorType === 'internal' && (user.tier === 'superuser' || user.tier === 'admin');
 
+export const isSuperuser = (user: ActiveUser | null | undefined): boolean =>
+  !!user && user.actorType === 'internal' && user.tier === 'superuser';
+
 export const isManager = (user: ActiveUser | null | undefined): boolean =>
   !!user && user.actorType === 'internal' && (user.role === 'Manager' || user.role === 'Project Manager');
 
@@ -78,30 +81,43 @@ export function canSeeProject(user: ActiveUser | null | undefined, project: Proj
 // ---------------------------------------------------------------------------
 
 export function canCreateProject(user: ActiveUser | null | undefined): boolean {
-  return isManager(user);
+  if (isManager(user)) return true;
+  if (isAdmin(user)) return true;
+  return false;
 }
 
 export function canEditProject(user: ActiveUser | null | undefined, project: Project): boolean {
   if (isManager(user)) return true;
-  return isProjectLead(user, project);
+  if (isAdmin(user)) return true;
+  if (isProjectLead(user, project)) return true;
+  if (isProjectMember(user, project)) return true;
+  return false;
 }
 
 export function canDeleteProject(user: ActiveUser | null | undefined): boolean {
-  return isManager(user);
+  if (isManager(user)) return true;
+  if (isAdmin(user)) return true;
+  return false;
 }
 
 export function canDuplicateProject(user: ActiveUser | null | undefined): boolean {
-  return isManager(user);
+  if (isManager(user)) return true;
+  if (isAdmin(user)) return true;
+  return false;
 }
 
 // ---------------------------------------------------------------------------
 // RAG / project health
 // ---------------------------------------------------------------------------
 
-/** Who can edit project health (RAG)? Managers/PMs or the project lead. */
+/** Who can edit project health (RAG)? Managers/PMs, admins, the project lead, or any member. */
 export function canManageRag(user: ActiveUser | null | undefined, project?: Project): boolean {
   if (isManager(user)) return true;
-  if (project) return isProjectLead(user, project);
+  if (isAdmin(user)) return true;
+  if (project) {
+    if (isProjectLead(user, project)) return true;
+    if (isProjectMember(user, project)) return true;
+  }
   return false;
 }
 
@@ -116,6 +132,7 @@ export function canSeeRag(user: ActiveUser | null | undefined): boolean {
 
 export function canManageCommunications(user: ActiveUser | null | undefined, project: Project): boolean {
   if (isManager(user)) return true;
+  if (isAdmin(user)) return true;
   if (isProjectLead(user, project)) return true;
   // Internal members (non-customer) may add notes.
   return isProjectMember(user, project);
@@ -127,14 +144,18 @@ export function canManageCommunications(user: ActiveUser | null | undefined, pro
 
 export function canCreateTask(user: ActiveUser | null | undefined, project: Project): boolean {
   if (isManager(user)) return true;
-  return isProjectLead(user, project);
+  if (isAdmin(user)) return true;
+  if (isProjectLead(user, project)) return true;
+  if (isProjectMember(user, project)) return true;
+  return false;
 }
 
 /**
  * Can the user edit this task?
  *  - managers/PMs       -> any task
+ *  - admin/superuser    -> any task
  *  - project lead       -> any task on their project
- *  - resource consultant-> only tasks assigned to them
+ *  - resource consultant-> any task on the project they're a member of
  *  - customer on project-> only customer-owned tasks (task_owner Customer | Pinnacle/Customer)
  */
 export function canEditTask(
@@ -144,11 +165,12 @@ export function canEditTask(
 ): boolean {
   if (!user) return false;
   if (isManager(user)) return true;
+  if (isAdmin(user)) return true;
   if (isProjectLead(user, project)) return true;
 
   if (user.actorType === 'internal') {
-    // Resource consultant: only tasks assigned to them, and only if still a member.
-    if (isProjectMember(user, project) && task.assignedConsultantId === user.id) return true;
+    // Resource consultant: any task on the project they're a member of.
+    if (isProjectMember(user, project)) return true;
     return false;
   }
 
@@ -167,13 +189,19 @@ export function canDeleteTask(
   project: Project
 ): boolean {
   if (isManager(user)) return true;
-  return isProjectLead(user, project);
+  if (isAdmin(user)) return true;
+  if (isProjectLead(user, project)) return true;
+  if (isProjectMember(user, project)) return true;
+  return false;
 }
 
 /** Convenience: can the user edit ANY task on this project (for bulk actions)? */
 export function canEditAnyTask(user: ActiveUser | null | undefined, project: Project): boolean {
   if (isManager(user)) return true;
-  return isProjectLead(user, project);
+  if (isAdmin(user)) return true;
+  if (isProjectLead(user, project)) return true;
+  if (isProjectMember(user, project)) return true;
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -182,6 +210,8 @@ export function canEditAnyTask(user: ActiveUser | null | undefined, project: Pro
 
 export function canEditGantt(user: ActiveUser | null | undefined): boolean {
   if (isCustomer(user)) return false;
+  // Read-only role can never edit — unless tier grants admin powers (most permissive wins).
+  if (isReadOnly(user) && !isAdmin(user)) return false;
   return true;
 }
 
