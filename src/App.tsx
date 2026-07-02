@@ -20,7 +20,7 @@ import {
 import { api } from './utils/api';
 import { isSupabaseConfigured, getSupabaseClient, inviteUser, deleteAuthUser } from './utils/supabase';
 import {
-  activeUserFromConsultant, activeUserFromCustomer, canSeeProject
+  activeUserFromConsultant, activeUserFromCustomer, canSeeProject, isCustomer
 } from './utils/permissions';
 
 // Toast structure
@@ -346,6 +346,17 @@ export default function App() {
       }
     }
   }, [activeUserId, filteredProjects, selectedProjectId, projects.length]);
+
+  // Safety: a customer's sidebar only exposes the Projects tab, so never let a
+  // customer linger on Dashboard/Settings (e.g. a tab persisted to localStorage
+  // before the role restriction, or a mid-session role change). The Dashboard
+  // and Settings views are not rendered for customers, so this also prevents a
+  // blank content pane.
+  useEffect(() => {
+    if (isCustomer(activeUser) && activeTab !== 'projects') {
+      setActiveTab('projects');
+    }
+  }, [activeUser, activeTab]);
 
   // Save database states helper
   const saveProjectsState = async (newProjects: Project[]) => {
@@ -1089,6 +1100,7 @@ export default function App() {
               }}
               onAddToast={addToast}
               setIsNewProjectModalOpen={setIsNewProjectModalOpen}
+              activeUser={activeUser}
             />
           );
         }
@@ -1308,6 +1320,7 @@ export default function App() {
             <nav style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
               {!isSidebarCollapsed && <div className="nav-section-label">Menu</div>}
               <ul className="nav-list">
+                {!isCustomer(activeUser) && (
                 <li
                   className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
                   onClick={() => {
@@ -1328,6 +1341,7 @@ export default function App() {
                   <LayoutDashboard size={18} />
                   <span>Dashboard</span>
                 </li>
+                )}
                 <li>
                   <div
                     className={`nav-item ${activeTab === 'projects' && !selectedProjectId ? 'active' : ''}`}
@@ -1356,8 +1370,7 @@ export default function App() {
 
               {/* Recent projects sub-tree */}
               {!isSidebarCollapsed && (() => {
-                const recentProjects = projects
-                  .filter(p => !p.isTemplate)
+                const recentProjects = filteredProjects
                   .slice()
                   .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                   .slice(0, 10);
@@ -1391,7 +1404,8 @@ export default function App() {
           {/* Microsoft authentication badge indicator and bottom controls */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
             {/* Bottom Settings navigation item */}
-            <div 
+            {!isCustomer(activeUser) && (
+            <div
               className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
               onClick={() => {
                 setActiveTab('settings');
@@ -1412,6 +1426,7 @@ export default function App() {
               <SettingsIcon size={18} />
               {!isSidebarCollapsed && <span>Settings</span>}
             </div>
+            )}
 
             {/* Custom Theme Toggle Switch */}
             <div className="theme-switch-row" style={{ display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'space-between', padding: isSidebarCollapsed ? '0.5rem 0' : '0.5rem 0.75rem', borderRadius: 'var(--radius-md)', backgroundColor: isSidebarCollapsed ? 'transparent' : 'var(--bg-tertiary)', gap: '0.5rem', flexDirection: isSidebarCollapsed ? 'column' : 'row' }}>
@@ -1513,7 +1528,7 @@ export default function App() {
                     onChange={(val) => setSelectedProjectId(val)}
                     options={[
                       { label: '-- Select Project --', value: '' },
-                      ...projects.filter(p => !p.isTemplate).map(p => ({ label: `${p.name} (${p.clientName})`, value: p.id }))
+                      ...filteredProjects.map(p => ({ label: `${p.name} (${p.clientName})`, value: p.id }))
                     ]}
                     enableSearch={true}
                   />

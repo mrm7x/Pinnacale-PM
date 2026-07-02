@@ -736,7 +736,7 @@ export default function ProjectDetails({
                 { id: 'tasks-v2', label: 'Tasks' },
                 { id: 'gantt', label: 'Gantt' },
                 { id: 'rag', label: 'RAG', customerHidden: true },
-                { id: 'communications', label: 'Project Notes' }
+                { id: 'communications', label: 'Project Notes', customerHidden: true }
               ] as const).filter(tab => !('customerHidden' in tab && tab.customerHidden && userIsCustomer)).map(tab => (
                 <button
                   key={tab.id}
@@ -762,6 +762,7 @@ export default function ProjectDetails({
             </div>
 
             <div style={{ display: 'flex', gap: '0.4rem', paddingBottom: '0.25rem' }}>
+                {!userIsCustomer && (
                 <button
                   className="btn btn-ghost"
                   onClick={handleExport}
@@ -771,6 +772,7 @@ export default function ProjectDetails({
                 >
                   <Download size={15} /> {isExporting ? 'Exporting…' : 'Export'}
                 </button>
+                )}
             {activeProject && canEditProject(activeUser, activeProject) && (
               <>
                 <button
@@ -1306,7 +1308,7 @@ export default function ProjectDetails({
         })()
       )}
 
-      {activeProjectTab === 'communications' && (() => {
+      {activeProjectTab === 'communications' && !userIsCustomer && (() => {
         const NOTE_TYPES: Record<string, { label: string; color: string; Icon: FC<{ size?: number }> }> = {
           decision: { label: 'Decision',    color: '#6366f1', Icon: CheckCircle },
           risk:     { label: 'Risk',         color: '#ef4444', Icon: AlertTriangle },

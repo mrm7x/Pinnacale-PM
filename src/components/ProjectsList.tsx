@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import type { Project, Consultant, Task } from '../types';
+import type { Project, Consultant, Task, ActiveUser } from '../types';
 import { formatDateFriendly } from './Dashboard';
 import { Plus, Search, Trash2, LayoutGrid, List, AlertCircle, Users, CheckCircle2, Filter, Columns3 } from 'lucide-react';
 import { WinComboBox } from './winui/WinComboBox';
 import { resolvePhaseMeta, PHASE_ORDER } from '../utils/phases';
+import { canSeeRag } from '../utils/permissions';
 
 interface ProjectsListProps {
   projects: Project[];
@@ -15,6 +16,7 @@ interface ProjectsListProps {
   onBulkDeleteProjects: (ids: string[]) => void;
   onAddToast: (msg: string, type: 'success' | 'error' | 'warning' | 'info') => void;
   setIsNewProjectModalOpen: (val: boolean) => void;
+  activeUser?: ActiveUser | null;
 }
 
 type ProjectsViewMode = 'grid' | 'list' | 'kanban';
@@ -48,7 +50,8 @@ export default function ProjectsList({
   onBulkUpdateProjects,
   onBulkDeleteProjects,
   onAddToast,
-  setIsNewProjectModalOpen
+  setIsNewProjectModalOpen,
+  activeUser
 }: ProjectsListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -59,6 +62,9 @@ export default function ProjectsList({
   const [viewMode, setViewMode] = useState<ProjectsViewMode>('list');
   const [kanbanGroupMode, setKanbanGroupMode] = useState<ProjectKanbanGroupMode>('phase');
   const [kanbanDragId, setKanbanDragId] = useState<string | null>(null);
+
+  // Hide RAG / project-health from anyone who isn't allowed to see it (customers).
+  const hideRag = activeUser ? !canSeeRag(activeUser) : false;
   
   // Bulk Action States
   const [bulkStatus, setBulkStatus] = useState<string>('');
@@ -294,10 +300,12 @@ export default function ProjectsList({
           <span className="pl-kanban-pill" style={{ backgroundColor: phaseColors.bg, color: phaseColors.text, borderColor: `${phaseColors.text}30` }}>
             {phaseColors.label}
           </span>
+          {!hideRag && (
           <span className="pl-kanban-pill" style={{ backgroundColor: healthColors.bg, color: healthColors.text, borderColor: `${healthColors.text}30` }}>
             <span className="pl-kanban-dot" style={{ backgroundColor: healthColors.dot }} />
             {healthColors.label}
           </span>
+          )}
         </div>
         <div className="pl-kanban-progress">
           <div className="pl-kanban-progress-bar">
@@ -364,6 +372,7 @@ export default function ProjectsList({
             />
           </div>
 
+          {!hideRag && (
           <div style={{ minWidth: '170px', flex: '1 1 170px' }}>
             <WinComboBox
               value={healthFilter}
@@ -376,6 +385,7 @@ export default function ProjectsList({
               ]}
             />
           </div>
+          )}
 
           <div style={{ minWidth: '180px', flex: '1 1 180px' }}>
             <WinComboBox
@@ -397,7 +407,7 @@ export default function ProjectsList({
                   { label: 'Kanban by phase', value: 'phase' },
                   { label: 'Kanban by status', value: 'status' },
                   { label: 'Kanban by lead', value: 'lead' },
-                  { label: 'Kanban by RAG', value: 'rag' }
+                  ...(hideRag ? [] : [{ label: 'Kanban by RAG', value: 'rag' }])
                 ]}
               />
             </div>
@@ -571,10 +581,12 @@ export default function ProjectsList({
                   <span style={{ fontSize: '0.85rem', padding: '0.3rem 0.85rem', borderRadius: 'var(--radius-sm)', backgroundColor: phaseColors.bg, color: phaseColors.text, fontWeight: 700 }}>
                     {phaseColors.label}
                   </span>
+                  {!hideRag && (
                   <span style={{ fontSize: '0.85rem', padding: '0.3rem 0.85rem', borderRadius: 'var(--radius-sm)', backgroundColor: healthColors.bg, color: healthColors.text, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: healthColors.dot }} />
                     {healthColors.label}
                   </span>
+                  )}
                 </div>
 
                 {/* Progress Indicators */}
@@ -688,10 +700,12 @@ export default function ProjectsList({
                       </span>
                     </td>
                     <td style={{ padding: '1.1rem' }}>
+                      {!hideRag ? (
                       <span style={{ fontSize: '0.85rem', padding: '0.3rem 0.85rem', borderRadius: '12px', backgroundColor: healthColors.bg, color: healthColors.text, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem', width: 'fit-content' }}>
                         <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: healthColors.dot }} />
                         {healthColors.label}
                       </span>
+                      ) : '—'}
                     </td>
                     <td style={{ padding: '1.1rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
