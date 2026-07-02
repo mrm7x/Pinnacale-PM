@@ -1317,6 +1317,7 @@ function TaskModal(props: TaskModalProps) {
   };
 
   const toggleDep = (id: string) => {
+    if (readOnly) return;
     const has = form.predecessorIds.includes(id);
     update({ predecessorIds: has ? form.predecessorIds.filter(x => x !== id) : [...form.predecessorIds, id] });
   };
@@ -1334,6 +1335,10 @@ function TaskModal(props: TaskModalProps) {
   const isEditingParent = !creating && task ? isParent(task.id) : false;
   const showRollupNote = isEditingParent;
   const durationDerived = form.durationDays === 0 && !!form.dueDate;
+  // Read-only when viewing an existing task the user cannot edit (e.g. a customer
+  // viewing a Pinnacle-owned task). Disables every field so the modal doesn't
+  // give the impression of being editable.
+  const readOnly = !creating && !canEdit;
 
   return (
     <>
@@ -1342,7 +1347,7 @@ function TaskModal(props: TaskModalProps) {
         <form onSubmit={handleSubmit} className="tv2-modal-form">
           <header className="tv2-modal-header" style={{ borderBottomColor: accent }}>
             <div>
-              <span className="tv2-modal-eyebrow">{creating ? 'New task' : 'Edit task'}</span>
+              <span className="tv2-modal-eyebrow">{creating ? 'New task' : readOnly ? 'View task' : 'Edit task'}</span>
               <h3 className="tv2-modal-title">{creating ? (presetParentId ? 'Add Sub Task' : 'Add Implementation Task') : form.name || 'Task'}</h3>
             </div>
             <button type="button" className="btn btn-secondary btn-icon" onClick={onClose}><X size={18} /></button>
@@ -1353,17 +1358,19 @@ function TaskModal(props: TaskModalProps) {
               <label className="form-label">Task name</label>
               <input className="form-input" value={form.name}
                 placeholder="e.g. Chart of Accounts Setup"
+                disabled={readOnly}
                 onChange={(e) => update({ name: e.target.value })} required />
             </div>
 
             <div className="tv2-field-row">
               <div className="tv2-field">
                 <label className="form-label">Status</label>
-                <WinComboBox value={form.status} onChange={(v) => update({ status: v as Task['status'] })} options={STATUS_OPTIONS} />
+                <WinComboBox value={form.status} disabled={readOnly} onChange={(v) => update({ status: v as Task['status'] })} options={STATUS_OPTIONS} />
               </div>
               <div className="tv2-field">
                 <label className="form-label">Assignee</label>
                 <WinComboBox value={form.assignedConsultantId}
+                  disabled={readOnly}
                   onChange={(v) => update({ assignedConsultantId: v })}
                   options={[{ label: 'Unassigned', value: '' }, ...consultants.map(c => ({ label: c.name, value: c.id }))]} />
               </div>
@@ -1372,7 +1379,7 @@ function TaskModal(props: TaskModalProps) {
             <div className="tv2-field-row">
               <div className="tv2-field">
                 <label className="form-label">Start date</label>
-                <WinDatePicker value={form.customStartDate} onChange={(v) => update({ customStartDate: v })} />
+                <WinDatePicker value={form.customStartDate} disabled={readOnly} onChange={(v) => update({ customStartDate: v })} />
               </div>
               <div className="tv2-field">
                 <label className="form-label">
@@ -1381,7 +1388,7 @@ function TaskModal(props: TaskModalProps) {
                   {!durationDerived && form.durationDays === 0 && <span className="tv2-hint"> · enter 0 to use due date</span>}
                 </label>
                 <input type="number" step="0.5" min="0" className="form-input" value={form.durationDays}
-                  disabled={isEditingParent}
+                  disabled={readOnly || isEditingParent}
                   title={isEditingParent ? 'Parent duration is computed from children' : undefined}
                   onChange={(e) => update({ durationDays: parseFloat(e.target.value) || 0 })} />
               </div>
@@ -1390,11 +1397,11 @@ function TaskModal(props: TaskModalProps) {
             <div className="tv2-field-row">
               <div className="tv2-field">
                 <label className="form-label">Due date</label>
-                <WinDatePicker value={form.dueDate} onChange={(v) => update({ dueDate: v })} />
+                <WinDatePicker value={form.dueDate} disabled={readOnly} onChange={(v) => update({ dueDate: v })} />
               </div>
               <div className="tv2-field">
                 <label className="form-label">Task owner</label>
-                <WinComboBox value={form.taskOwner} onChange={(v) => update({ taskOwner: v as TaskOwner })} options={OWNER_OPTIONS} />
+                <WinComboBox value={form.taskOwner} disabled={readOnly} onChange={(v) => update({ taskOwner: v as TaskOwner })} options={OWNER_OPTIONS} />
               </div>
             </div>
             {form.taskOwner === 'Customer' && (
@@ -1423,6 +1430,7 @@ function TaskModal(props: TaskModalProps) {
               <div className="tv2-field">
                 <label className="form-label">Parent task</label>
                 <WinComboBox value={form.parentId}
+                  disabled={readOnly}
                   onChange={(v) => update({ parentId: v })}
                   options={[
                     { label: 'None (top-level)', value: '' },
@@ -1434,13 +1442,14 @@ function TaskModal(props: TaskModalProps) {
               <div className="tv2-field">
                 <label className="form-label">Pink number</label>
                 <input className="form-input" value={form.pinkNumber} placeholder="e.g. PN-12345"
+                  disabled={readOnly}
                   onChange={(e) => update({ pinkNumber: e.target.value })} />
               </div>
             </div>
 
             <div className="tv2-field">
               <label className="form-label">Dependencies</label>
-              <div className="tv2-dep-list">
+              <div className="tv2-dep-list" style={readOnly ? { opacity: 0.6, pointerEvents: 'none' } : undefined}>
                 {tasks.filter(t => t.id !== task?.id).length === 0
                   ? <span className="tv2-dep-empty">No other tasks available for dependency links.</span>
                   : renderDependencyTree(null, 0, '', task?.id ?? null, form.predecessorIds, toggleDep)}
@@ -1451,6 +1460,7 @@ function TaskModal(props: TaskModalProps) {
               <label className="form-label">Description</label>
               <textarea className="form-textarea" rows={3} value={form.description}
                 placeholder="Provide execution steps or details…"
+                disabled={readOnly}
                 onChange={(e) => update({ description: e.target.value })} />
             </div>
           </div>

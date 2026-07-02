@@ -20,7 +20,7 @@ import {
 import { api } from './utils/api';
 import { isSupabaseConfigured, getSupabaseClient, inviteUser, deleteAuthUser } from './utils/supabase';
 import {
-  activeUserFromConsultant, activeUserFromCustomer, canSeeProject, isCustomer
+  activeUserFromConsultant, activeUserFromCustomer, canSeeProject, isCustomer, canEditAnyTask, canEditTask
 } from './utils/permissions';
 
 // Toast structure
@@ -388,7 +388,22 @@ export default function App() {
   const saveTasksState = async (newTasks: Task[]) => {
     setTasks(newTasks);
     try {
-      await api.tasks.saveAll(newTasks);
+      // Persist only the rows the active user is allowed to write. A customer
+      // (or a resource consultant) may edit some tasks but not others on the
+      // same project. If we bulk-upsert all project tasks, the rows they cannot
+      // write fail the tasks_update RLS policy and abort the ENTIRE batch — so
+      // even their legitimate edit never persists. Filtering here keeps the
+      // client-side state (incl. rescheduling) in sync while scoping the server
+      // write to what RLS will actually accept.
+      const writable = newTasks.filter(t => {
+        const proj = projects.find(p => p.id === t.projectId);
+        if (!proj) return false;
+        // Managers/leads can write any task on the project.
+        if (canEditAnyTask(activeUser, proj)) return true;
+        // Otherwise only the individual tasks this user may edit.
+        return canEditTask(activeUser, t, proj);
+      });
+      await api.tasks.saveAll(writable);
       if (!isSupabaseConfigured()) {
         localStorage.setItem('pinnacle_tasks', JSON.stringify(newTasks));
       }
@@ -1240,12 +1255,12 @@ export default function App() {
             <span 
               style={{ 
                 width: '28px', height: '28px', borderRadius: '50%', 
-                backgroundColor: activeConsultant?.avatarColor || 'var(--primary)',
+                backgroundColor: activeUser?.avatarColor || 'var(--primary)',
                 color: 'white', display: 'flex', alignItems: 'center',
                 justifyContent: 'center', fontSize: '0.65rem', fontWeight: 'bold'
               }}
             >
-              {activeConsultant?.name.split(' ').map(n => n[0]).join('') || 'U'}
+              {activeUser?.name.split(' ').map(n => n[0]).join('') || 'U'}
             </span>
           </div>
         </header>
@@ -1268,50 +1283,50 @@ export default function App() {
 
             {/* User Profile Card */}
             <div className="user-profile-card" style={{ padding: '0.75rem', marginBottom: '1.75rem', display: 'flex', alignItems: 'center', gap: '0.85rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: 'var(--radius-lg)' }}>
-              {activeConsultant?.tier === 'superuser' || activeConsultant?.tier === 'admin' ? (
-                <div 
-                  style={{ 
-                    width: '36px', 
-                    height: '36px', 
-                    borderRadius: 'var(--radius-md)', 
-                    backgroundColor: 'var(--primary)', 
-                    color: 'white', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center', 
+              {activeUser?.tier === 'superuser' || activeUser?.tier === 'admin' ? (
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: 'var(--primary)',
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     fontWeight: 600,
                     fontSize: '0.8rem',
                     flexShrink: 0
                   }}
                 >
-                  {activeConsultant?.tier === 'superuser' ? 'SU' : 'AD'}
+                  {activeUser?.tier === 'superuser' ? 'SU' : 'AD'}
                 </div>
               ) : (
-                <div 
-                  style={{ 
-                    width: '36px', 
-                    height: '36px', 
-                    borderRadius: 'var(--radius-md)', 
-                    backgroundColor: consultants.find(c => c.id === activeUserId)?.avatarColor || 'var(--primary)', 
-                    color: 'white', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center', 
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: activeUser?.avatarColor || 'var(--primary)',
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     fontWeight: 600,
                     fontSize: '0.8rem',
                     flexShrink: 0
                   }}
                 >
-                  {consultants.find(c => c.id === activeUserId)?.name.split(' ').map(n => n[0]).join('') || 'U'}
+                  {activeUser?.name.split(' ').map(n => n[0]).join('') || 'U'}
                 </div>
               )}
               {!isSidebarCollapsed && (
                 <div className="user-profile-details" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                   <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {activeConsultant?.name || 'User'}
+                    {activeUser?.name || 'User'}
                   </span>
                   <span style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', fontWeight: 500 }}>
-                    {activeConsultant?.role || 'Consultant'}
+                    {activeUser?.role || 'User'}
                   </span>
                 </div>
               )}
