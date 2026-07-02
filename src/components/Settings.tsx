@@ -274,15 +274,25 @@ REVOKE ALL ON tasks FROM anon;
     }
   };
 
+  // Section label shared across the page — gives visual hierarchy between
+  // Personal / Team / System groups without changing any functionality.
+  const SectionLabel = ({ icon: Icon, children }: { icon: any; children: React.ReactNode }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.85rem' }}>
+      <Icon size={15} style={{ color: 'var(--text-tertiary)' }} />
+      <span style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>
+        {children}
+      </span>
+      <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-color)', marginLeft: '0.5rem' }} />
+    </div>
+  );
+
   return (
-    <div className="grid-cols-12">
-      {/* LEFT COLUMN: Profile & Team Management */}
-      <div 
-        className={activeUserTier === 'superuser' ? "col-span-6" : "col-span-12"} 
-        style={activeUserTier === 'superuser' ? { display: 'flex', flexDirection: 'column', gap: '2rem' } : { maxWidth: '800px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem', width: '100%' }}
-      >
-        {/* My Profile Card */}
-        {currentUser && (
+    <div style={{ maxWidth: '960px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
+      {/* ============ PERSONAL ============ */}
+      {currentUser && (
+        <section style={{ display: 'flex', flexDirection: 'column' }}>
+          <SectionLabel icon={ShieldCheck}>Personal</SectionLabel>
+          {/* My Profile Card */}
           <div className="card">
             <div className="card-header">
               <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -323,11 +333,11 @@ REVOKE ALL ON tasks FROM anon;
             </div>
 
             {/* Gantt Avatar Color Picker */}
-            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem', marginBottom: '1.25rem' }}>
-              <label className="form-label" style={{ fontWeight: 600, marginBottom: '0.5rem', display: 'block' }}>Gantt Avatar Color</label>
+            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', marginTop: '1.5rem', marginBottom: '1.5rem' }}>
+              <label className="form-label" style={{ fontWeight: 600, marginBottom: '0.6rem', display: 'block' }}>Gantt Avatar Color</label>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
                 {colors.map(c => (
-                  <button 
+                  <button
                     key={c}
                     type="button"
                     onClick={() => {
@@ -353,8 +363,8 @@ REVOKE ALL ON tasks FROM anon;
             </div>
 
             {/* Change Password Form */}
-            <form onSubmit={handleChangeOwnPassword} style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
-              <label className="form-label" style={{ fontWeight: 600, marginBottom: '0.75rem', display: 'block' }}>Change Password</label>
+            <form onSubmit={handleChangeOwnPassword} style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem' }}>
+              <label className="form-label" style={{ fontWeight: 600, marginBottom: '0.6rem', display: 'block' }}>Change Password</label>
               <div className="grid-cols-12" style={{ gap: '0.75rem' }}>
                 <div className="form-group col-span-6" style={{ margin: 0 }}>
                   <input 
@@ -388,7 +398,13 @@ REVOKE ALL ON tasks FROM anon;
               </button>
             </form>
           </div>
-        )}
+        </section>
+      )}
+
+      {/* ============ TEAM ============ */}
+      {(canManageUsers(activeUserTier) || canManageCustomers(activeUser)) && (
+        <section style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+          <SectionLabel icon={Users}>Team</SectionLabel>
 
         {/* Manage Consultants */}
         {canManageUsers(activeUserTier) && (
@@ -400,32 +416,34 @@ REVOKE ALL ON tasks FROM anon;
             </div>
 
             <form onSubmit={handleAddConsultantSubmit} style={{ marginBottom: '1.5rem' }}>
-              <div className="form-group">
-                <label htmlFor="form-field-1" className="form-label">Consultant Name</label>
-                <input id="form-field-1" 
-                  type="text" 
-                  className="form-input" 
-                  placeholder="e.g. John Doe"
-                  value={newConsultant.name}
-                  onChange={(e) => setNewConsultant({ ...newConsultant, name: e.target.value })}
-                  required
-                />
-              </div>
-              
-              <div className="form-group">
-                <label htmlFor="form-field-2" className="form-label">Office 365 Business Email</label>
-                <input id="form-field-2" 
-                  type="email" 
-                  className="form-input" 
-                  placeholder="e.g. john.doe@acme.onmicrosoft.com"
-                  value={newConsultant.email}
-                  onChange={(e) => setNewConsultant({ ...newConsultant, email: e.target.value })}
-                  required
-                />
+              <div className="grid-cols-12" style={{ gap: '1rem' }}>
+                <div className="form-group col-span-6">
+                  <label htmlFor="form-field-1" className="form-label">Consultant Name</label>
+                  <input id="form-field-1"
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. John Doe"
+                    value={newConsultant.name}
+                    onChange={(e) => setNewConsultant({ ...newConsultant, name: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group col-span-6">
+                  <label htmlFor="form-field-2" className="form-label">Office 365 Business Email</label>
+                  <input id="form-field-2"
+                    type="email"
+                    className="form-input"
+                    placeholder="e.g. john.doe@acme.onmicrosoft.com"
+                    value={newConsultant.email}
+                    onChange={(e) => setNewConsultant({ ...newConsultant, email: e.target.value })}
+                    required
+                  />
+                </div>
               </div>
 
               <div className="grid-cols-12" style={{ gap: '1rem' }}>
-                <div className="form-group col-span-12">
+                <div className="form-group col-span-6">
                   <label htmlFor="form-field-3" className="form-label">Implementation Role</label>
                   <select id="form-field-3"
                     className="form-select"
@@ -439,7 +457,7 @@ REVOKE ALL ON tasks FROM anon;
                   </select>
                 </div>
 
-                <div className="form-group col-span-12">
+                <div className="form-group col-span-6">
                   <label className="form-label" style={{ marginBottom: '0.5rem', display: 'block' }}>Access Level</label>
                   <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', marginTop: '0.25rem' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', fontWeight: 500, fontSize: '0.85rem' }}>
@@ -766,12 +784,15 @@ REVOKE ALL ON tasks FROM anon;
             </div>
           </div>
         )}
-      </div>
+        </section>
+      )}
 
-      {/* RIGHT COLUMN: Database & Integrations (superuser only) */}
+      {/* ============ SYSTEM (superuser only) ============ */}
       {canManageDatabase(activeUserTier) && (
-        <div className="col-span-6" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-          
+        <section style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <SectionLabel icon={Database}>System</SectionLabel>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.5rem', alignItems: 'start' }}>
+
           {/* Database Management Card */}
           <div className="card">
             <div className="card-header">
@@ -1008,7 +1029,8 @@ REVOKE ALL ON tasks FROM anon;
             )}
           </div>
 
-        </div>
+          </div>
+        </section>
       )}
     </div>
   );
