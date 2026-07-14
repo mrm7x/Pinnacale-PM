@@ -76,6 +76,17 @@ const defaultProjects: Project[] = [
 
 // defaultTasks is imported from defaultTasks.ts
 
+// Every persisted field of a Task, in a fixed order, so two tasks can be
+// compared for "would this write actually change the row?". Listed explicitly
+// rather than JSON.stringify(task) because object-spread does not guarantee key
+// order, which would make identical rows compare as different.
+const taskFingerprint = (t: Task): string => JSON.stringify([
+  t.projectId, t.parentId, t.name, t.description, t.durationDays,
+  t.assignedConsultantId, t.predecessorIds, t.status,
+  t.plannedStartDate, t.plannedEndDate, t.startHalfDay, t.endHalfDay,
+  t.pinkNumber, t.sortOrder, t.customStartDate, t.progress, t.dueDate, t.taskOwner
+]);
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'projects' | 'settings'>(() => {
     const saved = localStorage.getItem('pinnacle_active_tab');
@@ -475,7 +486,8 @@ export default function App() {
     }
   };
 
-  const saveTasksState = async (newTasks: Task[]) => {
+  const saveTasksState = async (newTasks: Task[]): Promise<boolean> => {
+    const prevTasks = tasks;
     setTasks(newTasks);
     try {
       // Persist only the rows the active user is allowed to write. A customer
@@ -490,23 +502,33 @@ export default function App() {
         // Otherwise only the individual tasks this user may edit.
         return canEditTask(activeUser, t, proj);
       });
-      // Split into existing rows (UPDATE) vs genuinely new rows (INSERT/upsert).
-      // Postgres evaluates the INSERT policy's WITH CHECK for every row of an
+      // Callers hand us the WHOLE task list, but only a few rows ever actually
+      // change. Diff against the previous state and write just those. Rewriting
+      // every row meant ~100 sequential UPDATEs of untouched rows had to finish
+      // before brand-new rows were inserted (create-from-template) — a refresh,
+      // or any one error, inside that window lost the new tasks entirely.
+      const prevById = new Map(prevTasks.map(t => [t.id, t]));
+      // New rows go out first: they're what the user just asked for.
+      const toInsert = writable.filter(t => !prevById.has(t.id));
+      // Existing rows must go through a real UPDATE, not an upsert. Postgres
+      // evaluates the INSERT policy's WITH CHECK for every row of an
       // `INSERT ... ON CONFLICT DO UPDATE`, so a .upsert() is rejected for users
       // who have UPDATE rights but not INSERT rights (e.g. a customer editing a
-      // customer-owned task) — even though the row already exists. Existing rows
-      // therefore must go through a real UPDATE; only brand-new rows upsert.
-      const existingIds = new Set(tasks.map(t => t.id));
-      const toUpdate = writable.filter(t => existingIds.has(t.id));
-      const toInsert = writable.filter(t => !existingIds.has(t.id));
-      if (toUpdate.length) await api.tasks.updateMultiple(toUpdate);
+      // customer-owned task) — even though the row already exists.
+      const toUpdate = writable.filter(t => {
+        const prev = prevById.get(t.id);
+        return !!prev && taskFingerprint(prev) !== taskFingerprint(t);
+      });
       if (toInsert.length) await api.tasks.saveAll(toInsert);
+      if (toUpdate.length) await api.tasks.updateMultiple(toUpdate);
       if (!isSupabaseConfigured()) {
         localStorage.setItem('pinnacle_tasks', JSON.stringify(newTasks));
       }
+      return true;
     } catch (err) {
       console.error(err);
       addToast('We could not save your task changes. Please try again.', 'error');
+      return false;
     }
   };
 
@@ -560,8 +582,11 @@ export default function App() {
       }));
 
       const scheduledTasks = calculateTaskSchedules(projData.startDate, newTasks);
-      await saveTasksState([...tasks, ...scheduledTasks]);
-      addToast('Project created from template successfully!', 'success');
+      // Don't claim success when the task write failed — saveTasksState already
+      // toasted the error, and a "created successfully!" on top of it is how
+      // this failure stayed invisible.
+      const saved = await saveTasksState([...tasks, ...scheduledTasks]);
+      if (saved) addToast('Project created from template successfully!', 'success');
     } else {
       addToast('Project created successfully!', 'success');
     }
@@ -615,9 +640,9 @@ export default function App() {
     const scheduledDuplicatedTasks = calculateTaskSchedules(config.startDate, duplicatedTasks);
 
     await saveProjectsState([...projects, newProject]);
-    await saveTasksState([...tasks, ...scheduledDuplicatedTasks]);
+    const saved = await saveTasksState([...tasks, ...scheduledDuplicatedTasks]);
     setSelectedProjectId(newProjectId);
-    addToast('Project duplicated successfully!', 'success');
+    if (saved) addToast('Project duplicated successfully!', 'success');
   };
 
   const handleSaveAsTemplate = async (projectId: string, templateName: string) => {
@@ -651,8 +676,8 @@ export default function App() {
     const scheduledTemplateTasks = calculateTaskSchedules(sourceProject.startDate, duplicatedTasks);
 
     await saveProjectsState([...projects, newTemplate]);
-    await saveTasksState([...tasks, ...scheduledTemplateTasks]);
-    addToast(`Project saved as template "${templateName}"!`, 'success');
+    const saved = await saveTasksState([...tasks, ...scheduledTemplateTasks]);
+    if (saved) addToast(`Project saved as template "${templateName}"!`, 'success');
   };
 
   const handleDeleteTemplate = async (id: string) => {
