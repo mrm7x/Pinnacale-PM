@@ -282,49 +282,62 @@ export default function App() {
   });
   const [verifyingToken, setVerifyingToken] = useState(false);
   const [verifyTokenError, setVerifyTokenError] = useState<string | null>(null);
+  // Guards the onAuthStateChange handler below: while verifyOtp is in flight it
+  // holds the supabase auth lock, so that handler must NOT run (its awaited
+  // supabase calls would need the same lock and deadlock — stuck "Verifying…").
+  const tokenFlowActiveRef = useRef(false);
 
   const handleConfirmToken = async () => {
     if (!pendingToken) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
+    tokenFlowActiveRef.current = true;
     setVerifyingToken(true);
     setVerifyTokenError(null);
-    const { data, error } = await supabase.auth.verifyOtp({
-      type: pendingToken.type as any,
-      token_hash: pendingToken.tokenHash
-    });
-    if (error || !data?.session) {
-      setVerifyTokenError(
-        'This link is invalid or has already expired. Please ask an admin for a new invite, or request a new password-reset email.'
-      );
-      setVerifyingToken(false);
-      return;
-    }
-    // Verified — a session now exists. Resolve the profile by email (mirrors the
-    // normal login path) so the active user survives any legacy id != auth-uid
-    // drift, then hand off to the existing set-password modal.
-    const session = data.session;
-    let resolvedId = session.user.id;
-    const email = session.user.email?.toLowerCase();
-    if (email) {
-      const { data: c } = await supabase
-        .from('consultants').select('id').eq('email', email).maybeSingle() as { data: any };
-      if (c?.id) {
-        resolvedId = c.id as string;
-      } else {
-        const { data: cust } = await supabase
-          .from('customers').select('id').eq('email', email).maybeSingle() as { data: any };
-        if (cust?.id) resolvedId = cust.id as string;
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        type: pendingToken.type as any,
+        token_hash: pendingToken.tokenHash
+      });
+      if (error || !data?.session) {
+        setVerifyTokenError(
+          'This link is invalid or has already expired. Please ask an admin for a new invite, or request a new password-reset email.'
+        );
+        setVerifyingToken(false);
+        tokenFlowActiveRef.current = false;
+        return;
       }
+      // Verified — a session now exists. Resolve the profile by email (mirrors
+      // the normal login path) so the active user survives any legacy id !=
+      // auth-uid drift, then hand off to the existing set-password modal.
+      const session = data.session;
+      let resolvedId = session.user.id;
+      const email = session.user.email?.toLowerCase();
+      if (email) {
+        const { data: c } = await supabase
+          .from('consultants').select('id').eq('email', email).maybeSingle() as { data: any };
+        if (c?.id) {
+          resolvedId = c.id as string;
+        } else {
+          const { data: cust } = await supabase
+            .from('customers').select('id').eq('email', email).maybeSingle() as { data: any };
+          if (cust?.id) resolvedId = cust.id as string;
+        }
+      }
+      setResetUserId(resolvedId);
+      setActiveUserId(resolvedId);
+      setIsAuthenticated(true);
+      setShowPasswordReset(true); // invite + recovery both end in setting a password
+      loadData();
+      // Strip the spent token from the URL so a refresh can't retry a used token.
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setPendingToken(null);
+    } catch (e: any) {
+      // Never leave the button stuck on "Verifying…" — surface the failure.
+      setVerifyTokenError(e?.message || 'Something went wrong verifying this link. Please try again or request a new email.');
+      setVerifyingToken(false);
+      tokenFlowActiveRef.current = false;
     }
-    setResetUserId(resolvedId);
-    setActiveUserId(resolvedId);
-    setIsAuthenticated(true);
-    setShowPasswordReset(true); // invite + recovery both end in setting a password
-    loadData();
-    // Strip the spent token from the URL so a refresh can't retry a used token.
-    window.history.replaceState({}, document.title, window.location.pathname);
-    setPendingToken(null);
   };
 
   // Listen to Supabase Auth state changes for the two email-link flows that
@@ -338,6 +351,10 @@ export default function App() {
       const supabase = getSupabaseClient();
       if (supabase) {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+          // The interceptor (handleConfirmToken) owns invite/recovery now and is
+          // mid-verifyOtp, which holds the auth lock. Returning synchronously
+          // here avoids the awaited supabase calls below deadlocking that lock.
+          if (tokenFlowActiveRef.current) return;
           const isInvite = event === 'SIGNED_IN' && inviteLinkRef.current;
           if (event === 'PASSWORD_RECOVERY' || isInvite) {
             if (session?.user) {
