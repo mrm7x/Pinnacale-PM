@@ -328,10 +328,13 @@ export default function App() {
       setActiveUserId(resolvedId);
       setIsAuthenticated(true);
       setShowPasswordReset(true); // invite + recovery both end in setting a password
-      loadData();
-      // Strip the spent token from the URL so a refresh can't retry a used token.
-      window.history.replaceState({}, document.title, window.location.pathname);
       setPendingToken(null);
+      loadData();
+      // Strip the spent token from the URL so a refresh can't retry it. Use an
+      // absolute '/' rather than window.location.pathname: when Site URL has a
+      // trailing slash the link path is '//', and replaceState rejects a bare
+      // '//' as a cross-origin URL.
+      window.history.replaceState({}, document.title, '/');
     } catch (e: any) {
       // Never leave the button stuck on "Verifying…" — surface the failure.
       setVerifyTokenError(e?.message || 'Something went wrong verifying this link. Please try again or request a new email.');
