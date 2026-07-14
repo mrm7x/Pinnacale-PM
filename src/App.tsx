@@ -264,6 +264,69 @@ export default function App() {
     typeof window !== 'undefined' && window.location.hash.includes('type=invite')
   );
 
+  // ---------------------------------------------------------------------------
+  // Email-link interceptor (defeats corporate link-scanners)
+  // ---------------------------------------------------------------------------
+  // Invite / password-reset emails now link to
+  //   {{ .SiteURL }}/?token_hash=...&type=invite|recovery
+  // and the client no longer auto-exchanges tokens on load (detectSessionInUrl
+  // is false). We capture the token here and spend it ONLY when the user clicks
+  // "Continue" — a scanner that merely GETs the URL never triggers verifyOtp, so
+  // the single-use token survives for the real human.
+  const [pendingToken, setPendingToken] = useState<{ tokenHash: string; type: string } | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const p = new URLSearchParams(window.location.search);
+    const tokenHash = p.get('token_hash');
+    const type = p.get('type');
+    return tokenHash && type ? { tokenHash, type } : null;
+  });
+  const [verifyingToken, setVerifyingToken] = useState(false);
+  const [verifyTokenError, setVerifyTokenError] = useState<string | null>(null);
+
+  const handleConfirmToken = async () => {
+    if (!pendingToken) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setVerifyingToken(true);
+    setVerifyTokenError(null);
+    const { data, error } = await supabase.auth.verifyOtp({
+      type: pendingToken.type as any,
+      token_hash: pendingToken.tokenHash
+    });
+    if (error || !data?.session) {
+      setVerifyTokenError(
+        'This link is invalid or has already expired. Please ask an admin for a new invite, or request a new password-reset email.'
+      );
+      setVerifyingToken(false);
+      return;
+    }
+    // Verified — a session now exists. Resolve the profile by email (mirrors the
+    // normal login path) so the active user survives any legacy id != auth-uid
+    // drift, then hand off to the existing set-password modal.
+    const session = data.session;
+    let resolvedId = session.user.id;
+    const email = session.user.email?.toLowerCase();
+    if (email) {
+      const { data: c } = await supabase
+        .from('consultants').select('id').eq('email', email).maybeSingle() as { data: any };
+      if (c?.id) {
+        resolvedId = c.id as string;
+      } else {
+        const { data: cust } = await supabase
+          .from('customers').select('id').eq('email', email).maybeSingle() as { data: any };
+        if (cust?.id) resolvedId = cust.id as string;
+      }
+    }
+    setResetUserId(resolvedId);
+    setActiveUserId(resolvedId);
+    setIsAuthenticated(true);
+    setShowPasswordReset(true); // invite + recovery both end in setting a password
+    loadData();
+    // Strip the spent token from the URL so a refresh can't retry a used token.
+    window.history.replaceState({}, document.title, window.location.pathname);
+    setPendingToken(null);
+  };
+
   // Listen to Supabase Auth state changes for the two email-link flows that
   // require the user to set a password:
   //   - Password reset  → event 'PASSWORD_RECOVERY'
@@ -1191,6 +1254,40 @@ export default function App() {
         return <div>View not found</div>;
     }
   };
+
+    // Email-link interceptor: shown when the URL carries a token_hash. The token
+    // is verified only on the explicit button click, so link-scanners can't burn
+    // it. Takes priority over the login/app views.
+    if (pendingToken) {
+      const isRecovery = pendingToken.type === 'recovery';
+      return (
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', background: '#f5f5f4' }}>
+          <div style={{ maxWidth: 420, width: '100%', background: '#ffffff', borderRadius: 12, padding: '2rem', boxShadow: '0 4px 24px rgba(0,0,0,0.08)', textAlign: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.25rem' }}>
+              <Logo style={{ height: '28px', width: 'auto' }} />
+            </div>
+            <h1 style={{ fontSize: '1.25rem', fontWeight: 600, margin: '0 0 0.5rem', color: '#1c1917' }}>
+              {isRecovery ? 'Reset your password' : 'Welcome to Pinnacle PM'}
+            </h1>
+            <p style={{ fontSize: '0.9rem', color: '#57534e', margin: '0 0 1.5rem', lineHeight: 1.5 }}>
+              {isRecovery
+                ? 'Click continue to verify this link and choose a new password.'
+                : 'Click continue to verify your invite and set your password.'}
+            </p>
+            {verifyTokenError && (
+              <p style={{ fontSize: '0.85rem', color: '#dc2626', margin: '0 0 1rem', lineHeight: 1.5 }}>{verifyTokenError}</p>
+            )}
+            <button
+              onClick={handleConfirmToken}
+              disabled={verifyingToken}
+              style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: 8, border: 'none', background: '#2d4a65', color: '#ffffff', fontSize: '0.95rem', fontWeight: 600, cursor: verifyingToken ? 'default' : 'pointer', opacity: verifyingToken ? 0.7 : 1 }}
+            >
+              {verifyingToken ? 'Verifying…' : 'Continue'}
+            </button>
+          </div>
+        </div>
+      );
+    }
 
     if (!isAuthenticated) {
       return (

@@ -218,9 +218,24 @@ export const api = {
     getAll: async (): Promise<Task[]> => {
       if (isSupabaseConfigured()) {
         const client = getSupabaseClient() as any;
-        const { data, error } = await client.from('tasks').select('*');
-        if (error) throw error;
-        return (data || []).map(mapTaskFromDb);
+        // Page through every row. An unbounded .select('*') is silently capped
+        // by PostgREST's max-rows (1000 by default), which drops whole projects'
+        // tasks once the table grows past it. Ordering by id makes the disjoint
+        // .range() windows stable.
+        // ponytail: full client-side task load; move to per-project fetch if the
+        // table gets large enough that paging every task on load hurts.
+        const PAGE = 1000;
+        const rows: any[] = [];
+        for (let from = 0; ; from += PAGE) {
+          const { data, error } = await client
+            .from('tasks').select('*').order('id', { ascending: true })
+            .range(from, from + PAGE - 1);
+          if (error) throw error;
+          const batch = data || [];
+          rows.push(...batch);
+          if (batch.length < PAGE) break;
+        }
+        return rows.map(mapTaskFromDb);
       } else {
         const saved = localStorage.getItem('pinnacle_tasks');
         return saved ? JSON.parse(saved) : [];

@@ -72,7 +72,12 @@ export function getSupabaseClient() {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        // Do NOT auto-exchange auth tokens found in the URL on load. Invite and
+        // password-reset links carry a single-use token_hash that a corporate
+        // email link-scanner would otherwise burn on a background GET. The token
+        // is exchanged only when the user clicks "Continue" on the interceptor
+        // (App.tsx), which calls supabase.auth.verifyOtp().
+        detectSessionInUrl: false,
         storage: AUTH_STORAGE
       }
     });
