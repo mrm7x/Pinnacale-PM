@@ -112,6 +112,12 @@ export default function App() {
   
   // Database States
   const [projects, setProjects] = useState<Project[]>([]);
+  // saveTasksState looks up the project each task belongs to, but tasks are often
+  // saved in the same tick as the project that owns them was created (create from
+  // template, duplicate, save as template) — where `projects` state is still the
+  // pre-create array. saveProjectsState writes this ref eagerly so the lookup sees it.
+  const projectsRef = useRef<Project[]>([]);
+  projectsRef.current = projects;
   const [tasks, setTasks] = useState<Task[]>([]);
   const [consultants, setConsultants] = useState<Consultant[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -444,6 +450,7 @@ export default function App() {
   // Save database states helper
   const saveProjectsState = async (newProjects: Project[]) => {
     setProjects(newProjects);
+    projectsRef.current = newProjects;
     try {
       await api.projects.saveAll(newProjects);
       if (!isSupabaseConfigured()) {
@@ -476,7 +483,7 @@ export default function App() {
       // same project. Filtering keeps the client-side state (incl. rescheduling)
       // in sync while scoping the server write to what RLS will accept.
       const writable = newTasks.filter(t => {
-        const proj = projects.find(p => p.id === t.projectId);
+        const proj = projectsRef.current.find(p => p.id === t.projectId);
         if (!proj) return false;
         // Managers/leads can write any task on the project.
         if (canEditAnyTask(activeUser, proj)) return true;
