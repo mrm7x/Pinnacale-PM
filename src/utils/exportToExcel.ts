@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import type { Project, Task, Consultant } from '../types';
 import { getProjectAccent } from './phases';
-import { getSchedulePoint, parseDate } from './scheduler';
+import { getSchedulePoint, parseDate, effectiveDurationDays } from './scheduler';
 
 // ---------------------------------------------------------------------------
 // Colour helpers
@@ -283,7 +283,7 @@ function addTaskSheet(
       { value: STATUS_LABEL[task.status], align: 'center', bg: STATUS_ARGB[task.status], textColor: 'FFFFFFFF' },
       { value: task.taskOwner || 'Pinnacle', align: 'center' },
       { value: assignee?.name || 'Unassigned', align: 'center' },
-      { value: task.durationDays, align: 'center' },
+      { value: effectiveDurationDays(task), align: 'center' },
       { value: friendlyDate(task.plannedStartDate), align: 'center' },
       { value: friendlyDate(task.plannedEndDate), align: 'center' },
       { value: `${prog}%`, align: 'center' },
@@ -488,7 +488,7 @@ function addGanttSheet(
     const leftData: Array<{ v: ExcelJS.CellValue; align: ExcelJS.Alignment['horizontal'] }> = [
       { v: wbs, align: 'center' },
       { v: indent + task.name, align: 'left' },
-      { v: task.durationDays, align: 'center' },
+      { v: effectiveDurationDays(task), align: 'center' },
       { v: friendlyDate(task.plannedStartDate), align: 'center' },
       { v: friendlyDate(task.plannedEndDate), align: 'center' },
     ];

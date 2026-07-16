@@ -12,6 +12,16 @@ export function billableDays(tasks: Task[]): number {
   return tasks.reduce((acc, t) => t.taskOwner === 'Customer' ? acc : acc + (t.durationDays || 0), 0);
 }
 
+/**
+ * Duration to display for a task. A stored duration of 0 with a due date means
+ * "derive from due date" — the real span lives in the scheduled half-day
+ * indices, so read it from there instead of the stored 0.
+ */
+export function effectiveDurationDays(t: Task): number {
+  if (t.durationDays > 0 || !t.dueDate) return t.durationDays;
+  return Math.max(0, ((t.endHalfDay ?? 0) - (t.startHalfDay ?? 0) + 1) / 2);
+}
+
 export function isWeekend(date: Date): boolean {
   const day = date.getDay();
   return day === 0 || day === 6; // 0 = Sunday, 6 = Saturday
@@ -114,7 +124,12 @@ export function hasCircularDependency(tasks: Task[]): boolean {
 export function getHalfDaysBetween(projectStartDateStr: string, targetDateStr: string): number {
   const projStart = parseDate(projectStartDateStr);
   const target = parseDate(targetDateStr);
-  
+  // Roll a weekend target forward to Monday — the walk below skips weekends,
+  // so a Sat/Sun target could never be reached and the loop would never end.
+  while (isWeekend(target)) {
+    target.setDate(target.getDate() + 1);
+  }
+
   if (target <= projStart) return 0;
   
   let current = new Date(projStart);
@@ -189,14 +204,19 @@ export function calculateTaskSchedules(projectStartDate: string, tasks: Task[]):
 
   // Topological sorting helper
   const resolved = new Set<string>();
+  // Tasks currently being resolved. A hierarchy cycle (task parented under its
+  // own descendant) or a dependency on an ancestor would otherwise recurse
+  // forever — hasCircularDependency only walks predecessor edges.
+  const resolving = new Set<string>();
   const taskMap = new Map<string, typeof scheduledTasks[0]>();
   scheduledTasks.forEach(t => taskMap.set(t.id, t));
 
   function resolveTask(taskId: string) {
-    if (resolved.has(taskId)) return;
+    if (resolved.has(taskId) || resolving.has(taskId)) return;
 
     const task = taskMap.get(taskId);
     if (!task) return;
+    resolving.add(taskId);
 
     // First resolve all predecessors
     task.predecessorIds.forEach(predId => {
@@ -282,17 +302,18 @@ export function calculateTaskSchedules(projectStartDate: string, tasks: Task[]):
       // If no explicit duration is budgeted (0) and a due date exists, derive the
       // duration from the span between the task's resolved start and its due date.
       if (durationHalfDays === 0 && task.dueDate) {
-        const startPoint = getSchedulePoint(projectStartDate, startHalfDay);
         const dueHalfDays = getHalfDaysBetween(projectStartDate, task.dueDate);
         durationHalfDays = Math.max(1, dueHalfDays - startHalfDay + 1);
-        task.durationDays = durationHalfDays / 2; // reflect derived duration on the task
-        void startPoint; // start date string is mapped back in step 4; kept for clarity
+        // Keep the stored durationDays at 0 — it is the "derive from due date"
+        // flag. Persisting the derived value here disabled derivation after the
+        // first save (duration no longer 0), so later due-date moves were ignored.
       }
       const endHalfDay = startHalfDay + Math.max(1, durationHalfDays) - 1;
 
       scheduleIndices.set(taskId, { start: startHalfDay, end: endHalfDay });
     }
 
+    resolving.delete(taskId);
     resolved.add(taskId);
   }
 

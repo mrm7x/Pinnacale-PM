@@ -762,19 +762,16 @@ export default function App() {
     if (isSupabaseConfigured()) {
       try {
         await api.tasks.deleteMultiple(idsToDelete);
-        const projTasks = filteredTasksList.filter(t => t.projectId === taskToDelete.projectId);
-        const rescheduled = calculateTaskSchedules(activeProj.startDate, projTasks);
-        await api.tasks.saveAll(rescheduled);
-        
-        const otherTasks = filteredTasksList.filter(t => t.projectId !== taskToDelete.projectId);
-        setTasks([...otherTasks, ...rescheduled]);
       } catch (err) {
         console.error(err);
         addToast('We could not delete that task. Please try again.', 'error');
+        return;
       }
-    } else {
-      await rescheduleProjectTasks(taskToDelete.projectId, activeProj.startDate, filteredTasksList);
     }
+    // Reschedule + persist via saveTasksState: it diffs changed rows and issues
+    // real UPDATEs (a bulk upsert here was rejected by RLS for users with
+    // UPDATE-but-not-INSERT rights and rewrote every unchanged row).
+    await rescheduleProjectTasks(taskToDelete.projectId, activeProj.startDate, filteredTasksList);
   };
 
   const handleBulkUpdateTasks = async (taskIds: string[], updates: Partial<Task>) => {
@@ -884,19 +881,14 @@ export default function App() {
     if (isSupabaseConfigured()) {
       try {
         await api.tasks.deleteMultiple(allIdsToDelete);
-        const projTasks = filteredTasksList.filter(t => t.projectId === firstTask.projectId);
-        const rescheduled = calculateTaskSchedules(activeProj.startDate, projTasks);
-        await api.tasks.saveAll(rescheduled);
-        
-        const otherTasks = filteredTasksList.filter(t => t.projectId !== firstTask.projectId);
-        setTasks([...otherTasks, ...rescheduled]);
       } catch (err) {
         console.error(err);
         addToast('We could not delete those tasks. Please try again.', 'error');
+        return;
       }
-    } else {
-      await rescheduleProjectTasks(firstTask.projectId, activeProj.startDate, filteredTasksList);
     }
+    // Reschedule + persist via saveTasksState (diffed real UPDATEs — see handleDeleteTask).
+    await rescheduleProjectTasks(firstTask.projectId, activeProj.startDate, filteredTasksList);
     addToast(`Successfully deleted ${taskIds.length} tasks.`, 'warning');
   };
 

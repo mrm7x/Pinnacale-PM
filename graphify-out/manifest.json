@@ -15,8 +15,8 @@
     "semantic_hash": "b342d78be995e05b3f26a9babbc7ffae"
   },
   "src/App.tsx": {
-    "mtime": 1784213045.4507077,
-    "ast_hash": "eb0fbd842da3108ae341b30a9ade327a",
+    "mtime": 1784214735.4667087,
+    "ast_hash": "2e83e23907444b92c832820c4103e02a",
     "semantic_hash": ""
   },
   "src/components/CroppedLogo.tsx": {
@@ -35,8 +35,8 @@
     "semantic_hash": "774699751b487ea567faedcb3c7910f8"
   },
   "src/components/GanttChart.tsx": {
-    "mtime": 1784213438.4155293,
-    "ast_hash": "88683d5991b33ec0cce3ca7462e358f2",
+    "mtime": 1784214978.854526,
+    "ast_hash": "e67e4994daacc3f570c96aebbd58a8f0",
     "semantic_hash": ""
   },
   "src/components/Login.tsx": {
@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "src/components/TaskListV2.tsx": {
-    "mtime": 1784213413.4873776,
-    "ast_hash": "368b683014eaac166e8b12368d044ad7",
+    "mtime": 1784215654.4356225,
+    "ast_hash": "75c0974c71782c0c7393e01b018bd217",
     "semantic_hash": ""
   },
   "src/components/winui/WinComboBox.tsx": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "src/utils/exportToExcel.ts": {
-    "mtime": 1784023865.7163217,
-    "ast_hash": "f26b747efdeceae338367360a5abaeff",
+    "mtime": 1784215019.0103273,
+    "ast_hash": "0773849bcbe9b94e5f40e3d18379ff3f",
     "semantic_hash": ""
   },
   "src/utils/permissions.ts": {
@@ -125,8 +125,8 @@
     "semantic_hash": "a208a6144ed41bb024c59fdf4d42cacd"
   },
   "src/utils/scheduler.ts": {
-    "mtime": 1784213473.8259704,
-    "ast_hash": "457d10f4700a06e31ba4200a454322f2",
+    "mtime": 1784214940.9197109,
+    "ast_hash": "8c23d8d5605e109507ae1f22129780e2",
     "semantic_hash": ""
   },
   "src/utils/supabase.ts": {
@@ -392,6 +392,11 @@
   "supabase/migrations/20260714130000_backfill_task_sort_order.sql": {
     "mtime": 1784061579.804979,
     "ast_hash": "e9b6aef55916ccc3415c753fd8953877",
+    "semantic_hash": ""
+  },
+  ".claude/settings.local.json": {
+    "mtime": 1784215462.8943174,
+    "ast_hash": "70e37ba559692393b826a92cdd1e86de",
     "semantic_hash": ""
   }
 }

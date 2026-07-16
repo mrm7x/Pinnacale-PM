@@ -25,9 +25,9 @@
     "semantic_hash": "4a25713e238c4582cae4aa66197f95cb"
   },
   "src/components/Dashboard.tsx": {
-    "mtime": 1784023865.7073214,
-    "ast_hash": "5af49b8b9122e29045199ebcd3bacf3b",
-    "semantic_hash": "5af49b8b9122e29045199ebcd3bacf3b"
+    "mtime": 1784213587.5277216,
+    "ast_hash": "5efcf333ae13f5adc64930254d92bb7c",
+    "semantic_hash": ""
   },
   "src/components/EditProjectModal.tsx": {
     "mtime": 1784023865.7073214,
@@ -35,9 +35,9 @@
     "semantic_hash": "774699751b487ea567faedcb3c7910f8"
   },
   "src/components/GanttChart.tsx": {
-    "mtime": 1784023865.708323,
-    "ast_hash": "c44ea4938933187230eca2afb3c02bd2",
-    "semantic_hash": "c44ea4938933187230eca2afb3c02bd2"
+    "mtime": 1784213438.4155293,
+    "ast_hash": "88683d5991b33ec0cce3ca7462e358f2",
+    "semantic_hash": ""
   },
   "src/components/Login.tsx": {
     "mtime": 1784023865.708323,
@@ -60,13 +60,13 @@
     "semantic_hash": "1e7dbad12a1b50900b10891281c52561"
   },
   "src/components/ProjectDetails.tsx": {
-    "mtime": 1784023865.7113233,
-    "ast_hash": "471a8d4b263e73642c467b45f34c5fd5",
+    "mtime": 1784213535.2034137,
+    "ast_hash": "0a0a24d1d52f53be7afbbd049a88638e",
     "semantic_hash": ""
   },
   "src/components/ProjectsList.tsx": {
-    "mtime": 1784023865.7113233,
-    "ast_hash": "c0c5c590173c44b588151db234f721a7",
+    "mtime": 1784213617.072811,
+    "ast_hash": "db755af86d248bc2cdae742609d9d9fb",
     "semantic_hash": ""
   },
   "src/components/Settings.tsx": {
@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "src/components/TaskListV2.tsx": {
-    "mtime": 1784023865.7133224,
-    "ast_hash": "f2954a0c5cf8a22d73295119dc38b4b4",
+    "mtime": 1784213413.4873776,
+    "ast_hash": "368b683014eaac166e8b12368d044ad7",
     "semantic_hash": ""
   },
   "src/components/winui/WinComboBox.tsx": {
@@ -125,9 +125,9 @@
     "semantic_hash": "a208a6144ed41bb024c59fdf4d42cacd"
   },
   "src/utils/scheduler.ts": {
-    "mtime": 1784023865.7173545,
-    "ast_hash": "8a2fb475019b5c46a9c993835598a009",
-    "semantic_hash": "8a2fb475019b5c46a9c993835598a009"
+    "mtime": 1784213473.8259704,
+    "ast_hash": "457d10f4700a06e31ba4200a454322f2",
+    "semantic_hash": ""
   },
   "src/utils/supabase.ts": {
     "mtime": 1784025739.4562187,

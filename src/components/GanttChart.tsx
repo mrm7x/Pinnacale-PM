@@ -1,6 +1,6 @@
 import { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import type { Project, Task, Consultant } from '../types';
-import { getSchedulePoint, parseDate, isWeekend } from '../utils/scheduler';
+import { getSchedulePoint, parseDate, isWeekend, effectiveDurationDays } from '../utils/scheduler';
 import { formatDateFriendly } from './Dashboard';
 import { getProjectAccent } from '../utils/phases';
 import {
@@ -530,7 +530,7 @@ function GanttPopover({ task, consultants, allTasks, accent, anchorRow, rowHeigh
           </div>
           <div className="g2-pop-row">
             <span className="g2-pop-label"><Clock size={13} /> Duration</span>
-            <span className="g2-pop-value">{task.durationDays} day{task.durationDays === 1 ? '' : 's'}</span>
+            <span className="g2-pop-value">{effectiveDurationDays(task)} day{effectiveDurationDays(task) === 1 ? '' : 's'}</span>
           </div>
           <div className="g2-pop-row">
             <span className="g2-pop-label">Status</span>

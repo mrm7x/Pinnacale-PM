@@ -628,17 +628,23 @@ export default function TaskListV2({
     selected: string[],
     toggle: (id: string) => void
   ): React.ReactNode[] => {
-    const levelTasks = projectTasks.filter(t => t.parentId === parentId);
+    const levelTasks = projectTasks.filter(t => (t.parentId ?? null) === parentId);
     if (levelTasks.length === 0) return [];
     return levelTasks.map((task, index) => {
       if (editingId && task.id === editingId) return null;
       const taskNumber = parentNumber ? `${parentNumber}.${index + 1}` : `${index + 1}`;
       const isTaskParent = isParent(task.id);
+      // A task's own ancestor can't be its predecessor: the parent's schedule is
+      // derived from its children, so the dependency is circular through the
+      // hierarchy (and used to crash the scheduler). Shown but not selectable.
+      const isAncestorOfEditing = !!editingId && isDescendant(task.id, editingId);
       return (
         <div key={task.id} style={{ display: 'flex', flexDirection: 'column' }}>
-          <label className="tv2-dep-row" style={{ paddingLeft: `${depth * 1.25}rem` }}>
+          <label className="tv2-dep-row" style={{ paddingLeft: `${depth * 1.25}rem`, ...(isAncestorOfEditing ? { opacity: 0.5 } : {}) }}
+            title={isAncestorOfEditing ? 'A task cannot depend on its own parent task' : undefined}>
             <input type="checkbox" className="win-checkbox"
               checked={selected.includes(task.id)}
+              disabled={isAncestorOfEditing}
               onChange={() => toggle(task.id)}
             />
             <span className="tv2-wbs-mini">{taskNumber}</span>
@@ -1222,6 +1228,7 @@ export default function TaskListV2({
           accent={accent}
           canEdit={modalTask ? canEditThisTask(modalTask) : canCreateTask(activeUser, project)}
           isParent={isParent}
+          isDescendant={isDescendant}
           progressFor={progressFor}
           onClose={() => { setModalTaskId(null); setCreateParentId(null); }}
           onSave={(t) => {
@@ -1285,6 +1292,8 @@ interface TaskModalProps {
   accent: string;
   canEdit: boolean;
   isParent: (id: string) => boolean;
+  /** Is `maybeDescId` anywhere in the subtree under `rootId`? (cycle guard) */
+  isDescendant: (rootId: string, maybeDescId: string) => boolean;
   progressFor: (t: Task) => number;
   onClose: () => void;
   onSave: (task: Omit<Task, 'id'>) => void;
@@ -1298,15 +1307,37 @@ interface TaskModalProps {
 }
 
 function TaskModal(props: TaskModalProps) {
-  const { mode, task, presetParentId, project, tasks, consultants, accent, canEdit, isParent, progressFor, onClose, onSave, onUpdate, onDelete, onAddSubTask, renderDependencyTree } = props;
+  const { mode, task, presetParentId, project, tasks, consultants, accent, canEdit, isParent, isDescendant, progressFor, onClose, onSave, onUpdate, onDelete, onAddSubTask, renderDependencyTree } = props;
   const creating = mode === 'create';
 
   const [form, setForm] = useState(() => buildForm(task, creating, presetParentId));
-  // For edit mode, auto-persist on every change (the parent re-schedules). For
-  // create mode we wait for the explicit Save button.
+  // For edit mode, auto-persist changes (the parent re-schedules). For create
+  // mode we wait for the explicit Save button.
   // SECURITY: never persist when canEdit is false (e.g. read-only / customer
   // viewing a Pinnacle-owned task). Previously update() wrote on every keystroke
   // regardless of canEdit, letting users bypass the edit gate.
+  //
+  // Persistence is debounced: each write triggers a full project reschedule and
+  // sequential DB updates, and unserialized per-keystroke saves could land out
+  // of order. The pending form is flushed on unmount (modal close).
+  const persistTimer = useRef<number | null>(null);
+  const pendingForm = useRef<DrawerForm | null>(null);
+  const onUpdateRef = useRef(onUpdate);
+  onUpdateRef.current = onUpdate;
+  const taskRef = useRef(task);
+  taskRef.current = task;
+
+  const flushPending = () => {
+    if (persistTimer.current !== null) { clearTimeout(persistTimer.current); persistTimer.current = null; }
+    const cur = taskRef.current;
+    if (pendingForm.current && cur) {
+      onUpdateRef.current({ ...cur, ...toTaskPatch(pendingForm.current, cur) });
+      pendingForm.current = null;
+    }
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => flushPending, []);
+
   const update = (patch: Partial<typeof form>) => {
     setForm(prev => {
       const next = { ...prev, ...patch };
@@ -1314,7 +1345,9 @@ function TaskModal(props: TaskModalProps) {
       if (patch.durationDays !== undefined) next.durationDays = snapHalf(patch.durationDays);
       if (patch.status === 'completed') next.progress = 100;
       if (!creating && task && canEdit) {
-        onUpdate({ ...task, ...toTaskPatch(next, task) });
+        pendingForm.current = next;
+        if (persistTimer.current !== null) clearTimeout(persistTimer.current);
+        persistTimer.current = window.setTimeout(flushPending, 400);
       }
       return next;
     });
@@ -1438,8 +1471,11 @@ function TaskModal(props: TaskModalProps) {
                   onChange={(v) => update({ parentId: v })}
                   options={[
                     { label: 'None (top-level)', value: '' },
+                    // Any task can be a parent except the task itself and its own
+                    // descendants — nesting under a descendant creates a hierarchy
+                    // cycle that used to crash the scheduler.
                     ...tasks
-                      .filter(t => t.id !== task?.id && (!isParent(t.id) || t.id === form.parentId))
+                      .filter(t => t.id !== task?.id && (!task || !isDescendant(task.id, t.id)))
                       .map(t => ({ label: t.name, value: t.id }))
                   ]} />
               </div>
