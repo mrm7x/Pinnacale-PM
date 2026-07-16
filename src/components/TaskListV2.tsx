@@ -1209,6 +1209,10 @@ export default function TaskListV2({
       {/* Floating centered modal (edit / create) */}
       {modalOpen && (
         <TaskModal
+          // Remount when the modal's identity changes (edit ↔ create, or a new
+          // preset parent). Without this, "Add Sub Task" from an open edit modal
+          // kept the previous form state and ignored presetParentId.
+          key={modalTaskId ?? `create-${createParentId ?? 'root'}`}
           mode={createParentId !== null || modalTaskId === '__new__' ? 'create' : 'edit'}
           task={modalTask}
           presetParentId={createParentId}

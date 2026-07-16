@@ -1,16 +1,16 @@
 # Graph Report - Pinnacale-PM  (2026-07-16)
 
 ## Corpus Check
-- 68 files · ~81,767 words
+- 68 files · ~81,942 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 394 nodes · 657 edges · 58 communities (20 shown, 38 thin omitted)
+- 395 nodes · 665 edges · 58 communities (20 shown, 38 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 1 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `a398b685`
+- Built from commit: `cf9a277d`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -87,10 +87,10 @@
 ## Surprising Connections (you probably didn't know these)
 - `LoginProps` --references--> `Consultant`  [EXTRACTED]
   src/components/Login.tsx → src/types.ts
+- `KanbanColumn` --references--> `Task`  [EXTRACTED]
+  src/components/TaskListV2.tsx → src/types.ts
 - `FlatTask` --references--> `Task`  [EXTRACTED]
   src/utils/exportToExcel.ts → src/types.ts
-- `ProjectDetails()` --calls--> `formatDateFriendly()`  [EXTRACTED]
-  src/components/ProjectDetails.tsx → src/components/Dashboard.tsx
 - `GanttChart()` --calls--> `getProjectAccent()`  [EXTRACTED]
   src/components/GanttChart.tsx → src/utils/phases.ts
 - `PasswordResetProps` --references--> `Consultant`  [EXTRACTED]
@@ -108,15 +108,15 @@
 
 ### Community 0 - "App Shell & Shared UI"
 Cohesion: 0.08
-Nodes (25): defaultConsultants, defaultProjects, Toast, CroppedLogo(), CroppedLogoProps, LoginProps, Logo(), LogoProps (+17 more)
+Nodes (24): defaultConsultants, defaultProjects, Toast, CroppedLogo(), CroppedLogoProps, LoginProps, Logo(), LogoProps (+16 more)
 
 ### Community 1 - "Task List Table & Editing"
-Cohesion: 0.08
-Nodes (22): buildForm(), clampProgress(), COLUMN_DEFS, ColumnDef, DEFAULT_COLUMNS, DrawerForm, loadViews(), makeDefaultView() (+14 more)
+Cohesion: 0.07
+Nodes (24): buildForm(), clampProgress(), COLUMN_DEFS, ColumnDef, DEFAULT_COLUMNS, DrawerForm, KanbanColumn, loadViews() (+16 more)
 
 ### Community 2 - "Project Modals & Details"
-Cohesion: 0.12
-Nodes (27): EditProjectModalProps, GanttChartProps, NewProjectModalProps, PasswordResetProps, PROJECT_ICONS, ProjectDetailsProps, PROJECT_STATUS_OPTIONS, ProjectKanbanColumn (+19 more)
+Cohesion: 0.14
+Nodes (23): EditProjectModalProps, GanttChartProps, NewProjectModalProps, PasswordResetProps, ProjectDetailsProps, PROJECT_STATUS_OPTIONS, ProjectKanbanColumn, ProjectKanbanGroupMode (+15 more)
 
 ### Community 3 - "Package Dependencies"
 Cohesion: 0.06
@@ -124,7 +124,7 @@ Nodes (30): dependencies, exceljs, lucide-react, react, react-dom, @supabase/sup
 
 ### Community 4 - "Dashboard & Stats"
 Cohesion: 0.10
-Nodes (21): DashboardProps, formatDateFriendly(), formatDateTimeFriendly(), STATUS_META, clamp(), GanttChart(), GanttPopover(), initials() (+13 more)
+Nodes (25): DashboardProps, formatDateFriendly(), formatDateTimeFriendly(), STATUS_META, clamp(), GanttChart(), GanttPopover(), initials() (+17 more)
 
 ### Community 5 - "Excel Export"
 Cohesion: 0.12
@@ -132,7 +132,7 @@ Nodes (26): TaskModal(), addGanttSheet(), addTaskSheet(), applyDataCell(), apply
 
 ### Community 6 - "Roles & Permissions"
 Cohesion: 0.22
-Nodes (24): App(), ProjectDetails(), TaskListV2(), activeUserFromConsultant(), activeUserFromCustomer(), canCreateProject(), canCreateTask(), canDeleteProject() (+16 more)
+Nodes (24): App(), TaskListV2(), activeUserFromConsultant(), activeUserFromCustomer(), canCreateProject(), canCreateTask(), canDeleteProject(), canDeleteTask() (+16 more)
 
 ### Community 7 - "App TS Config"
 Cohesion: 0.11
@@ -191,12 +191,12 @@ _Questions this graph is uniquely positioned to answer:_
 - **Why does `Project` connect `Project Modals & Details` to `App Shell & Shared UI`, `Task List Table & Editing`, `Dashboard & Stats`, `Excel Export`, `Roles & Permissions`?**
   _High betweenness centrality (0.018) - this node is a cross-community bridge._
 - **Why does `Task` connect `Project Modals & Details` to `App Shell & Shared UI`, `Task List Table & Editing`, `Dashboard & Stats`, `Excel Export`, `Roles & Permissions`?**
-  _High betweenness centrality (0.016) - this node is a cross-community bridge._
+  _High betweenness centrality (0.015) - this node is a cross-community bridge._
 - **What connects `name`, `private`, `version` to the rest of the system?**
   _180 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `App Shell & Shared UI` be split into smaller, more focused modules?**
-  _Cohesion score 0.07678075855689177 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07922705314009662 - nodes in this community are weakly interconnected._
 - **Should `Task List Table & Editing` be split into smaller, more focused modules?**
-  _Cohesion score 0.07954545454545454 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07394957983193277 - nodes in this community are weakly interconnected._
 - **Should `Project Modals & Details` be split into smaller, more focused modules?**
-  _Cohesion score 0.11522048364153627 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.13763440860215054 - nodes in this community are weakly interconnected._

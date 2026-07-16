@@ -79,10 +79,23 @@ export default function GanttChart({
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const projectTasks = useMemo(
-    () => activeProject ? tasks.filter(t => t.projectId === activeProject.id) : [],
-    [tasks, activeProject]
-  );
+  // Order rows hierarchically (parents followed by their children, siblings by
+  // sortOrder) to match the task list and the Excel export. Tasks whose parent
+  // is missing are treated as roots so they never drop off the chart.
+  const projectTasks = useMemo(() => {
+    if (!activeProject) return [];
+    const list = tasks.filter(t => t.projectId === activeProject.id);
+    const ids = new Set(list.map(t => t.id));
+    const out: Task[] = [];
+    const walk = (parentId: string | null) => {
+      list
+        .filter(t => (t.parentId && ids.has(t.parentId) ? t.parentId : null) === parentId)
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+        .forEach(t => { out.push(t); walk(t.id); });
+    };
+    walk(null);
+    return out;
+  }, [tasks, activeProject]);
 
   const maxEndHalfDay = useMemo(
     () => projectTasks.length ? Math.max(...projectTasks.map(t => t.endHalfDay || 0)) : 0,

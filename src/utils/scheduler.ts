@@ -3,6 +3,15 @@ import type { Task } from '../types';
 /**
  * Checks if a date falls on a weekend.
  */
+/**
+ * Sums task durations that count toward the project budget. Customer-owned
+ * tasks are the customer's effort, not Pinnacle's, so they are excluded.
+ * ('Pinnacle/Customer' shared tasks still count.)
+ */
+export function billableDays(tasks: Task[]): number {
+  return tasks.reduce((acc, t) => t.taskOwner === 'Customer' ? acc : acc + (t.durationDays || 0), 0);
+}
+
 export function isWeekend(date: Date): boolean {
   const day = date.getDay();
   return day === 0 || day === 6; // 0 = Sunday, 6 = Saturday

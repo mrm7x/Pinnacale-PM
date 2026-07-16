@@ -12,6 +12,7 @@ import {
   Pin, AlertTriangle, Lightbulb, Zap, Bell, CheckCircle, Search
 } from 'lucide-react';
 import { exportProjectToExcel } from '../utils/exportToExcel';
+import { billableDays } from '../utils/scheduler';
 import { safeExternalUrl } from '../utils/url';
 import { WinComboBox } from './winui/WinComboBox';
 import { WinDatePicker } from './winui/WinDatePicker';
@@ -170,7 +171,7 @@ export default function ProjectDetails({
   // Note: Parent tasks will be excluded from budget totals to avoid double counting.
   const isParent = (taskId: string) => tasks.some(t => t.parentId === taskId);
   const leafTasks = projectTasks.filter(t => !isParent(t.id));
-  const totalAllocatedDuration = leafTasks.reduce((acc, t) => acc + t.durationDays, 0);
+  const totalAllocatedDuration = billableDays(leafTasks);
   const isOverBudget = activeProject ? totalAllocatedDuration > activeProject.budgetDays : false;
 
   const totalLeafTasks = leafTasks.length;

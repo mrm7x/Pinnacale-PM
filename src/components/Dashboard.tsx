@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { isCustomer as isCustomerUser, type ActiveUser } from '../utils/permissions';
 import { getProjectAccent, resolvePhase, resolvePhaseMeta, PHASE_ORDER } from '../utils/phases';
+import { billableDays } from '../utils/scheduler';
 
 // Status metadata shared across analytics/health views
 const STATUS_META: Record<Task['status'], { label: string; color: string }> = {
@@ -274,7 +275,7 @@ export default function Dashboard({
   const computeProjectStats = (project: Project) => {
     const pTasks = tasks.filter(t => t.projectId === project.id);
     const pLeaf = pTasks.filter(isLeaf);
-    const allocated = pLeaf.reduce((a, t) => a + t.durationDays, 0);
+    const allocated = billableDays(pLeaf);
     const completed = pTasks.filter(t => t.status === 'completed').length;
     const pct = pTasks.length ? Math.round((completed / pTasks.length) * 100) : 0;
     const overBudget = allocated > project.budgetDays;
@@ -638,7 +639,7 @@ export default function Dashboard({
                   {projects.map(project => {
                     const projectTasks = tasks.filter(t => t.projectId === project.id);
                     const projectLeafTasks = projectTasks.filter(t => !tasks.some(c => c.parentId === t.id));
-                    const projectAllocated = projectLeafTasks.reduce((acc, t) => acc + t.durationDays, 0);
+                    const projectAllocated = billableDays(projectLeafTasks);
                     const projectCompleted = projectTasks.filter(t => t.status === 'completed').length;
                     const pct = projectTasks.length > 0 ? Math.round((projectCompleted / projectTasks.length) * 100) : 0;
                     
@@ -1177,7 +1178,7 @@ export default function Dashboard({
               projects.map(project => {
                 const projectTasks = tasks.filter(t => t.projectId === project.id);
                 const projectLeafTasks = projectTasks.filter(t => !tasks.some(c => c.parentId === t.id));
-                const projectAllocated = projectLeafTasks.reduce((acc, t) => acc + t.durationDays, 0);
+                const projectAllocated = billableDays(projectLeafTasks);
                 const projectCompleted = projectTasks.filter(t => t.status === 'completed').length;
                 const pct = projectTasks.length > 0 ? Math.round((projectCompleted / projectTasks.length) * 100) : 0;
                 

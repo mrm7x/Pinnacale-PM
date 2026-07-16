@@ -5,6 +5,7 @@ import { Plus, Search, Trash2, LayoutGrid, List, AlertCircle, Users, CheckCircle
 import { WinComboBox } from './winui/WinComboBox';
 import { resolvePhaseMeta, PHASE_ORDER } from '../utils/phases';
 import { canSeeRag } from '../utils/permissions';
+import { billableDays } from '../utils/scheduler';
 
 interface ProjectsListProps {
   projects: Project[];
@@ -109,7 +110,7 @@ export default function ProjectsList({
     const completedTasks = projectTasks.filter(t => t.status === 'completed');
     
     const progress = projectTasks.length > 0 ? Math.round((completedTasks.length / projectTasks.length) * 100) : 0;
-    const daysUsed = completedTasks.reduce((acc, t) => acc + (t.durationDays || 0), 0);
+    const daysUsed = billableDays(completedTasks);
     const budgetPercentage = budgetDays > 0 ? Math.round((daysUsed / budgetDays) * 100) : 0;
     
     return { progress, daysUsed, budgetPercentage, taskCount: projectTasks.length };
