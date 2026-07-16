@@ -938,11 +938,22 @@ export default function App() {
       id
     };
 
+    // Save ONLY the new row. Upserting the whole list would also UPDATE every
+    // existing consultant row, and RLS rejects a non-superuser admin touching
+    // admin/superuser rows — aborting the entire statement and silently losing
+    // the new user (invite already sent, so an orphaned auth account remained).
     try {
-      await saveConsultantsState([...consultants, newConsultant]);
+      const next = [...consultants, newConsultant];
+      if (isSupabaseConfigured()) {
+        await api.consultants.save(newConsultant);
+      } else {
+        localStorage.setItem('pinnacle_consultants', JSON.stringify(next));
+      }
+      setConsultants(next);
       return true;
     } catch (err) {
       console.error(err);
+      addToast('The invite was sent, but we could not save the user profile. Please try adding them again.', 'error');
       return false;
     }
   };

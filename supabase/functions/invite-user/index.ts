@@ -86,7 +86,25 @@ Deno.serve(async (req) => {
   // 4. Send the invite with admin privileges.
   const redirectTo = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
   const { data, error } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo });
-  if (error) return json({ error: error.message }, 400, cors);
+  if (!error) return json({ user: { id: data.user?.id ?? null } }, 200, cors);
 
-  return json({ user: { id: data.user?.id ?? null } }, 200, cors);
+  // Already-registered auth user (re-invite / password reset / recovering an
+  // orphaned account whose profile row failed to save): resolve their id via
+  // generateLink (which does NOT send an email) and send a recovery email.
+  const alreadyExists =
+    (error as { code?: string }).code === 'email_exists' ||
+    /already.*registered/i.test(error.message);
+  if (!alreadyExists) return json({ error: error.message }, 400, cors);
+
+  const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+    type: 'recovery',
+    email,
+    options: { redirectTo },
+  });
+  if (linkErr) return json({ error: linkErr.message }, 400, cors);
+
+  const { error: resetErr } = await admin.auth.resetPasswordForEmail(email, { redirectTo });
+  if (resetErr) return json({ error: resetErr.message }, 400, cors);
+
+  return json({ user: { id: linkData.user?.id ?? null } }, 200, cors);
 });
