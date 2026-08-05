@@ -103,7 +103,8 @@ function mapTaskFromDb(db: any): Task {
     customStartDate: db.custom_start_date || null,
     progress: db.progress != null ? Number(db.progress) : 0,
     dueDate: db.due_date || null,
-    taskOwner: db.task_owner || 'Pinnacle'
+    taskOwner: db.task_owner || 'Pinnacle',
+    startPeriod: db.start_period || null
   };
 }
 
@@ -127,7 +128,8 @@ function mapTaskToDb(t: Task) {
     custom_start_date: t.customStartDate || null,
     progress: t.progress ?? 0,
     due_date: t.dueDate || null,
-    task_owner: t.taskOwner || 'Pinnacle'
+    task_owner: t.taskOwner || 'Pinnacle',
+    start_period: t.startPeriod || null
   };
 }
 

@@ -4,7 +4,8 @@
  * Lives outside src/ so `tsc -b` (which includes only src) never sees it.
  */
 import {
-  escapeIcsText, foldIcsLine, dayAfter, calendarTasks, buildIcs,
+  escapeIcsText, foldIcsLine, dayAfter, calendarTasks, buildIcs, halfDayPeriod,
+  appointments,
 } from '../src/utils/exportToIcs.ts';
 import type { Project, Task, Consultant } from '../src/types.ts';
 
@@ -43,7 +44,9 @@ check(dayAfter('2026-12-31') === '2027-01-01', 'year rollover');
 check(dayAfter('2028-02-28') === '2028-02-29', 'leap day rollover');
 
 // --- fixtures -------------------------------------------------------------
-const project = { id: 'p1', name: 'Acme Rollout', clientName: 'Acme, Ltd' } as Project;
+// 2026-08-10 is a Monday, so half-day index 0 of this project is that morning.
+const MONDAY = '2026-08-10';
+const project = { id: 'p1', name: 'Acme Rollout', clientName: 'Acme, Ltd', startDate: MONDAY } as Project;
 const consultant = { id: 'c1', name: 'Sam Reed' } as Consultant;
 
 const task = (over: Partial<Task>): Task => ({
@@ -95,5 +98,107 @@ const inverted = buildIcs(
 );
 check(inverted.includes('DTSTART;VALUE=DATE:20260812'), 'inverted range keeps its start');
 check(inverted.includes('DTEND;VALUE=DATE:20260813'), 'inverted range is clamped to a one-day event');
+
+// --- half-day AM/PM appointments ------------------------------------------
+// The scheduler alternates AM/PM from index 0, so parity decides the period.
+// Tasks saved before the option existed have no stored period and default to AM.
+check(halfDayPeriod(task({ startHalfDay: 0, endHalfDay: 0 })) === 'AM', 'unset half day defaults to morning');
+check(halfDayPeriod(task({ startHalfDay: 3, endHalfDay: 3 })) === 'AM', 'an odd index does not force an afternoon');
+check(halfDayPeriod(task({ startHalfDay: 0, endHalfDay: 1 })) === null, 'a full day is not a half day');
+check(halfDayPeriod(task({ startHalfDay: 2, endHalfDay: 5 })) === null, 'a multi-day task is not a half day');
+check(halfDayPeriod(task({ startHalfDay: undefined, endHalfDay: undefined })) === null, 'missing indices fall back to all-day');
+// A NaN from Number(null) on a legacy row must not become a bogus 09:30 slot.
+check(halfDayPeriod(task({ startHalfDay: NaN, endHalfDay: NaN })) === null, 'NaN indices fall back to all-day');
+
+// An explicit choice on the task overrides the derived parity in both directions.
+check(halfDayPeriod(task({ startHalfDay: 0, endHalfDay: 0, startPeriod: 'PM' })) === 'PM', 'an explicit PM is honoured');
+check(halfDayPeriod(task({ startHalfDay: 3, endHalfDay: 3, startPeriod: 'AM' })) === 'AM', 'an explicit AM is honoured');
+check(halfDayPeriod(task({ startHalfDay: 3, endHalfDay: 3, startPeriod: null })) === 'AM', 'null defaults to morning');
+// A choice left on a task that is no longer half a day must not create a slot.
+check(halfDayPeriod(task({ startHalfDay: 0, endHalfDay: 3, startPeriod: 'PM' })) === null, 'a stale choice cannot force a multi-day task into a slot');
+
+const chosenIcs = buildIcs(project, [task({
+  id: 'chosen', startHalfDay: 0, endHalfDay: 0, startPeriod: 'PM',
+  plannedStartDate: '2026-08-10', plannedEndDate: '2026-08-10',
+})], consultant);
+check(chosenIcs.includes('DTSTART:20260810T140000'), 'an explicitly chosen PM exports at 14:00');
+
+const amIcs = buildIcs(project, [task({
+  id: 'am', startHalfDay: 4, endHalfDay: 4,
+  plannedStartDate: '2026-08-10', plannedEndDate: '2026-08-10',
+})], consultant);
+check(amIcs.includes('DTSTART:20260810T093000'), 'morning task starts at 09:30');
+check(amIcs.includes('DTEND:20260810T123000'), 'morning task ends at 12:30');
+check(!amIcs.includes('VALUE=DATE'), 'a timed appointment is not an all-day event');
+
+const pmIcs = buildIcs(project, [task({
+  id: 'pm', startHalfDay: 7, endHalfDay: 7, startPeriod: 'PM',
+  plannedStartDate: '2026-08-10', plannedEndDate: '2026-08-10',
+})], consultant);
+check(pmIcs.includes('DTSTART:20260810T140000'), 'afternoon task starts at 14:00');
+check(pmIcs.includes('DTEND:20260810T170000'), 'afternoon task ends at 17:00');
+
+// --- one working day per appointment ---------------------------------------
+const oneDay = task({
+  id: 'day', startHalfDay: 0, endHalfDay: 1,
+  plannedStartDate: MONDAY, plannedEndDate: MONDAY,
+});
+const daySlots = appointments(oneDay, MONDAY);
+check(daySlots.length === 1, 'a whole day is a single appointment');
+check(daySlots[0].start === '093000' && daySlots[0].end === '170000', 'a whole day runs 09:30 to 17:00');
+const dayIcs = buildIcs(project, [oneDay], consultant);
+check(dayIcs.includes('DTSTART:20260810T093000') && dayIcs.includes('DTEND:20260810T170000'), 'one-day task is timed');
+check(!dayIcs.includes('VALUE=DATE'), 'a one-day task is not an all-day event');
+
+// Three days become three separate 09:30-17:00 appointments.
+const threeDay = task({
+  id: 'multi', name: 'Data migration', startHalfDay: 0, endHalfDay: 5,
+  plannedStartDate: MONDAY, plannedEndDate: '2026-08-12',
+});
+const multiSlots = appointments(threeDay, MONDAY);
+check(multiSlots.length === 3, 'a three-day task splits into three appointments');
+check(multiSlots.map(s => s.date).join(',') === '2026-08-10,2026-08-11,2026-08-12', 'one per consecutive working day');
+check(multiSlots.every(s => s.start === '093000' && s.end === '170000'), 'every chunk is a full working day');
+
+const multiIcs = buildIcs(project, [threeDay], consultant);
+check(multiIcs.split('BEGIN:VEVENT').length - 1 === 3, 'three VEVENTs are emitted');
+check(!multiIcs.includes('VALUE=DATE'), 'a multi-day task no longer produces an all-day event');
+// A repeated UID lets Outlook treat later days as edits of the first.
+const uids = [...multiIcs.matchAll(/UID:(.+)/g)].map(m => m[1].trim());
+check(new Set(uids).size === uids.length, 'every chunk has a unique UID');
+check(multiIcs.includes('(2/3)'), 'chunks are numbered so days can be told apart');
+check(multiIcs.includes('CATEGORIES:Chargable'), 'chunks keep the category');
+
+// A week-long task must not book the weekend — getSchedulePoint skips it, and
+// walking the half-day indices inherits that for free.
+const weekLong = task({
+  id: 'week', startHalfDay: 0, endHalfDay: 13,
+  plannedStartDate: MONDAY, plannedEndDate: '2026-08-18',
+});
+const weekSlots = appointments(weekLong, MONDAY);
+check(weekSlots.length === 7, 'seven working days, not nine calendar days');
+check(!weekSlots.some(s => s.date === '2026-08-15' || s.date === '2026-08-16'), 'the weekend is skipped');
+
+// A day and a half starting in the afternoon: PM on day one, then a full day.
+const splitDay = task({
+  id: 'split', startHalfDay: 1, endHalfDay: 3,
+  plannedStartDate: MONDAY, plannedEndDate: '2026-08-11',
+});
+const splitSlots = appointments(splitDay, MONDAY);
+check(splitSlots.length === 2, 'a day and a half covers two dates');
+check(splitSlots[0].start === '140000' && splitSlots[0].end === '170000', 'the first date is an afternoon only');
+check(splitSlots[1].start === '093000' && splitSlots[1].end === '170000', 'the second date is a full day');
+
+// Unscheduled or corrupt rows still fall back to an all-day event.
+check(appointments(task({ startHalfDay: undefined, endHalfDay: undefined }), MONDAY).length === 0, 'no schedule means no timed slots');
+check(appointments(task({ startHalfDay: 5, endHalfDay: 2 }), MONDAY).length === 0, 'an inverted index pair is rejected');
+check(appointments(task({ startHalfDay: 0, endHalfDay: 5000 }), MONDAY).length === 0, 'an absurd span is refused rather than spun out');
+check(appointments(task({ startHalfDay: 0, endHalfDay: 5 }), '').length === 0, 'a missing project start date does not throw');
+check(ics.includes('DTSTART;VALUE=DATE:20260810'), 'a task with no half-day indices stays all-day');
+
+// --- Outlook category and busy status --------------------------------------
+check(ics.includes('CATEGORIES:Chargable'), 'appointments carry the Chargable category');
+check(amIcs.includes('CATEGORIES:Chargable'), 'timed appointments carry it too');
+check(amIcs.includes('X-MICROSOFT-CDO-BUSYSTATUS:BUSY') && amIcs.includes('TRANSP:OPAQUE'), 'timed appointments show as Busy');
 
 console.log('exportToIcs self-check passed');

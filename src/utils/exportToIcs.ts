@@ -1,7 +1,7 @@
 import type { Project, Task, Consultant } from '../types';
 // Explicit .ts extension (allowed by allowImportingTsExtensions) so scripts/
 // exportToIcs.selfcheck.ts can run this module under plain `node` with no bundler.
-import { parseDate, formatDate } from './scheduler.ts';
+import { parseDate, formatDate, getSchedulePoint } from './scheduler.ts';
 
 // ---------------------------------------------------------------------------
 // iCalendar (RFC 5545) text helpers
@@ -83,6 +83,76 @@ const STATUS_LABEL: Record<Task['status'], string> = {
   completed: 'Completed',
 };
 
+/** Outlook category applied to every exported appointment. */
+const CATEGORY = 'Chargable';
+
+/**
+ * Working hours. Written as floating local time (no timezone), so 09:30 stays
+ * 09:30 for the consultant regardless of where their mailbox thinks it is — and
+ * no VTIMEZONE block is needed. Tune here.
+ */
+const HALF_DAY_HOURS = {
+  AM: { start: '093000', end: '123000' },
+  PM: { start: '140000', end: '170000' },
+};
+const FULL_DAY_HOURS = { start: '093000', end: '170000' };
+
+/**
+ * Which half of the day a task occupies, or null if it is not a half-day task.
+ * Tasks saved before the AM/PM option existed have no stored period and default
+ * to the morning.
+ */
+export function halfDayPeriod(task: Task): 'AM' | 'PM' | null {
+  const { startHalfDay: s, endHalfDay: e } = task;
+  if (!Number.isFinite(s) || !Number.isFinite(e) || s !== e) return null;
+  return task.startPeriod ?? 'AM';
+}
+
+export interface Appointment {
+  date: string;   // YYYY-MM-DD
+  start: string;  // HHMMSS
+  end: string;
+}
+
+/**
+ * A task's working day is longer than one calendar day, so it becomes one
+ * appointment per working day rather than a single all-day banner. Each day is
+ * timed by how much of it the task actually occupies: both halves run
+ * 09:30-17:00, a lone morning 09:30-12:30, a lone afternoon 14:00-17:00.
+ *
+ * Walking the half-day indices through getSchedulePoint means weekends are
+ * skipped by exactly the same rule the plan uses — no second calendar to keep
+ * in step. Returns [] when the task has no usable schedule, and the caller
+ * falls back to an all-day event.
+ */
+export function appointments(task: Task, projectStartDate: string): Appointment[] {
+  const { startHalfDay: s, endHalfDay: e } = task;
+
+  const period = halfDayPeriod(task);
+  if (period) return [{ date: task.plannedStartDate!, ...HALF_DAY_HOURS[period] }];
+
+  // Without a project start date the half-day indices have nothing to resolve
+  // against, so fall back to an all-day event rather than throwing mid-export.
+  if (!projectStartDate) return [];
+  if (!Number.isFinite(s) || !Number.isFinite(e) || e! < s!) return [];
+  // ponytail: a corrupt index pair shouldn't spin out thousands of events.
+  // Raise this if a genuine task ever runs longer than a year of working days.
+  if (e! - s! > 500) return [];
+
+  const byDate = new Map<string, Set<'AM' | 'PM'>>();
+  for (let i = s!; i <= e!; i++) {
+    const point = getSchedulePoint(projectStartDate, i);
+    const periods = byDate.get(point.date) ?? new Set<'AM' | 'PM'>();
+    periods.add(point.period);
+    byDate.set(point.date, periods);
+  }
+
+  return [...byDate].map(([date, periods]) => ({
+    date,
+    ...(periods.size === 2 ? FULL_DAY_HOURS : HALF_DAY_HOURS[periods.has('AM') ? 'AM' : 'PM']),
+  }));
+}
+
 /**
  * Tasks for one consultant on one project, starting on or after `fromDate`.
  * The from-date is the user's own de-duplication control: Outlook's file import
@@ -137,20 +207,50 @@ export function buildIcs(
     const start = task.plannedStartDate!;
     const end = task.plannedEndDate! < start ? start : task.plannedEndDate!;
 
-    lines.push(
+    // One appointment per working day. An empty list means the task has no
+    // usable schedule, so it falls back to an all-day event over its range.
+    const slots = appointments(task, project.startDate);
+    const spans = slots.length > 1;
+
+    const emit = (when: string[], uid: string, summary: string) => lines.push(
       'BEGIN:VEVENT',
-      `UID:${task.id}@pinnacle-flow`,
+      `UID:${uid}@pinnacle-flow`,
       `DTSTAMP:${stamp}`,
-      `DTSTART;VALUE=DATE:${icsDate(start)}`,
-      `DTEND;VALUE=DATE:${icsDate(dayAfter(end))}`,
-      `SUMMARY:${escapeIcsText(`${project.name}: ${task.name}`)}`,
+      ...when,
+      `SUMMARY:${escapeIcsText(summary)}`,
       `DESCRIPTION:${escapeIcsText(detail)}`,
+      `CATEGORIES:${escapeIcsText(CATEGORY)}`,
       // ponytail: all-day events import as Free in Outlook unless told otherwise.
-      // Flip these two to TRANSPARENT/FREE if consultants don't want to look booked.
+      // Flip these two to TRANSPARENT/FREE if consultants shouldn't look booked.
       'TRANSP:OPAQUE',
       'X-MICROSOFT-CDO-BUSYSTATUS:BUSY',
       'END:VEVENT',
     );
+
+    const title = `${project.name}: ${task.name}`;
+
+    if (slots.length === 0) {
+      emit([
+        `DTSTART;VALUE=DATE:${icsDate(start)}`,
+        `DTEND;VALUE=DATE:${icsDate(dayAfter(end))}`,
+      ], task.id, title);
+      return;
+    }
+
+    slots.forEach((slot, i) => {
+      emit(
+        [
+          `DTSTART:${icsDate(slot.date)}T${slot.start}`,
+          `DTEND:${icsDate(slot.date)}T${slot.end}`,
+        ],
+        // Each day is its own event, so each needs its own UID — a repeated UID
+        // lets Outlook treat the later days as edits of the first.
+        spans ? `${task.id}-${i + 1}` : task.id,
+        // Days are otherwise identical in the diary; number them so a consultant
+        // can tell day 2 of 5 from day 3.
+        spans ? `${title} (${i + 1}/${slots.length})` : title,
+      );
+    });
   });
 
   lines.push('END:VCALENDAR');

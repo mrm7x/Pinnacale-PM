@@ -1431,6 +1431,24 @@ function TaskModal(props: TaskModalProps) {
               </div>
             </div>
 
+            {form.durationDays === 0.5 && (
+              <div className="tv2-field-row">
+                <div className="tv2-field">
+                  <label className="form-label">
+                    Half day
+                    <span className="tv2-hint"> · time used in calendar exports</span>
+                  </label>
+                  <WinComboBox value={form.startPeriod} disabled={readOnly}
+                    onChange={(v) => update({ startPeriod: v as 'AM' | 'PM' })}
+                    options={[
+                      { label: 'AM — 09:30 to 12:30', value: 'AM' },
+                      { label: 'PM — 14:00 to 17:00', value: 'PM' },
+                    ]} />
+                </div>
+                <div className="tv2-field" />
+              </div>
+            )}
+
             <div className="tv2-field-row">
               <div className="tv2-field">
                 <label className="form-label">Due date</label>
@@ -1591,6 +1609,7 @@ interface DrawerForm {
   assignedConsultantId: string;
   durationDays: number;
   customStartDate: string;
+  startPeriod: 'AM' | 'PM';
   dueDate: string;
   taskOwner: TaskOwner;
   parentId: string;
@@ -1603,7 +1622,7 @@ function buildForm(task: Task | null, creating: boolean, presetParentId: string 
   if (creating || !task) {
     return {
       name: '', description: '', status: 'not_started', assignedConsultantId: '',
-      durationDays: 0, customStartDate: '', dueDate: '', taskOwner: 'Pinnacle',
+      durationDays: 0, customStartDate: '', startPeriod: 'AM', dueDate: '', taskOwner: 'Pinnacle',
       parentId: presetParentId || '', pinkNumber: '',
       progress: 0, predecessorIds: []
     };
@@ -1615,6 +1634,7 @@ function buildForm(task: Task | null, creating: boolean, presetParentId: string 
     assignedConsultantId: task.assignedConsultantId || '',
     durationDays: task.durationDays,
     customStartDate: task.customStartDate || '',
+    startPeriod: task.startPeriod || 'AM',
     dueDate: task.dueDate || '',
     taskOwner: (task.taskOwner || 'Pinnacle') as TaskOwner,
     parentId: task.parentId || '',
@@ -1636,6 +1656,9 @@ function toTaskPatch(form: DrawerForm, existing: Task | null): Omit<Task, 'id'> 
     status: form.status,
     pinkNumber: form.pinkNumber,
     customStartDate: form.customStartDate || null,
+    // Only meaningful for a half-day task. Cleared otherwise so a stale choice
+    // can't resurface if the duration is later changed back to 0.5.
+    startPeriod: form.durationDays === 0.5 ? form.startPeriod : null,
     dueDate: form.dueDate || null,
     taskOwner: form.taskOwner,
     progress: form.progress,

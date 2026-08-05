@@ -111,6 +111,12 @@ export interface Task {
   progress?: number; // 0-100, stored on leaf tasks; parents compute a rollup
   dueDate?: string | null; // YYYY-MM-DD; when set & durationDays === 0, duration is derived
   taskOwner?: 'Pinnacle' | 'Customer' | 'Pinnacle/Customer'; // default 'Pinnacle'; Customer days don't count to budget
+  /**
+   * Morning or afternoon for a half-day task, used when exporting to Outlook.
+   * Null/undefined derives the period from the schedule (see halfDayPeriod).
+   * This labels the appointment only — it does not move the task in the plan.
+   */
+  startPeriod?: 'AM' | 'PM' | null;
   
   // Computed scheduling fields (dynamically calculated)
   plannedStartDate?: string; // YYYY-MM-DD
