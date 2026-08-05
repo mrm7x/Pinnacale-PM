@@ -15,7 +15,10 @@ jobs:
 
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned rather than `latest`: resolving "latest" calls the GitHub
+          # releases API unauthenticated, which rate-limits on shared runner IPs
+          # and fails the whole deploy. Bump this deliberately.
+          version: 2.111.0
 
       - name: Link Project
         run: supabase link --project-ref zhpoknwadnxauuyqffgt
