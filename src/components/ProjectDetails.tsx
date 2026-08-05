@@ -12,7 +12,8 @@ import {
   Pin, AlertTriangle, Lightbulb, Zap, Bell, CheckCircle, Search
 } from 'lucide-react';
 import { exportProjectToExcel } from '../utils/exportToExcel';
-import { billableDays } from '../utils/scheduler';
+import { exportConsultantCalendar } from '../utils/exportToIcs';
+import { billableDays, formatDate } from '../utils/scheduler';
 import { safeExternalUrl } from '../utils/url';
 import { WinComboBox } from './winui/WinComboBox';
 import { WinDatePicker } from './winui/WinDatePicker';
@@ -142,6 +143,8 @@ export default function ProjectDetails({
   const [assigneeFilter, _setAssigneeFilter] = useState<string>('all');
   const [statusFilter, _setStatusFilter] = useState<string>('all');
   const [isExporting, setIsExporting] = useState(false);
+  const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
+  const [calendarForm, setCalendarForm] = useState({ consultantId: '', fromDate: formatDate(new Date()) });
   const [ragRiskInputs, setRagRiskInputs] = useState<Record<string, string>>({});
   const [noteForm, setNoteForm] = useState({ subject: '', description: '', noteType: 'update' as Communication['noteType'] });
   const [noteSearch, setNoteSearch] = useState('');
@@ -158,6 +161,23 @@ export default function ProjectDetails({
       onAddToast('Export failed. Please try again.', 'error');
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleCalendarExport = (e: React.FormEvent) => {
+    e.preventDefault();
+    const consultant = consultants.find(c => c.id === calendarForm.consultantId);
+    if (!activeProject || !consultant) return;
+    try {
+      const count = exportConsultantCalendar(activeProject, tasks, consultant, calendarForm.fromDate);
+      if (count === 0) {
+        onAddToast('No scheduled tasks for that consultant on or after this date.', 'error');
+        return;
+      }
+      setIsCalendarModalOpen(false);
+      onAddToast(`${count} appointment${count === 1 ? '' : 's'} exported. In Outlook: File > Open & Export > Import an iCalendar (.ics) file > Import.`, 'success');
+    } catch {
+      onAddToast('Calendar export failed. Please try again.', 'error');
     }
   };
 
@@ -772,6 +792,19 @@ export default function ProjectDetails({
                   style={{ padding: '0.5rem 0.85rem', fontSize: '0.9rem' }}
                 >
                   <Download size={15} /> {isExporting ? 'Exporting…' : 'Export'}
+                </button>
+                )}
+                {!userIsCustomer && (
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    setCalendarForm({ consultantId: '', fromDate: formatDate(new Date()) });
+                    setIsCalendarModalOpen(true);
+                  }}
+                  title="Export tasks as Outlook calendar appointments"
+                  style={{ padding: '0.5rem 0.85rem', fontSize: '0.9rem' }}
+                >
+                  <Calendar size={15} /> Export Calendar
                 </button>
                 )}
             {activeProject && canEditProject(activeUser, activeProject) && (
@@ -1752,6 +1785,52 @@ export default function ProjectDetails({
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setIsDuplicateModalOpen(false)}>Cancel</button>
                 <button type="submit" className="btn btn-primary">Duplicate</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EXPORT CALENDAR MODAL */}
+      {isCalendarModalOpen && activeProject && (
+        <div className="modal-overlay">
+          <div className="modal-container">
+            <div className="modal-header">
+              <h3>Export Calendar</h3>
+              <button className="btn btn-secondary btn-icon" onClick={() => setIsCalendarModalOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleCalendarExport}>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label className="form-label">Consultant</label>
+                  <WinComboBox
+                    value={calendarForm.consultantId}
+                    onChange={(value) => setCalendarForm({ ...calendarForm, consultantId: value })}
+                    placeholder="Select a consultant..."
+                    options={consultants
+                      .filter(c => tasks.some(t => t.projectId === activeProject.id && t.assignedConsultantId === c.id))
+                      .map(c => ({ label: c.name, value: c.id }))}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Export tasks starting from</label>
+                  <WinDatePicker
+                    value={calendarForm.fromDate}
+                    onChange={(value) => setCalendarForm({ ...calendarForm, fromDate: value })}
+                  />
+                </div>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  Downloads an .ics of this project's tasks for that consultant as all-day appointments.
+                  In classic Outlook use <strong>File &gt; Open &amp; Export &gt; Import/Export &gt; Import an iCalendar (.ics) file &gt; Import</strong> —
+                  double-clicking the file opens it as a separate calendar instead of adding to the diary.
+                  Outlook does not de-duplicate on import, so set the date past anything already in the diary.
+                </p>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setIsCalendarModalOpen(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={!calendarForm.consultantId}>Export</button>
               </div>
             </form>
           </div>
