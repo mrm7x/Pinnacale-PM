@@ -5,7 +5,8 @@
  */
 import {
   escapeIcsText, foldIcsLine, dayAfter, calendarTasks, buildIcs, halfDayPeriod,
-  appointments,
+  appointments, bookings, buildSummaryText, buildSummaryHtml, buildEml, longDate,
+  consultantSummaryText,
 } from '../src/utils/exportToIcs.ts';
 import type { Project, Task, Consultant } from '../src/types.ts';
 
@@ -200,5 +201,74 @@ check(ics.includes('DTSTART;VALUE=DATE:20260810'), 'a task with no half-day indi
 check(ics.includes('CATEGORIES:Chargable'), 'appointments carry the Chargable category');
 check(amIcs.includes('CATEGORIES:Chargable'), 'timed appointments carry it too');
 check(amIcs.includes('X-MICROSOFT-CDO-BUSYSTATUS:BUSY') && amIcs.includes('TRANSP:OPAQUE'), 'timed appointments show as Busy');
+
+// --- summary report --------------------------------------------------------
+check(longDate('2026-08-10') === 'Mon 10 Aug 2026', 'dates read as a weekday and month');
+
+const reportTasks = [
+  task({ id: 'r1', name: 'Kick-off', pinkNumber: 'PK-1', startHalfDay: 0, endHalfDay: 0, plannedStartDate: MONDAY, plannedEndDate: MONDAY }),
+  task({ id: 'r2', name: 'Data migration', startHalfDay: 2, endHalfDay: 7, plannedStartDate: '2026-08-11', plannedEndDate: '2026-08-13' }),
+];
+const report = bookings(project, reportTasks);
+check(report.length === 4, 'a half day plus three full days is four appointments');
+
+const text = buildSummaryText(project, consultant, report, MONDAY);
+check(text.startsWith('Bookings for Acme Rollout'), 'the report is titled by project');
+check(text.includes('Sam Reed'), 'the report names the consultant');
+check(text.includes('Mon 10 Aug 2026') && text.includes('09:30 - 12:30'), 'a half day shows its morning slot');
+check(text.includes('Tue 11 Aug 2026') && text.includes('09:30 - 17:00'), 'a full day shows working hours');
+check(text.includes('[PK-1]'), 'pink numbers are carried into the report');
+check(text.includes('Total: 3.5 days of effort across 4 working days.'), 'the total counts half days as half');
+check(text.includes('4 appointments from Mon 10 Aug 2026'), 'the report states the count and start');
+
+// The on-screen copy is built from the same tasks the export would select.
+check(consultantSummaryText(project, all, consultant, '2026-08-01').includes('Bookings for Acme Rollout'), 'the on-screen summary is filtered like the export');
+check(consultantSummaryText(project, all, consultant, '2027-01-01') === '', 'nothing to export means nothing to show');
+
+const html = buildSummaryHtml(project, consultant, report, MONDAY);
+check(html.includes('<table'), 'the html summary is a table');
+check(html.includes('Data migration'), 'tasks appear in the html summary');
+// The body is user data; a task name must not be able to inject markup.
+check(!buildSummaryHtml(project, consultant,
+  bookings(project, [task({ id: 'x', name: '<script>bad</script>', startHalfDay: 0, endHalfDay: 0, plannedStartDate: MONDAY, plannedEndDate: MONDAY })]),
+  MONDAY).includes('<script>'), 'html in a task name is escaped');
+
+// --- email draft -----------------------------------------------------------
+const eml = buildEml(project, consultant, report, buildIcs(project, reportTasks, consultant),
+  'Acme Rollout - Sam Reed - Calendar.ics', MONDAY, new Date('2026-08-05T09:15:00Z'));
+check(eml.includes('Subject: Bookings for Acme Rollout'), 'the subject names the project');
+check(eml.includes('X-Unsent: 1'), 'Outlook opens it as an editable draft, not a received message');
+check(eml.includes('MIME-Version: 1.0'), 'it declares MIME');
+check(!/[^\r]\n/.test(eml), 'every header line break is CRLF');
+
+const boundary = eml.match(/boundary="([^"]+)"/)?.[1] ?? '';
+check(boundary.length > 0, 'a multipart boundary is declared');
+check(eml.split(`--${boundary}`).length - 1 === 3, 'two parts and a closing delimiter');
+check(eml.includes('Content-Disposition: attachment; filename="Acme Rollout - Sam Reed - Calendar.ics"'), 'the calendar is attached by name');
+check(eml.trimEnd().endsWith(`--${boundary}--`), 'the multipart body is closed');
+
+// A line break in any header input must not be able to start a new header.
+const injected = buildEml(
+  { ...project, name: 'Acme\r\nBcc: everyone@example.com' } as Project,
+  { ...consultant, email: 'sam@x.com\r\nBcc: leak@x.com' } as Consultant,
+  report, 'ICS', 'cal\r\nX-Evil: 1.ics', MONDAY,
+);
+// The text may appear inside a value; what matters is that no LINE starts with
+// it, because that is what makes it a header.
+const injectedLines = injected.split('\r\n');
+check(!injectedLines.some(l => /^Bcc:/i.test(l)), 'a line break in a project name or address cannot inject a header');
+check(!injectedLines.some(l => /^X-Evil/i.test(l)), 'a line break in the attachment name cannot inject a header');
+check(injected.includes('Subject: Bookings for Acme Bcc: everyone@example.com'), 'the text survives, flattened onto one line');
+check(injected.includes('filename="cal X-Evil: 1.ics"'), 'the filename stays quoted on one line');
+check(!buildEml(project, consultant, report, 'ICS', 'a"; x="b.ics', MONDAY).includes('a"; x='), 'a quote cannot close the filename parameter early');
+
+// The attachment must decode back to the exact calendar that was passed in.
+const parts = eml.split(`--${boundary}`);
+const attachment = parts[2].split('\r\n\r\n')[1].replace(/\r\n/g, '');
+const decoded = new TextDecoder().decode(Uint8Array.from(atob(attachment), ch => ch.charCodeAt(0)));
+check(decoded === buildIcs(project, reportTasks, consultant), 'the attachment decodes to the calendar exactly');
+check(decoded.startsWith('BEGIN:VCALENDAR'), 'the decoded attachment is a calendar');
+// Base64 bodies must be wrapped or some servers reject the message.
+check(attachment.length > 0 && parts[2].split('\r\n').every(l => l.length <= 998), 'no line exceeds the SMTP limit');
 
 console.log('exportToIcs self-check passed');

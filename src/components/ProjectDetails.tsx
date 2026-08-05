@@ -9,10 +9,10 @@ import {
   Plus, Calendar, Trash2, Edit2, ChevronDown, ChevronRight, ChevronUp,
   RefreshCw, User, X, Clock, FolderKanban, Pencil,
   Folder, Briefcase, Target, Rocket, Star, Layout, Check, Download,
-  Pin, AlertTriangle, Lightbulb, Zap, Bell, CheckCircle, Search
+  Pin, AlertTriangle, Lightbulb, Zap, Bell, CheckCircle, Search, Copy
 } from 'lucide-react';
 import { exportProjectToExcel } from '../utils/exportToExcel';
-import { exportConsultantCalendar } from '../utils/exportToIcs';
+import { exportConsultantCalendar, consultantSummaryText, type CalendarFormat } from '../utils/exportToIcs';
 import { billableDays, formatDate } from '../utils/scheduler';
 import { safeExternalUrl } from '../utils/url';
 import { WinComboBox } from './winui/WinComboBox';
@@ -144,7 +144,9 @@ export default function ProjectDetails({
   const [statusFilter, _setStatusFilter] = useState<string>('all');
   const [isExporting, setIsExporting] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
-  const [calendarForm, setCalendarForm] = useState({ consultantId: '', fromDate: formatDate(new Date()) });
+  const [calendarForm, setCalendarForm] = useState({
+    consultantId: '', fromDate: formatDate(new Date()), format: 'ics' as CalendarFormat,
+  });
   const [ragRiskInputs, setRagRiskInputs] = useState<Record<string, string>>({});
   const [noteForm, setNoteForm] = useState({ subject: '', description: '', noteType: 'update' as Communication['noteType'] });
   const [noteSearch, setNoteSearch] = useState('');
@@ -169,13 +171,20 @@ export default function ProjectDetails({
     const consultant = consultants.find(c => c.id === calendarForm.consultantId);
     if (!activeProject || !consultant) return;
     try {
-      const count = exportConsultantCalendar(activeProject, tasks, consultant, calendarForm.fromDate);
+      const count = exportConsultantCalendar(
+        activeProject, tasks, consultant, calendarForm.fromDate, calendarForm.format,
+      );
       if (count === 0) {
         onAddToast('No scheduled tasks for that consultant on or after this date.', 'error');
         return;
       }
       setIsCalendarModalOpen(false);
-      onAddToast(`${count} appointment${count === 1 ? '' : 's'} exported. In Outlook: File > Open & Export > Import an iCalendar (.ics) file > Import.`, 'success');
+      onAddToast(
+        calendarForm.format === 'eml'
+          ? `${count} appointment${count === 1 ? '' : 's'} in a draft email. Open the .eml to edit and send it.`
+          : `${count} appointment${count === 1 ? '' : 's'} exported. In Outlook: File > Open & Export > Import an iCalendar (.ics) file > Import.`,
+        'success',
+      );
     } catch {
       onAddToast('Calendar export failed. Please try again.', 'error');
     }
@@ -183,6 +192,16 @@ export default function ProjectDetails({
 
   // Active Project Data
   const activeProject = projects.find(p => p.id === selectedProjectId) || null;
+
+  // Only built while the export modal is open, so this costs nothing otherwise.
+  const calendarSummary = isCalendarModalOpen && activeProject && calendarForm.consultantId
+    ? consultantSummaryText(
+        activeProject,
+        tasks,
+        consultants.find(c => c.id === calendarForm.consultantId)!,
+        calendarForm.fromDate,
+      )
+    : '';
   const projectTasks = tasks
     .filter(t => t.projectId === selectedProjectId)
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
@@ -798,7 +817,7 @@ export default function ProjectDetails({
                 <button
                   className="btn btn-ghost"
                   onClick={() => {
-                    setCalendarForm({ consultantId: '', fromDate: formatDate(new Date()) });
+                    setCalendarForm({ consultantId: '', fromDate: formatDate(new Date()), format: 'ics' });
                     setIsCalendarModalOpen(true);
                   }}
                   title="Export tasks as Outlook calendar appointments"
@@ -1821,11 +1840,71 @@ export default function ProjectDetails({
                     onChange={(value) => setCalendarForm({ ...calendarForm, fromDate: value })}
                   />
                 </div>
+                <div className="form-group">
+                  <label className="form-label">Download as</label>
+                  <WinComboBox
+                    value={calendarForm.format}
+                    onChange={(value) => setCalendarForm({ ...calendarForm, format: value as CalendarFormat })}
+                    options={[
+                      { label: 'Calendar file (.ics)', value: 'ics' },
+                      { label: 'Draft email with summary (.eml)', value: 'eml' },
+                    ]}
+                  />
+                </div>
+                {calendarSummary && (
+                  <div className="form-group">
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>Summary</span>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        style={{ padding: '0.2rem 0.6rem', fontSize: '0.78rem' }}
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(calendarSummary);
+                            onAddToast('Summary copied to clipboard.', 'success');
+                          } catch {
+                            onAddToast('Could not copy — select the text and copy manually.', 'error');
+                          }
+                        }}
+                      >
+                        <Copy size={13} /> Copy
+                      </button>
+                    </label>
+                    <pre
+                      style={{
+                        margin: 0,
+                        maxHeight: '11rem',
+                        overflow: 'auto',
+                        padding: '0.6rem 0.75rem',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--border-color)',
+                        backgroundColor: 'var(--bg-secondary)',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.75rem',
+                        lineHeight: 1.5,
+                        fontFamily: 'Consolas, "Cascadia Mono", monospace',
+                        whiteSpace: 'pre',
+                      }}
+                    >
+                      {calendarSummary}
+                    </pre>
+                  </div>
+                )}
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  Downloads an .ics of this project's tasks for that consultant as all-day appointments.
-                  In classic Outlook use <strong>File &gt; Open &amp; Export &gt; Import/Export &gt; Import an iCalendar (.ics) file &gt; Import</strong> —
-                  double-clicking the file opens it as a separate calendar instead of adding to the diary.
-                  Outlook does not de-duplicate on import, so set the date past anything already in the diary.
+                  {calendarForm.format === 'eml' ? (
+                    <>
+                      Creates a draft email to the consultant listing every appointment, with the calendar
+                      file attached. Open the .eml in Outlook, check it, and send. Nothing is sent for you.
+                    </>
+                  ) : (
+                    <>
+                      Downloads an .ics of this project's tasks for that consultant.
+                      In classic Outlook use <strong>File &gt; Open &amp; Export &gt; Import/Export &gt; Import an iCalendar (.ics) file &gt; Import</strong> —
+                      double-clicking the file opens it as a separate calendar instead of adding to the diary.
+                    </>
+                  )}
+                  {' '}Outlook does not de-duplicate on import, so set the date past anything already in the diary.
                 </p>
               </div>
               <div className="modal-footer">

@@ -176,6 +176,57 @@ export function calendarTasks(
     .sort((a, b) => (a.plannedStartDate! < b.plannedStartDate! ? -1 : 1));
 }
 
+/** One appointment as it will appear in the diary. */
+export interface Booking {
+  task: Task;
+  uid: string;
+  title: string;
+  date: string;          // YYYY-MM-DD, the day it lands on
+  /** Clock times, or null when it falls back to an all-day event. */
+  start: string | null;  // HHMMSS
+  end: string | null;
+  /** Exclusive end date, all-day bookings only. */
+  allDayUntil: string | null;
+}
+
+/**
+ * Everything that will be written to the calendar, in order. The .ics and the
+ * summary report are both built from this, so the email can never describe
+ * something different from what the attached calendar actually books.
+ */
+export function bookings(project: Project, tasks: Task[]): Booking[] {
+  return tasks.flatMap((task): Booking[] => {
+    // Defensive: the scheduler always produces end >= start, but these dates are
+    // persisted columns. One row where they are inverted would emit DTEND before
+    // DTSTART, and Outlook rejects the whole file rather than skipping the event.
+    const start = task.plannedStartDate!;
+    const end = task.plannedEndDate! < start ? start : task.plannedEndDate!;
+    const title = `${project.name}: ${task.name}`;
+
+    // One appointment per working day. An empty list means the task has no
+    // usable schedule, so it falls back to an all-day event over its range.
+    const slots = appointments(task, project.startDate);
+    if (slots.length === 0) {
+      return [{ task, uid: task.id, title, date: start, start: null, end: null, allDayUntil: dayAfter(end) }];
+    }
+
+    const spans = slots.length > 1;
+    return slots.map((slot, i) => ({
+      task,
+      // Each day is its own event, so each needs its own UID — a repeated UID
+      // lets Outlook treat the later days as edits of the first.
+      uid: spans ? `${task.id}-${i + 1}` : task.id,
+      // Days are otherwise identical in the diary; number them so a consultant
+      // can tell day 2 of 5 from day 3.
+      title: spans ? `${title} (${i + 1}/${slots.length})` : title,
+      date: slot.date,
+      start: slot.start,
+      end: slot.end,
+      allDayUntil: null,
+    }));
+  });
+}
+
 export function buildIcs(
   project: Project,
   tasks: Task[],
@@ -193,31 +244,22 @@ export function buildIcs(
     `X-WR-CALNAME:${escapeIcsText(`${project.name} - ${consultant.name}`)}`,
   ];
 
-  tasks.forEach(task => {
+  bookings(project, tasks).forEach(b => {
     const detail = [
-      task.description,
-      task.pinkNumber ? `Pink #: ${task.pinkNumber}` : '',
-      `Status: ${STATUS_LABEL[task.status]}`,
+      b.task.description,
+      b.task.pinkNumber ? `Pink #: ${b.task.pinkNumber}` : '',
+      `Status: ${STATUS_LABEL[b.task.status]}`,
       `Client: ${project.clientName}`,
     ].filter(Boolean).join('\n');
 
-    // Defensive: the scheduler always produces end >= start, but these dates are
-    // persisted columns. One row where they are inverted would emit DTEND before
-    // DTSTART, and Outlook rejects the whole file rather than skipping the event.
-    const start = task.plannedStartDate!;
-    const end = task.plannedEndDate! < start ? start : task.plannedEndDate!;
-
-    // One appointment per working day. An empty list means the task has no
-    // usable schedule, so it falls back to an all-day event over its range.
-    const slots = appointments(task, project.startDate);
-    const spans = slots.length > 1;
-
-    const emit = (when: string[], uid: string, summary: string) => lines.push(
+    lines.push(
       'BEGIN:VEVENT',
-      `UID:${uid}@pinnacle-flow`,
+      `UID:${b.uid}@pinnacle-flow`,
       `DTSTAMP:${stamp}`,
-      ...when,
-      `SUMMARY:${escapeIcsText(summary)}`,
+      ...(b.start
+        ? [`DTSTART:${icsDate(b.date)}T${b.start}`, `DTEND:${icsDate(b.date)}T${b.end}`]
+        : [`DTSTART;VALUE=DATE:${icsDate(b.date)}`, `DTEND;VALUE=DATE:${icsDate(b.allDayUntil!)}`]),
+      `SUMMARY:${escapeIcsText(b.title)}`,
       `DESCRIPTION:${escapeIcsText(detail)}`,
       `CATEGORIES:${escapeIcsText(CATEGORY)}`,
       // ponytail: all-day events import as Free in Outlook unless told otherwise.
@@ -226,36 +268,175 @@ export function buildIcs(
       'X-MICROSOFT-CDO-BUSYSTATUS:BUSY',
       'END:VEVENT',
     );
-
-    const title = `${project.name}: ${task.name}`;
-
-    if (slots.length === 0) {
-      emit([
-        `DTSTART;VALUE=DATE:${icsDate(start)}`,
-        `DTEND;VALUE=DATE:${icsDate(dayAfter(end))}`,
-      ], task.id, title);
-      return;
-    }
-
-    slots.forEach((slot, i) => {
-      emit(
-        [
-          `DTSTART:${icsDate(slot.date)}T${slot.start}`,
-          `DTEND:${icsDate(slot.date)}T${slot.end}`,
-        ],
-        // Each day is its own event, so each needs its own UID — a repeated UID
-        // lets Outlook treat the later days as edits of the first.
-        spans ? `${task.id}-${i + 1}` : task.id,
-        // Days are otherwise identical in the diary; number them so a consultant
-        // can tell day 2 of 5 from day 3.
-        spans ? `${title} (${i + 1}/${slots.length})` : title,
-      );
-    });
   });
 
   lines.push('END:VCALENDAR');
 
   return lines.map(foldIcsLine).join('\r\n') + '\r\n';
+}
+
+// ---------------------------------------------------------------------------
+// Summary report
+// ---------------------------------------------------------------------------
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** 2026-08-10 -> "Mon 10 Aug 2026" */
+export function longDate(ymd: string): string {
+  const d = parseDate(ymd);
+  return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/** 093000 -> "09:30" */
+function clock(hhmmss: string): string {
+  return `${hhmmss.slice(0, 2)}:${hhmmss.slice(2, 4)}`;
+}
+
+function slotLabel(b: Booking): string {
+  return b.start ? `${clock(b.start)} - ${clock(b.end!)}` : 'All day';
+}
+
+/** Half-days booked, so the total reads in the same units as task durations. */
+function totalDays(list: Booking[]): number {
+  return list.reduce((sum, b) => {
+    if (!b.start) return sum + 1;
+    return sum + (b.start === '093000' && b.end === '170000' ? 1 : 0.5);
+  }, 0);
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/** Plain-text summary of everything in the calendar file. */
+export function buildSummaryText(
+  project: Project,
+  consultant: Consultant,
+  list: Booking[],
+  fromDate: string,
+): string {
+  const rows = list.map(b => {
+    const pink = b.task.pinkNumber ? `  [${b.task.pinkNumber}]` : '';
+    return `  ${longDate(b.date).padEnd(16)}  ${slotLabel(b).padEnd(15)}  ${b.task.name}${pink}`;
+  });
+
+  return [
+    `Bookings for ${project.name}`,
+    `${consultant.name} · ${project.clientName}`,
+    `${list.length} appointment${list.length === 1 ? '' : 's'} from ${longDate(fromDate)}`,
+    '',
+    ...rows,
+    '',
+    `Total: ${totalDays(list)} day${totalDays(list) === 1 ? '' : 's'} of effort across ${new Set(list.map(b => b.date)).size} working days.`,
+    '',
+    'The attached .ics adds these to your Outlook calendar:',
+    'File > Open & Export > Import/Export > Import an iCalendar (.ics) file > Import.',
+  ].join('\n');
+}
+
+/** The same summary as a simple table, for the body of the email draft. */
+export function buildSummaryHtml(
+  project: Project,
+  consultant: Consultant,
+  list: Booking[],
+  fromDate: string,
+): string {
+  // Inline styles only — email clients strip <style> blocks.
+  const cell = 'padding:6px 10px;border-bottom:1px solid #e5e7eb;font-size:13px;';
+  const rows = list.map(b => `      <tr>
+        <td style="${cell}white-space:nowrap;">${escapeHtml(longDate(b.date))}</td>
+        <td style="${cell}white-space:nowrap;">${escapeHtml(slotLabel(b))}</td>
+        <td style="${cell}">${escapeHtml(b.task.name)}</td>
+        <td style="${cell}color:#6b7280;">${escapeHtml(b.task.pinkNumber || '')}</td>
+      </tr>`).join('\n');
+
+  const head = 'padding:6px 10px;border-bottom:2px solid #2d4a65;font-size:12px;text-align:left;color:#2d4a65;';
+
+  return `<html><body style="font-family:Segoe UI,Arial,sans-serif;color:#1f2937;">
+    <p>Hi ${escapeHtml(consultant.name.split(' ')[0])},</p>
+    <p>Here are your bookings for <strong>${escapeHtml(project.name)}</strong> (${escapeHtml(project.clientName)})
+       from ${escapeHtml(longDate(fromDate))} &mdash; ${list.length} appointment${list.length === 1 ? '' : 's'},
+       ${totalDays(list)} day${totalDays(list) === 1 ? '' : 's'} in total.</p>
+    <table cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+      <tr><th style="${head}">Date</th><th style="${head}">Time</th><th style="${head}">Task</th><th style="${head}">Pink #</th></tr>
+${rows}
+    </table>
+    <p style="font-size:13px;color:#6b7280;">To add these to your calendar, open the attached .ics and use
+       <strong>File &gt; Open &amp; Export &gt; Import/Export &gt; Import an iCalendar (.ics) file &gt; Import</strong>.
+       Opening it by double-click shows it as a separate calendar instead of adding to your diary.</p>
+  </body></html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Outlook email draft (.eml)
+// ---------------------------------------------------------------------------
+
+/** UTF-8 safe base64, wrapped at 76 characters as MIME requires. */
+function base64Lines(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  bytes.forEach(b => { binary += String.fromCharCode(b); });
+  return (btoa(binary).match(/.{1,76}/g) ?? []).join('\r\n');
+}
+
+/**
+ * Encodes a header value that may contain non-ASCII (RFC 2047). Plain ASCII is
+ * left alone so the common case stays readable in the raw file.
+ *
+ * Line breaks are flattened first: a project name containing one would end the
+ * header and start a new line, letting anything typed after it become a real
+ * header (Bcc:, Content-Type:, …) in the message the consultant then sends.
+ */
+function encodeHeader(value: string): string {
+  const flat = value.replace(/[\r\n]+/g, ' ').trim();
+  // eslint-disable-next-line no-control-regex
+  if (!/[^\x00-\x7f]/.test(flat)) return flat;
+  return `=?utf-8?B?${btoa(String.fromCharCode(...new TextEncoder().encode(flat)))}?=`;
+}
+
+/**
+ * An .eml Outlook opens as an editable, unsent draft — that is what X-Unsent
+ * does; without it the file opens read-only as a received message. The calendar
+ * rides along as a normal attachment rather than text/calendar, so Outlook does
+ * not try to interpret it as a meeting request addressed to the sender.
+ */
+export function buildEml(
+  project: Project,
+  consultant: Consultant,
+  list: Booking[],
+  icsContent: string,
+  icsFilename: string,
+  fromDate: string,
+  now = new Date(),
+): string {
+  const boundary = `----pinnacle-${now.getTime().toString(36)}`;
+  // A quote would close the filename parameter early, so drop those too.
+  const safeName = icsFilename.replace(/[\r\n"]+/g, ' ').trim();
+
+  return [
+    `To: ${encodeHeader(consultant.email || '')}`,
+    `Subject: ${encodeHeader(`Bookings for ${project.name}`)}`,
+    'X-Unsent: 1',
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/html; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    base64Lines(buildSummaryHtml(project, consultant, list, fromDate)),
+    '',
+    `--${boundary}`,
+    `Content-Type: application/octet-stream; name="${safeName}"`,
+    `Content-Disposition: attachment; filename="${safeName}"`,
+    'Content-Transfer-Encoding: base64',
+    '',
+    base64Lines(icsContent),
+    '',
+    `--${boundary}--`,
+    '',
+  ].join('\r\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -270,26 +451,57 @@ export function buildIcs(
  * File > Open & Export > Import/Export > Import an iCalendar (.ics) file > Import.
  * Double-clicking the file instead opens it as a separate read-only calendar.
  */
+/** The shareable summary on its own, for showing on screen and copying. */
+export function consultantSummaryText(
+  project: Project,
+  tasks: Task[],
+  consultant: Consultant,
+  fromDate: string,
+): string {
+  const selected = calendarTasks(project, tasks, consultant.id, fromDate);
+  if (selected.length === 0) return '';
+  return buildSummaryText(project, consultant, bookings(project, selected), fromDate);
+}
+
+export type CalendarFormat = 'ics' | 'eml';
+
+function download(content: string, filename: string, mime: string): void {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
 export function exportConsultantCalendar(
   project: Project,
   tasks: Task[],
   consultant: Consultant,
   fromDate: string,
+  format: CalendarFormat = 'ics',
 ): number {
   const selected = calendarTasks(project, tasks, consultant.id, fromDate);
   if (selected.length === 0) return 0;
 
-  const blob = new Blob([buildIcs(project, selected, consultant)], {
-    type: 'text/calendar;charset=utf-8',
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${project.name} - ${consultant.name} - Calendar.ics`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  const stem = `${project.name} - ${consultant.name}`;
+  const icsName = `${stem} - Calendar.ics`;
+  const ics = buildIcs(project, selected, consultant);
 
-  return selected.length;
+  if (format === 'eml') {
+    const list = bookings(project, selected);
+    download(
+      buildEml(project, consultant, list, ics, icsName, fromDate),
+      `${stem} - Bookings.eml`,
+      'message/rfc822',
+    );
+    return list.length;
+  }
+
+  download(ics, icsName, 'text/calendar;charset=utf-8');
+  return bookings(project, selected).length;
 }
+
