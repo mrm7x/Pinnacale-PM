@@ -12,7 +12,7 @@ import {
   Pin, AlertTriangle, Lightbulb, Zap, Bell, CheckCircle, Search, Copy
 } from 'lucide-react';
 import { exportProjectToExcel } from '../utils/exportToExcel';
-import { exportConsultantCalendar, consultantSummaryText, type CalendarFormat } from '../utils/exportToIcs';
+import { exportConsultantCalendar, consultantSummary, type CalendarFormat } from '../utils/exportToIcs';
 import { billableDays, formatDate } from '../utils/scheduler';
 import { safeExternalUrl } from '../utils/url';
 import { WinComboBox } from './winui/WinComboBox';
@@ -145,7 +145,7 @@ export default function ProjectDetails({
   const [isExporting, setIsExporting] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [calendarForm, setCalendarForm] = useState({
-    consultantId: '', fromDate: formatDate(new Date()), format: 'ics' as CalendarFormat,
+    consultantId: '', fromDate: formatDate(new Date()), toDate: '', format: 'ics' as CalendarFormat,
   });
   const [ragRiskInputs, setRagRiskInputs] = useState<Record<string, string>>({});
   const [noteForm, setNoteForm] = useState({ subject: '', description: '', noteType: 'update' as Communication['noteType'] });
@@ -170,12 +170,16 @@ export default function ProjectDetails({
     e.preventDefault();
     const consultant = consultants.find(c => c.id === calendarForm.consultantId);
     if (!activeProject || !consultant) return;
+    if (calendarForm.toDate && calendarForm.toDate < calendarForm.fromDate) {
+      onAddToast('The end date is before the start date.', 'error');
+      return;
+    }
     try {
       const count = exportConsultantCalendar(
-        activeProject, tasks, consultant, calendarForm.fromDate, calendarForm.format,
+        activeProject, tasks, consultant, calendarForm.fromDate, calendarForm.toDate, calendarForm.format,
       );
       if (count === 0) {
-        onAddToast('No scheduled tasks for that consultant on or after this date.', 'error');
+        onAddToast('No scheduled tasks for that consultant in this date range.', 'error');
         return;
       }
       setIsCalendarModalOpen(false);
@@ -195,13 +199,14 @@ export default function ProjectDetails({
 
   // Only built while the export modal is open, so this costs nothing otherwise.
   const calendarSummary = isCalendarModalOpen && activeProject && calendarForm.consultantId
-    ? consultantSummaryText(
+    ? consultantSummary(
         activeProject,
         tasks,
         consultants.find(c => c.id === calendarForm.consultantId)!,
         calendarForm.fromDate,
+        calendarForm.toDate,
       )
-    : '';
+    : { text: '', html: '' };
   const projectTasks = tasks
     .filter(t => t.projectId === selectedProjectId)
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
@@ -817,7 +822,7 @@ export default function ProjectDetails({
                 <button
                   className="btn btn-ghost"
                   onClick={() => {
-                    setCalendarForm({ consultantId: '', fromDate: formatDate(new Date()), format: 'ics' });
+                    setCalendarForm({ consultantId: '', fromDate: formatDate(new Date()), toDate: '', format: 'ics' });
                     setIsCalendarModalOpen(true);
                   }}
                   title="Export tasks as Outlook calendar appointments"
@@ -1841,6 +1846,27 @@ export default function ProjectDetails({
                   />
                 </div>
                 <div className="form-group">
+                  {/* A div, not a label: a <button> inside a label becomes that
+                      label's control, so clicking the caption would clear the date. */}
+                  <div className="form-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span>Up to (optional)</span>
+                    {calendarForm.toDate && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        style={{ padding: '0.2rem 0.6rem', fontSize: '0.78rem' }}
+                        onClick={() => setCalendarForm({ ...calendarForm, toDate: '' })}
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <WinDatePicker
+                    value={calendarForm.toDate}
+                    onChange={(value) => setCalendarForm({ ...calendarForm, toDate: value })}
+                  />
+                </div>
+                <div className="form-group">
                   <label className="form-label">Download as</label>
                   <WinComboBox
                     value={calendarForm.format}
@@ -1851,9 +1877,9 @@ export default function ProjectDetails({
                     ]}
                   />
                 </div>
-                {calendarSummary && (
+                {calendarSummary.text && (
                   <div className="form-group">
-                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div className="form-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>Summary</span>
                       <button
                         type="button"
@@ -1861,16 +1887,29 @@ export default function ProjectDetails({
                         style={{ padding: '0.2rem 0.6rem', fontSize: '0.78rem' }}
                         onClick={async () => {
                           try {
-                            await navigator.clipboard.writeText(calendarSummary);
-                            onAddToast('Summary copied to clipboard.', 'success');
+                            // Both flavours: Outlook and Word take the HTML and paste a real
+                            // table, plain-text editors fall back to the monospace version.
+                            await navigator.clipboard.write([
+                              new ClipboardItem({
+                                'text/html': new Blob([calendarSummary.html], { type: 'text/html' }),
+                                'text/plain': new Blob([calendarSummary.text], { type: 'text/plain' }),
+                              }),
+                            ]);
+                            onAddToast('Summary copied — paste straight into Outlook.', 'success');
                           } catch {
-                            onAddToast('Could not copy — select the text and copy manually.', 'error');
+                            // ClipboardItem is missing on older browsers; plain text still works.
+                            try {
+                              await navigator.clipboard.writeText(calendarSummary.text);
+                              onAddToast('Summary copied as plain text.', 'success');
+                            } catch {
+                              onAddToast('Could not copy — select the text and copy manually.', 'error');
+                            }
                           }
                         }}
                       >
                         <Copy size={13} /> Copy
                       </button>
-                    </label>
+                    </div>
                     <pre
                       style={{
                         margin: 0,
@@ -1887,7 +1926,7 @@ export default function ProjectDetails({
                         whiteSpace: 'pre',
                       }}
                     >
-                      {calendarSummary}
+                      {calendarSummary.text}
                     </pre>
                   </div>
                 )}

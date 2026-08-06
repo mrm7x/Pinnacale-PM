@@ -6,7 +6,7 @@
 import {
   escapeIcsText, foldIcsLine, dayAfter, calendarTasks, buildIcs, halfDayPeriod,
   appointments, bookings, buildSummaryText, buildSummaryHtml, buildEml, longDate,
-  consultantSummaryText,
+  consultantSummary, rangeLabel,
 } from '../src/utils/exportToIcs.ts';
 import type { Project, Task, Consultant } from '../src/types.ts';
 
@@ -72,6 +72,14 @@ check(picked.map(t => t.id).join(',') === 'mine,later', 'filters by project, con
 check(calendarTasks(project, all, consultant.id, '2026-01-01').length === 3, 'earlier from-date widens the set');
 check(calendarTasks(project, all, consultant.id, '2027-01-01').length === 0, 'future from-date matches nothing');
 check(calendarTasks(project, all, 'c2', '2026-01-01').length === 1, "another consultant's tasks are separate");
+
+// An end date bounds the other side of the range; empty means no upper bound.
+check(calendarTasks(project, all, consultant.id, '2026-01-01', '').length === 3, 'an empty end date does not filter');
+check(calendarTasks(project, all, consultant.id, '2026-01-01', '2026-08-31').map(t => t.id).join(',') === 'early,mine',
+  'the end date drops later tasks');
+check(calendarTasks(project, all, consultant.id, '2026-08-10', '2026-08-10').map(t => t.id).join(',') === 'mine',
+  'a single-day range keeps a task starting that day');
+check(calendarTasks(project, all, consultant.id, '2026-08-11', '2026-08-31').length === 0, 'an empty window matches nothing');
 
 // --- generated calendar ---------------------------------------------------
 const ics = buildIcs(project, picked, consultant, new Date('2026-08-05T09:15:00Z'));
@@ -217,17 +225,29 @@ check(text.startsWith('Bookings for Acme Rollout'), 'the report is titled by pro
 check(text.includes('Sam Reed'), 'the report names the consultant');
 check(text.includes('Mon 10 Aug 2026') && text.includes('09:30 - 12:30'), 'a half day shows its morning slot');
 check(text.includes('Tue 11 Aug 2026') && text.includes('09:30 - 17:00'), 'a full day shows working hours');
-check(text.includes('[PK-1]'), 'pink numbers are carried into the report');
+check(!text.includes('PK-1'), 'pink numbers stay out of what gets emailed');
 check(text.includes('Total: 3.5 days of effort across 4 working days.'), 'the total counts half days as half');
 check(text.includes('4 appointments from Mon 10 Aug 2026'), 'the report states the count and start');
 
+// The range reads as one phrase whether or not an end date was chosen.
+check(rangeLabel(MONDAY, '') === 'from Mon 10 Aug 2026', 'no end date reads as an open range');
+check(rangeLabel(MONDAY, '2026-08-14') === 'from Mon 10 Aug 2026 to Fri 14 Aug 2026', 'an end date closes the range');
+check(buildSummaryText(project, consultant, report, MONDAY, '2026-08-14').includes('to Fri 14 Aug 2026'), 'the report states the end date');
+
 // The on-screen copy is built from the same tasks the export would select.
-check(consultantSummaryText(project, all, consultant, '2026-08-01').includes('Bookings for Acme Rollout'), 'the on-screen summary is filtered like the export');
-check(consultantSummaryText(project, all, consultant, '2027-01-01') === '', 'nothing to export means nothing to show');
+check(consultantSummary(project, all, consultant, '2026-08-01').text.includes('Bookings for Acme Rollout'), 'the on-screen summary is filtered like the export');
+check(consultantSummary(project, all, consultant, '2027-01-01').text === '', 'nothing to export means nothing to show');
+check(consultantSummary(project, all, consultant, '2027-01-01').html === '', 'and no html either');
+// The pasteable copy is the same content as the email body, not a second format.
+check(consultantSummary(project, all, consultant, '2026-08-01').html.includes('<table'),
+  'the copy carries html so Outlook pastes a table');
 
 const html = buildSummaryHtml(project, consultant, report, MONDAY);
 check(html.includes('<table'), 'the html summary is a table');
 check(html.includes('Data migration'), 'tasks appear in the html summary');
+check(!html.includes('Pink') && !html.includes('PK-1'), 'the email table has no pink number column');
+// Word ignores <style> blocks and inherited fonts, so every cell carries its own.
+check((html.match(/<td style="font-family:/g) ?? []).length === report.length * 3, 'every cell styles its own font for Outlook');
 // The body is user data; a task name must not be able to inject markup.
 check(!buildSummaryHtml(project, consultant,
   bookings(project, [task({ id: 'x', name: '<script>bad</script>', startHalfDay: 0, endHalfDay: 0, plannedStartDate: MONDAY, plannedEndDate: MONDAY })]),
@@ -235,7 +255,7 @@ check(!buildSummaryHtml(project, consultant,
 
 // --- email draft -----------------------------------------------------------
 const eml = buildEml(project, consultant, report, buildIcs(project, reportTasks, consultant),
-  'Acme Rollout - Sam Reed - Calendar.ics', MONDAY, new Date('2026-08-05T09:15:00Z'));
+  'Acme Rollout - Sam Reed - Calendar.ics', MONDAY, '', new Date('2026-08-05T09:15:00Z'));
 check(eml.includes('Subject: Bookings for Acme Rollout'), 'the subject names the project');
 check(eml.includes('X-Unsent: 1'), 'Outlook opens it as an editable draft, not a received message');
 check(eml.includes('MIME-Version: 1.0'), 'it declares MIME');

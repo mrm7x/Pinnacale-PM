@@ -154,8 +154,10 @@ export function appointments(task: Task, projectStartDate: string): Appointment[
 }
 
 /**
- * Tasks for one consultant on one project, starting on or after `fromDate`.
- * The from-date is the user's own de-duplication control: Outlook's file import
+ * Tasks for one consultant on one project, starting within [fromDate, toDate].
+ * An empty `toDate` means no upper bound.
+ *
+ * The date range is the user's own de-duplication control: Outlook's file import
  * ignores UID and will happily create duplicates, so re-exporting from a later
  * date is how you avoid re-adding appointments already in the diary.
  */
@@ -164,6 +166,7 @@ export function calendarTasks(
   tasks: Task[],
   consultantId: string,
   fromDate: string,
+  toDate = '',
 ): Task[] {
   return tasks
     .filter(t =>
@@ -171,7 +174,8 @@ export function calendarTasks(
       t.assignedConsultantId === consultantId &&
       !!t.plannedStartDate &&
       !!t.plannedEndDate &&
-      t.plannedStartDate >= fromDate,
+      t.plannedStartDate >= fromDate &&
+      (!toDate || t.plannedStartDate! <= toDate),
     )
     .sort((a, b) => (a.plannedStartDate! < b.plannedStartDate! ? -1 : 1));
 }
@@ -309,22 +313,26 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/** "from Mon 10 Aug 2026", or "… to Fri 14 Aug 2026" when an end date is set. */
+export function rangeLabel(fromDate: string, toDate: string): string {
+  return `from ${longDate(fromDate)}${toDate ? ` to ${longDate(toDate)}` : ''}`;
+}
+
 /** Plain-text summary of everything in the calendar file. */
 export function buildSummaryText(
   project: Project,
   consultant: Consultant,
   list: Booking[],
   fromDate: string,
+  toDate = '',
 ): string {
-  const rows = list.map(b => {
-    const pink = b.task.pinkNumber ? `  [${b.task.pinkNumber}]` : '';
-    return `  ${longDate(b.date).padEnd(16)}  ${slotLabel(b).padEnd(15)}  ${b.task.name}${pink}`;
-  });
+  const rows = list.map(b =>
+    `  ${longDate(b.date).padEnd(16)}  ${slotLabel(b).padEnd(15)}  ${b.task.name}`);
 
   return [
     `Bookings for ${project.name}`,
     `${consultant.name} · ${project.clientName}`,
-    `${list.length} appointment${list.length === 1 ? '' : 's'} from ${longDate(fromDate)}`,
+    `${list.length} appointment${list.length === 1 ? '' : 's'} ${rangeLabel(fromDate, toDate)}`,
     '',
     ...rows,
     '',
@@ -335,34 +343,45 @@ export function buildSummaryText(
   ].join('\n');
 }
 
-/** The same summary as a simple table, for the body of the email draft. */
+/**
+ * The same summary as a simple table, for the body of the email draft and for
+ * the clipboard.
+ *
+ * Outlook renders HTML with the Word engine, which drops <style> blocks and
+ * does not inherit the body font into a table — so every style is inline and
+ * the font is repeated on each cell, otherwise a pasted table falls back to
+ * Times New Roman.
+ */
 export function buildSummaryHtml(
   project: Project,
   consultant: Consultant,
   list: Booking[],
   fromDate: string,
+  toDate = '',
 ): string {
-  // Inline styles only — email clients strip <style> blocks.
-  const cell = 'padding:6px 10px;border-bottom:1px solid #e5e7eb;font-size:13px;';
+  // Single quotes: a family name with a space must be quoted to be valid CSS,
+  // and these strings sit inside double-quoted style attributes.
+  const font = "font-family:'Segoe UI',Arial,sans-serif;";
+  const cell = `${font}padding:6px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#1f2937;`;
   const rows = list.map(b => `      <tr>
         <td style="${cell}white-space:nowrap;">${escapeHtml(longDate(b.date))}</td>
         <td style="${cell}white-space:nowrap;">${escapeHtml(slotLabel(b))}</td>
         <td style="${cell}">${escapeHtml(b.task.name)}</td>
-        <td style="${cell}color:#6b7280;">${escapeHtml(b.task.pinkNumber || '')}</td>
       </tr>`).join('\n');
 
-  const head = 'padding:6px 10px;border-bottom:2px solid #2d4a65;font-size:12px;text-align:left;color:#2d4a65;';
+  const head = `${font}padding:6px 12px;border-bottom:2px solid #2d4a65;font-size:12px;text-align:left;color:#2d4a65;`;
+  const para = `${font}font-size:13px;color:#1f2937;`;
 
-  return `<html><body style="font-family:Segoe UI,Arial,sans-serif;color:#1f2937;">
-    <p>Hi ${escapeHtml(consultant.name.split(' ')[0])},</p>
-    <p>Here are your bookings for <strong>${escapeHtml(project.name)}</strong> (${escapeHtml(project.clientName)})
-       from ${escapeHtml(longDate(fromDate))} &mdash; ${list.length} appointment${list.length === 1 ? '' : 's'},
+  return `<html><body style="${font}color:#1f2937;">
+    <p style="${para}">Hi ${escapeHtml(consultant.name.split(' ')[0])},</p>
+    <p style="${para}">Here are your bookings for <strong>${escapeHtml(project.name)}</strong> (${escapeHtml(project.clientName)})
+       ${escapeHtml(rangeLabel(fromDate, toDate))} &mdash; ${list.length} appointment${list.length === 1 ? '' : 's'},
        ${totalDays(list)} day${totalDays(list) === 1 ? '' : 's'} in total.</p>
-    <table cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
-      <tr><th style="${head}">Date</th><th style="${head}">Time</th><th style="${head}">Task</th><th style="${head}">Pink #</th></tr>
+    <table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+      <tr><th style="${head}">Date</th><th style="${head}">Time</th><th style="${head}">Task</th></tr>
 ${rows}
     </table>
-    <p style="font-size:13px;color:#6b7280;">To add these to your calendar, open the attached .ics and use
+    <p style="${font}font-size:13px;color:#6b7280;">To add these to your calendar, open the attached .ics and use
        <strong>File &gt; Open &amp; Export &gt; Import/Export &gt; Import an iCalendar (.ics) file &gt; Import</strong>.
        Opening it by double-click shows it as a separate calendar instead of adding to your diary.</p>
   </body></html>`;
@@ -408,6 +427,7 @@ export function buildEml(
   icsContent: string,
   icsFilename: string,
   fromDate: string,
+  toDate = '',
   now = new Date(),
 ): string {
   const boundary = `----pinnacle-${now.getTime().toString(36)}`;
@@ -425,7 +445,7 @@ export function buildEml(
     'Content-Type: text/html; charset=utf-8',
     'Content-Transfer-Encoding: base64',
     '',
-    base64Lines(buildSummaryHtml(project, consultant, list, fromDate)),
+    base64Lines(buildSummaryHtml(project, consultant, list, fromDate, toDate)),
     '',
     `--${boundary}`,
     `Content-Type: application/octet-stream; name="${safeName}"`,
@@ -451,16 +471,26 @@ export function buildEml(
  * File > Open & Export > Import/Export > Import an iCalendar (.ics) file > Import.
  * Double-clicking the file instead opens it as a separate read-only calendar.
  */
-/** The shareable summary on its own, for showing on screen and copying. */
-export function consultantSummaryText(
+/**
+ * The shareable summary on its own, for showing on screen and copying. Both
+ * flavours come from the same bookings: the plain text is what shows in the
+ * modal, the HTML is what Outlook picks up when the copy is pasted into an
+ * email. Empty strings when nothing matches the filter.
+ */
+export function consultantSummary(
   project: Project,
   tasks: Task[],
   consultant: Consultant,
   fromDate: string,
-): string {
-  const selected = calendarTasks(project, tasks, consultant.id, fromDate);
-  if (selected.length === 0) return '';
-  return buildSummaryText(project, consultant, bookings(project, selected), fromDate);
+  toDate = '',
+): { text: string; html: string } {
+  const selected = calendarTasks(project, tasks, consultant.id, fromDate, toDate);
+  if (selected.length === 0) return { text: '', html: '' };
+  const list = bookings(project, selected);
+  return {
+    text: buildSummaryText(project, consultant, list, fromDate, toDate),
+    html: buildSummaryHtml(project, consultant, list, fromDate, toDate),
+  };
 }
 
 export type CalendarFormat = 'ics' | 'eml';
@@ -482,9 +512,10 @@ export function exportConsultantCalendar(
   tasks: Task[],
   consultant: Consultant,
   fromDate: string,
+  toDate = '',
   format: CalendarFormat = 'ics',
 ): number {
-  const selected = calendarTasks(project, tasks, consultant.id, fromDate);
+  const selected = calendarTasks(project, tasks, consultant.id, fromDate, toDate);
   if (selected.length === 0) return 0;
 
   const stem = `${project.name} - ${consultant.name}`;
@@ -494,7 +525,7 @@ export function exportConsultantCalendar(
   if (format === 'eml') {
     const list = bookings(project, selected);
     download(
-      buildEml(project, consultant, list, ics, icsName, fromDate),
+      buildEml(project, consultant, list, ics, icsName, fromDate, toDate),
       `${stem} - Bookings.eml`,
       'message/rfc822',
     );
