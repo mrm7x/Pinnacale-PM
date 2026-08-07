@@ -81,6 +81,22 @@ check(calendarTasks(project, all, consultant.id, '2026-08-10', '2026-08-10').map
   'a single-day range keeps a task starting that day');
 check(calendarTasks(project, all, consultant.id, '2026-08-11', '2026-08-31').length === 0, 'an empty window matches nothing');
 
+// --- customer-owned tasks -------------------------------------------------
+// Distinct start dates so the sorted order below is unambiguous.
+const owners: Task[] = [
+  task({ id: 'pinnacle', taskOwner: 'Pinnacle', plannedStartDate: '2026-08-10' }),
+  task({ id: 'customer', taskOwner: 'Customer', plannedStartDate: '2026-08-11' }),
+  task({ id: 'shared', taskOwner: 'Pinnacle/Customer', plannedStartDate: '2026-08-12' }),
+  task({ id: 'unset', taskOwner: undefined, plannedStartDate: '2026-08-13' }),
+];
+const owned = (mode: 'exclude' | 'include' | 'only') =>
+  calendarTasks(project, owners, consultant.id, '2026-01-01', '', mode).map(t => t.id).join(',');
+check(owned('exclude') === 'pinnacle,shared,unset', 'customer tasks are excluded by default');
+check(calendarTasks(project, owners, consultant.id, '2026-01-01').map(t => t.id).join(',') === 'pinnacle,shared,unset',
+  'and excluded when no mode is passed at all');
+check(owned('include') === 'pinnacle,customer,shared,unset', 'include keeps everything');
+check(owned('only') === 'customer', 'only keeps customer-owned tasks alone');
+
 // --- generated calendar ---------------------------------------------------
 const ics = buildIcs(project, picked, consultant, new Date('2026-08-05T09:15:00Z'));
 check(ics.startsWith('BEGIN:VCALENDAR\r\n'), 'starts with VCALENDAR');

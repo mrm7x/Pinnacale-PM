@@ -12,7 +12,7 @@ import {
   Pin, AlertTriangle, Lightbulb, Zap, Bell, CheckCircle, Search, Copy
 } from 'lucide-react';
 import { exportProjectToExcel } from '../utils/exportToExcel';
-import { exportConsultantCalendar, consultantSummary, type CalendarFormat } from '../utils/exportToIcs';
+import { exportConsultantCalendar, consultantSummary, type CalendarFormat, type CustomerTaskMode } from '../utils/exportToIcs';
 import { billableDays, formatDate } from '../utils/scheduler';
 import { safeExternalUrl } from '../utils/url';
 import { WinComboBox } from './winui/WinComboBox';
@@ -146,7 +146,11 @@ export default function ProjectDetails({
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [calendarForm, setCalendarForm] = useState({
     consultantId: '', fromDate: formatDate(new Date()), toDate: '', format: 'ics' as CalendarFormat,
+    includeCustomer: false, onlyCustomer: false,
   });
+  // The two boxes clear each other, so at most one is ever set here.
+  const customerTaskMode: CustomerTaskMode =
+    calendarForm.onlyCustomer ? 'only' : calendarForm.includeCustomer ? 'include' : 'exclude';
   const [ragRiskInputs, setRagRiskInputs] = useState<Record<string, string>>({});
   const [noteForm, setNoteForm] = useState({ subject: '', description: '', noteType: 'update' as Communication['noteType'] });
   const [noteSearch, setNoteSearch] = useState('');
@@ -177,9 +181,19 @@ export default function ProjectDetails({
     try {
       const count = exportConsultantCalendar(
         activeProject, tasks, consultant, calendarForm.fromDate, calendarForm.toDate, calendarForm.format,
+        customerTaskMode,
       );
       if (count === 0) {
-        onAddToast('No scheduled tasks for that consultant in this date range.', 'error');
+        // The owner filter is a second reason for an empty export, so say which
+        // one applied — otherwise the user widens a date range that was fine.
+        onAddToast(
+          customerTaskMode === 'only'
+            ? 'No Customer-owned tasks for that consultant in this date range.'
+            : customerTaskMode === 'exclude'
+              ? 'No scheduled tasks for that consultant in this date range. Customer-owned tasks are excluded unless you tick the box.'
+              : 'No scheduled tasks for that consultant in this date range.',
+          'error',
+        );
         return;
       }
       setIsCalendarModalOpen(false);
@@ -205,6 +219,7 @@ export default function ProjectDetails({
         consultants.find(c => c.id === calendarForm.consultantId)!,
         calendarForm.fromDate,
         calendarForm.toDate,
+        customerTaskMode,
       )
     : { text: '', html: '' };
   const projectTasks = tasks
@@ -822,7 +837,10 @@ export default function ProjectDetails({
                 <button
                   className="btn btn-ghost"
                   onClick={() => {
-                    setCalendarForm({ consultantId: '', fromDate: formatDate(new Date()), toDate: '', format: 'ics' });
+                    setCalendarForm({
+                      consultantId: '', fromDate: formatDate(new Date()), toDate: '', format: 'ics',
+                      includeCustomer: false, onlyCustomer: false,
+                    });
                     setIsCalendarModalOpen(true);
                   }}
                   title="Export tasks as Outlook calendar appointments"
@@ -1876,6 +1894,30 @@ export default function ProjectDetails({
                       { label: 'Draft email with summary (.eml)', value: 'eml' },
                     ]}
                   />
+                </div>
+                <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                    <input type="checkbox" className="win-checkbox"
+                      checked={calendarForm.includeCustomer}
+                      // Ticking this while "only" is on would leave two boxes
+                      // claiming different things, so it turns "only" back off.
+                      onChange={(e) => setCalendarForm({
+                        ...calendarForm, includeCustomer: e.target.checked, onlyCustomer: false,
+                      })}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <span>Include Customer tasks in the export</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                    <input type="checkbox" className="win-checkbox"
+                      checked={calendarForm.onlyCustomer}
+                      onChange={(e) => setCalendarForm({
+                        ...calendarForm, onlyCustomer: e.target.checked, includeCustomer: false,
+                      })}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <span>Only export Customer tasks</span>
+                  </label>
                 </div>
                 {calendarSummary.text && (
                   <div className="form-group">

@@ -154,6 +154,13 @@ export function appointments(task: Task, projectStartDate: string): Appointment[
 }
 
 /**
+ * How customer-owned tasks are treated. They are the customer's own work rather
+ * than the consultant's, so they stay out of the diary unless asked for.
+ * 'Pinnacle/Customer' is shared work and is never treated as customer-owned.
+ */
+export type CustomerTaskMode = 'exclude' | 'include' | 'only';
+
+/**
  * Tasks for one consultant on one project, starting within [fromDate, toDate].
  * An empty `toDate` means no upper bound.
  *
@@ -167,6 +174,7 @@ export function calendarTasks(
   consultantId: string,
   fromDate: string,
   toDate = '',
+  customerTasks: CustomerTaskMode = 'exclude',
 ): Task[] {
   return tasks
     .filter(t =>
@@ -175,7 +183,8 @@ export function calendarTasks(
       !!t.plannedStartDate &&
       !!t.plannedEndDate &&
       t.plannedStartDate >= fromDate &&
-      (!toDate || t.plannedStartDate! <= toDate),
+      (!toDate || t.plannedStartDate! <= toDate) &&
+      (customerTasks === 'include' || (t.taskOwner === 'Customer') === (customerTasks === 'only')),
     )
     .sort((a, b) => (a.plannedStartDate! < b.plannedStartDate! ? -1 : 1));
 }
@@ -483,8 +492,9 @@ export function consultantSummary(
   consultant: Consultant,
   fromDate: string,
   toDate = '',
+  customerTasks: CustomerTaskMode = 'exclude',
 ): { text: string; html: string } {
-  const selected = calendarTasks(project, tasks, consultant.id, fromDate, toDate);
+  const selected = calendarTasks(project, tasks, consultant.id, fromDate, toDate, customerTasks);
   if (selected.length === 0) return { text: '', html: '' };
   const list = bookings(project, selected);
   return {
@@ -514,8 +524,9 @@ export function exportConsultantCalendar(
   fromDate: string,
   toDate = '',
   format: CalendarFormat = 'ics',
+  customerTasks: CustomerTaskMode = 'exclude',
 ): number {
-  const selected = calendarTasks(project, tasks, consultant.id, fromDate, toDate);
+  const selected = calendarTasks(project, tasks, consultant.id, fromDate, toDate, customerTasks);
   if (selected.length === 0) return 0;
 
   const stem = `${project.name} - ${consultant.name}`;
