@@ -166,7 +166,6 @@ export default function TaskImportModal({ project, existingTasks, consultants, a
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
             <button type="button" className="btn btn-primary"
               disabled={!parsed || !!parsed.fatal || counts.ok === 0}
-              style={{ backgroundColor: accent, color: 'white', border: '1px solid rgba(0,0,0,0.1)' }}
               onClick={doImport}
             >
               <Upload size={14} /> Import {counts.ok > 0 ? `${counts.ok} task${counts.ok === 1 ? '' : 's'}` : ''}

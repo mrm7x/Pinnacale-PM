@@ -6,7 +6,7 @@ import type {
 import { canCreateTask, canEditTask, canEditAnyTask, type ActiveUser } from '../utils/permissions';
 import {
   Plus, ChevronDown, ChevronRight, X, Clock, Calendar, Trash2,
-  Link2, AlertTriangle, ListChecks, Filter, GripVertical, CornerDownRight,
+  Link2, AlertTriangle, ListChecks, GripVertical, CornerDownRight,
   Columns3, List, Minus, Save, Copy, Upload
 } from 'lucide-react';
 import { WinComboBox } from './winui/WinComboBox';
@@ -1125,43 +1125,25 @@ export default function TaskListV2({
       {/* Toolbar */}
       <div className="tv2-toolbar">
         <div className="tv2-toolbar-left">
-          <h3 className="tv2-title">Implementation Tasks</h3>
-          <div className="tv2-view-toggle" role="group" aria-label="Task view">
+          <div className="seg" role="group" aria-label="Task view">
             <button
               type="button"
-              className={`tv2-view-btn ${viewMode === 'list' ? 'tv2-view-btn-active' : ''}`}
+              className={viewMode === 'list' ? 'active' : ''}
               onClick={() => setViewMode('list')}
             >
               <List size={14} /> List
             </button>
             <button
               type="button"
-              className={`tv2-view-btn ${viewMode === 'kanban' ? 'tv2-view-btn-active' : ''}`}
+              className={viewMode === 'kanban' ? 'active' : ''}
               onClick={() => setViewMode('kanban')}
             >
               <Columns3 size={14} /> Kanban
             </button>
           </div>
-          {canCreateTask(activeUser, project) && (
-            <button className="btn btn-primary tv2-add-btn"
-              style={{ backgroundColor: accent, color: 'white', border: '1px solid rgba(0,0,0,0.1)' }}
-              onClick={() => openCreate(null)}
-            >
-              <Plus size={15} /> Add Task
-            </button>
-          )}
-          {canCreateTask(activeUser, project) && (
-            <button className="btn btn-secondary tv2-add-btn" onClick={() => setShowImport(true)}
-              title="Import tasks from an Excel (.xlsx) or CSV file">
-              <Upload size={15} /> Import
-            </button>
-          )}
-        </div>
         {/* View controls: saved views, columns, font zoom */}
-        <div className="tv2-view-controls">
           <div className="tv2-view-group">
-            <span className="tv2-view-group-label"><ListChecks size={13} /> View</span>
-            <WinComboBox className="tv2-view-picker" value={activeViewId}
+                        <WinComboBox className="tv2-view-picker" value={activeViewId}
               onChange={(id) => { const v = views.find(x => x.id === id); if (v) applyView(v); }}
               options={views.map(v => ({ label: v.name + (v.isBuiltIn ? '' : ''), value: v.id }))}
             />
@@ -1220,9 +1202,20 @@ export default function TaskListV2({
               <Plus size={15} />
             </button>
           </div>
+          <span className="tv2-spacer" />
+          {canCreateTask(activeUser, project) && (
+            <button className="btn btn-secondary" onClick={() => setShowImport(true)}
+              title="Import tasks from an Excel (.xlsx) or CSV file">
+              <Upload size={14} /> Import
+            </button>
+          )}
+          {canCreateTask(activeUser, project) && (
+            <button className="btn btn-primary" onClick={() => openCreate(null)}>
+              <Plus size={14} /> Add task
+            </button>
+          )}
         </div>
         <div className="tv2-filters">
-          <span className="tv2-filters-label"><Filter size={13} /> Filters</span>
           <label className="tv2-filter-check">
             <input type="checkbox" className="win-checkbox" checked={hideCompleted} onChange={(e) => setHideCompleted(e.target.checked)} />
             <span>Hide completed</span>
@@ -1262,7 +1255,7 @@ export default function TaskListV2({
       </div>
 
       {viewMode === 'list' ? (
-        <div className="tv2-table card" style={{ borderTop: `4px solid ${accent}` }}>
+        <div className="tv2-table card">
           {projectTasks.length === 0 ? (
             <div className="tv2-empty">
               <p>No tasks created yet for this project. Click <b>Add Task</b> to build your implementation checklist.</p>
@@ -1295,7 +1288,7 @@ export default function TaskListV2({
           )}
         </div>
       ) : (
-        <div className="tv2-kanban card" style={{ borderTop: `4px solid ${accent}` }}>
+        <div className="tv2-kanban card">
           {projectTasks.length === 0 ? (
             <div className="tv2-empty">
               <p>No tasks created yet for this project. Click <b>Add Task</b> to build your implementation checklist.</p>
@@ -1715,7 +1708,7 @@ function TaskModal(props: TaskModalProps) {
             )}
             <div className="tv2-modal-spacer" />
             <button type="button" className="btn btn-secondary" onClick={onClose}>{creating ? 'Cancel' : 'Done'}</button>
-            {creating && <button type="submit" className="btn btn-primary" style={{ backgroundColor: accent, color: 'white', border: '1px solid rgba(0,0,0,0.1)' }}>Create task</button>}
+            {creating && <button type="submit" className="btn btn-primary">Create task</button>}
           </footer>
         </form>
       </div>

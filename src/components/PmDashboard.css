@@ -81,7 +81,7 @@
 .pmd-golive {
   display: flex; flex-direction: column; gap: 0.6rem; text-align: left;
   padding: 0.9rem 1rem; border-radius: var(--radius-md);
-  border: 1px solid var(--border-color); border-top: 4px solid var(--primary);
+  border: 1px solid var(--border-color);
   background: var(--bg-tertiary); color: inherit; cursor: pointer; font: inherit;
   transition: box-shadow var(--transition-fast), border-color var(--transition-fast);
 }

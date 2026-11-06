@@ -51,8 +51,6 @@ export function WinComboBox({ value, onChange, options, placeholder = 'Select...
       border: '1px solid var(--border-color)',
       borderRadius: 'var(--radius-md)',
       boxShadow: 'var(--shadow-md)',
-      backdropFilter: 'blur(40px) saturate(150%)',
-      WebkitBackdropFilter: 'blur(40px) saturate(150%)',
       maxHeight: '250px',
       overflowY: 'auto',
       padding: '0.25rem'
@@ -124,11 +122,8 @@ export function WinComboBox({ value, onChange, options, placeholder = 'Select...
           justifyContent: 'space-between', 
           alignItems: 'center', 
           cursor: 'pointer',
-          padding: '0.45rem 0.8rem',
-          backgroundColor: isOpen ? 'var(--bg-secondary)' : 'var(--input-fill)',
-          borderBottomWidth: isOpen ? '2px' : '1px',
-          borderBottomColor: isOpen ? 'var(--primary)' : 'var(--input-border-bottom)',
-          paddingBottom: isOpen ? 'calc(0.45rem - 1px)' : '0.45rem',
+          padding: '7px 11px',
+          ...(isOpen ? { borderColor: 'var(--accent-ink)', boxShadow: '0 0 0 3px var(--accent-soft)' } : {}),
           userSelect: 'none'
         }}
         onClick={() => setIsOpen(!isOpen)}

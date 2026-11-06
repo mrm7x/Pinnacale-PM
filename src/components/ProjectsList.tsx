@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Project, Consultant, Task, ActiveUser } from '../types';
 import { formatDateFriendly } from './Dashboard';
-import { Plus, Search, Trash2, LayoutGrid, List, AlertCircle, Users, CheckCircle2, Filter, Columns3 } from 'lucide-react';
+import { Plus, Search, Trash2, LayoutGrid, List, AlertCircle, Users, CheckCircle2, Columns3 } from 'lucide-react';
 import { WinComboBox } from './winui/WinComboBox';
 import { resolvePhaseMeta, PHASE_ORDER } from '../utils/phases';
 import { canSeeRag } from '../utils/permissions';
@@ -335,127 +335,95 @@ export default function ProjectsList({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      {/* Header Panel */}
-      <div className="card" style={{ padding: '1.1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', borderTop: '5px solid var(--primary)', borderRadius: 'var(--radius-md)', position: 'relative', zIndex: 20, overflow: 'visible' }}>
-        <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'center', flex: 1, minWidth: '320px', flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative', flex: '1 1 240px', maxWidth: '320px' }}>
-            <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
-            <input
-              type="text"
-              className="form-input"
-              placeholder="Search projects, clients..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              style={{ paddingLeft: '2.75rem', height: '40px', fontSize: '0.95rem' }}
-            />
-          </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* Toolbar: search, filters, view switch, count, primary action */}
+      <div className="toolbar">
+        <label className="search-field">
+          <Search size={15} aria-hidden="true" />
+          <input
+            type="search"
+            className="form-input"
+            placeholder="Search projects, clients"
+            aria-label="Search projects"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+        </label>
 
-          <div style={{ minWidth: '180px', flex: '1 1 180px' }}>
-            <WinComboBox
-              value={statusFilter}
-              onChange={setStatusFilter}
-              options={[
-                { label: 'All Status', value: 'all' },
-                ...PROJECT_STATUS_OPTIONS
-              ]}
-            />
-          </div>
-
-          <div style={{ minWidth: '170px', flex: '1 1 170px' }}>
-            <WinComboBox
-              value={phaseFilter}
-              onChange={setPhaseFilter}
-              options={[
-                { label: 'All Phases', value: 'all' },
-                ...PHASE_ORDER.map(p => ({ label: p, value: p }))
-              ]}
-            />
-          </div>
-
-          {!hideRag && (
-          <div style={{ minWidth: '170px', flex: '1 1 170px' }}>
-            <WinComboBox
-              value={healthFilter}
-              onChange={setHealthFilter}
-              options={[
-                { label: 'All Health', value: 'all' },
-                { label: 'On Track', value: 'on track' },
-                { label: 'At Risk', value: 'at risk' },
-                { label: 'Off Track', value: 'off track' }
-              ]}
-            />
-          </div>
-          )}
-
-          <div style={{ minWidth: '180px', flex: '1 1 180px' }}>
-            <WinComboBox
-              value={leadConsultantFilter}
-              onChange={setLeadConsultantFilter}
-              options={[
-                { label: 'All Lead Consultants', value: 'all' },
-                ...consultants.map(c => ({ label: c.name, value: c.id }))
-              ]}
-            />
-          </div>
-
-          {viewMode === 'kanban' && (
-            <div style={{ minWidth: '190px', flex: '1 1 190px' }}>
-              <WinComboBox
-                value={kanbanGroupMode}
-                onChange={(v) => setKanbanGroupMode(v as ProjectKanbanGroupMode)}
-                options={[
-                  { label: 'Kanban by phase', value: 'phase' },
-                  { label: 'Kanban by status', value: 'status' },
-                  { label: 'Kanban by lead', value: 'lead' },
-                  ...(hideRag ? [] : [{ label: 'Kanban by RAG', value: 'rag' }])
-                ]}
-              />
-            </div>
-          )}
+        <div className="toolbar-filter">
+          <WinComboBox
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={[
+              { label: 'All statuses', value: 'all' },
+              ...PROJECT_STATUS_OPTIONS
+            ]}
+          />
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ display: 'flex', backgroundColor: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', padding: '3px' }}>
-            <button
-              className={`btn ${viewMode === 'grid' ? 'btn-primary' : ''}`}
-              style={{ padding: '0.55rem', backgroundColor: viewMode === 'grid' ? 'var(--bg-elevated)' : 'transparent', color: viewMode === 'grid' ? 'var(--primary)' : 'var(--text-secondary)', border: 'none', boxShadow: viewMode === 'grid' ? 'var(--shadow-sm)' : 'none', minWidth: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              onClick={() => setViewMode('grid')}
-              title="Grid View"
-            >
-              <LayoutGrid size={18} />
-            </button>
-            <button
-              className={`btn ${viewMode === 'list' ? 'btn-primary' : ''}`}
-              style={{ padding: '0.55rem', backgroundColor: viewMode === 'list' ? 'var(--bg-elevated)' : 'transparent', color: viewMode === 'list' ? 'var(--primary)' : 'var(--text-secondary)', border: 'none', boxShadow: viewMode === 'list' ? 'var(--shadow-sm)' : 'none', minWidth: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              onClick={() => setViewMode('list')}
-              title="List View"
-            >
-              <List size={18} />
-            </button>
-            <button
-              className={`btn ${viewMode === 'kanban' ? 'btn-primary' : ''}`}
-              style={{ padding: '0.55rem', backgroundColor: viewMode === 'kanban' ? 'var(--bg-elevated)' : 'transparent', color: viewMode === 'kanban' ? 'var(--primary)' : 'var(--text-secondary)', border: 'none', boxShadow: viewMode === 'kanban' ? 'var(--shadow-sm)' : 'none', minWidth: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              onClick={() => setViewMode('kanban')}
-              title="Kanban View"
-            >
-              <Columns3 size={18} />
-            </button>
-          </div>
-
-          <button
-            className="btn btn-primary"
-            onClick={() => setIsNewProjectModalOpen(true)}
-            style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', height: '40px', fontSize: '0.95rem', fontWeight: 600 }}
-          >
-            <Plus size={18} /> New Project
-          </button>
+        <div className="toolbar-filter">
+          <WinComboBox
+            value={phaseFilter}
+            onChange={setPhaseFilter}
+            options={[
+              { label: 'All phases', value: 'all' },
+              ...PHASE_ORDER.map(p => ({ label: p, value: p }))
+            ]}
+          />
         </div>
-      </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0 0.25rem' }}>
-        <Filter size={16} style={{ color: 'var(--text-tertiary)' }} />
-        <span style={{ fontSize: '0.95rem', color: 'var(--text-secondary)' }}>Showing <strong>{filteredProjects.length}</strong> of {activeProjects.length} projects</span>
+        {!hideRag && (
+        <div className="toolbar-filter">
+          <WinComboBox
+            value={healthFilter}
+            onChange={setHealthFilter}
+            options={[
+              { label: 'All health', value: 'all' },
+              { label: 'On Track', value: 'on track' },
+              { label: 'At Risk', value: 'at risk' },
+              { label: 'Off Track', value: 'off track' }
+            ]}
+          />
+        </div>
+        )}
+
+        <div className="toolbar-filter">
+          <WinComboBox
+            value={leadConsultantFilter}
+            onChange={setLeadConsultantFilter}
+            options={[
+              { label: 'All leads', value: 'all' },
+              ...consultants.map(c => ({ label: c.name, value: c.id }))
+            ]}
+          />
+        </div>
+
+        {viewMode === 'kanban' && (
+          <div className="toolbar-filter">
+            <WinComboBox
+              value={kanbanGroupMode}
+              onChange={(v) => setKanbanGroupMode(v as ProjectKanbanGroupMode)}
+              options={[
+                { label: 'Group by phase', value: 'phase' },
+                { label: 'Group by status', value: 'status' },
+                { label: 'Group by lead', value: 'lead' },
+                ...(hideRag ? [] : [{ label: 'Group by RAG', value: 'rag' }])
+              ]}
+            />
+          </div>
+        )}
+
+        <span className="toolbar-count">{filteredProjects.length} of {activeProjects.length} projects</span>
+
+        <div className="seg" role="group" aria-label="View">
+          <button type="button" className={viewMode === 'grid' ? 'active' : ''} onClick={() => setViewMode('grid')} title="Grid view" aria-label="Grid view"><LayoutGrid size={16} /></button>
+          <button type="button" className={viewMode === 'list' ? 'active' : ''} onClick={() => setViewMode('list')} title="List view" aria-label="List view"><List size={16} /></button>
+          <button type="button" className={viewMode === 'kanban' ? 'active' : ''} onClick={() => setViewMode('kanban')} title="Kanban view" aria-label="Kanban view"><Columns3 size={16} /></button>
+        </div>
+
+        <button className="btn btn-primary" onClick={() => setIsNewProjectModalOpen(true)}>
+          <Plus size={16} /> New project
+        </button>
       </div>
 
       {selectedProjectIds.length > 0 && (
@@ -553,7 +521,6 @@ export default function ProjectsList({
                   flexDirection: 'column',
                   gap: '1.25rem',
                   cursor: 'pointer',
-                  borderTop: `5px solid ${getStatusDotColor(project.status)}`,
                   transition: 'transform 0.2s, box-shadow 0.2s',
                   position: 'relative'
                 }}
@@ -639,7 +606,7 @@ export default function ProjectsList({
           )}
         </div>
       ) : viewMode === 'list' ? (
-        <div className="card" style={{ overflowX: 'auto', borderTop: '5px solid var(--primary)' }}>
+        <div className="card" style={{ overflowX: 'auto', padding: 0 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border-strong)', textAlign: 'left', backgroundColor: 'var(--bg-tertiary)', fontSize: '0.85rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
@@ -751,7 +718,7 @@ export default function ProjectsList({
           </table>
         </div>
       ) : (
-        <div className="card pl-kanban" style={{ borderTop: '5px solid var(--primary)' }}>
+        <div className="card pl-kanban">
           {filteredProjects.length === 0 ? (
             <div className="pl-kanban-empty-board">No projects found matching your criteria.</div>
           ) : (

@@ -14,7 +14,7 @@ import NewProjectModal from './components/NewProjectModal';
 import { WinComboBox } from './components/winui/WinComboBox';
 import {
   FolderKanban, LayoutDashboard, Settings as SettingsIcon, 
-  Sun, Moon, X, LogOut, Menu, ChevronLeft, ChevronRight,
+  Sun, Moon, X, LogOut, Menu, PanelLeft,
   ArrowLeft
 } from 'lucide-react';
 import { api } from './utils/api';
@@ -1454,67 +1454,15 @@ export default function App() {
         {/* Sidebar navigation */}
         <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''} ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            <div className="brand-section" style={{ justifyContent: 'center' }}>
+            <div className="brand-section">
               {!isSidebarCollapsed ? (
-                <Logo style={{ height: '26px', width: 'auto' }} />
+                <Logo style={{ height: '24px', width: 'auto' }} />
               ) : (
-                <CroppedLogo style={{ height: '26px', width: 'auto' }} />
-              )}
-            </div>
-
-            {/* User Profile Card */}
-            <div className="user-profile-card" style={{ padding: '0.75rem', marginBottom: '1.75rem', display: 'flex', alignItems: 'center', gap: '0.85rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: 'var(--radius-lg)' }}>
-              {activeUser?.tier === 'superuser' || activeUser?.tier === 'admin' ? (
-                <div
-                  style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: 'var(--radius-md)',
-                    backgroundColor: 'var(--primary)',
-                    color: 'white',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 600,
-                    fontSize: '0.8rem',
-                    flexShrink: 0
-                  }}
-                >
-                  {activeUser?.tier === 'superuser' ? 'SU' : 'AD'}
-                </div>
-              ) : (
-                <div
-                  style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: 'var(--radius-md)',
-                    backgroundColor: activeUser?.avatarColor || 'var(--primary)',
-                    color: 'white',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 600,
-                    fontSize: '0.8rem',
-                    flexShrink: 0
-                  }}
-                >
-                  {activeUser?.name.split(' ').map(n => n[0]).join('') || 'U'}
-                </div>
-              )}
-              {!isSidebarCollapsed && (
-                <div className="user-profile-details" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {activeUser?.name || 'User'}
-                  </span>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', fontWeight: 500 }}>
-                    {activeUser?.role || 'User'}
-                  </span>
-                </div>
+                <CroppedLogo style={{ height: '24px', width: 'auto' }} />
               )}
             </div>
 
             <nav style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-              {!isSidebarCollapsed && <div className="nav-section-label">Menu</div>}
               <ul className="nav-list">
                 {!isCustomer(activeUser) && (
                 <li
@@ -1573,7 +1521,7 @@ export default function App() {
                 if (recentProjects.length === 0) return null;
                 return (
                   <>
-                    <div className="nav-section-label">Recent Projects</div>
+                    <div className="nav-section-label">Recent projects</div>
                     <ul className="nav-subtree">
                       {recentProjects.map(p => (
                         <li
@@ -1597,82 +1545,63 @@ export default function App() {
             </nav>
           </div>
 
-          {/* Microsoft authentication badge indicator and bottom controls */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
-            {/* Bottom Settings navigation item */}
-            {!isCustomer(activeUser) && (
-            <div
-              className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
-              onClick={() => {
-                setActiveTab('settings');
-                setIsMobileMenuOpen(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  setActiveTab('settings');
-                  setIsMobileMenuOpen(false);
-                }
-              }}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.6rem 0.75rem', cursor: 'pointer', borderRadius: 'var(--radius-md)' }}
-              title="Settings"
-              aria-label="Navigate to Settings"
-              role="button"
-              tabIndex={0}
-            >
-              <SettingsIcon size={18} />
-              {!isSidebarCollapsed && <span>Settings</span>}
+          <div className="side-foot">
+            <div className="acct" title={isSidebarCollapsed ? `${activeUser?.name || 'User'} · ${activeUser?.role || 'User'}` : undefined}>
+              <span
+                className="acct-avatar"
+                style={{ backgroundColor: activeUser?.tier === 'superuser' || activeUser?.tier === 'admin' ? '#11354A' : (activeUser?.avatarColor || '#11354A') }}
+              >
+                {activeUser?.tier === 'superuser' ? 'SU' : activeUser?.tier === 'admin' ? 'AD' : (activeUser?.name.split(' ').map(n => n[0]).join('').slice(0, 2) || 'U')}
+              </span>
+              <span className="acct-who">
+                <span className="acct-name">{activeUser?.name || 'User'}</span>
+                <span className="acct-role">{activeUser?.role || 'User'}</span>
+              </span>
+              <button className="side-icon" onClick={handleLogout} title="Sign out" aria-label="Sign out">
+                <LogOut size={15} />
+              </button>
             </div>
-            )}
 
-            {/* Custom Theme Toggle Switch */}
-            <div className="theme-switch-row" style={{ display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'space-between', padding: isSidebarCollapsed ? '0.5rem 0' : '0.5rem 0.75rem', borderRadius: 'var(--radius-md)', backgroundColor: isSidebarCollapsed ? 'transparent' : 'var(--bg-tertiary)', gap: '0.5rem', flexDirection: isSidebarCollapsed ? 'column' : 'row' }}>
-              {!isSidebarCollapsed && (
-                <div className="theme-switch-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
-                  Theme
+            <div className="side-row">
+              {!isCustomer(activeUser) && (
+                <div
+                  className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('settings');
+                    setIsMobileMenuOpen(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      setActiveTab('settings');
+                      setIsMobileMenuOpen(false);
+                    }
+                  }}
+                  title="Settings"
+                  aria-label="Navigate to Settings"
+                  role="button"
+                  tabIndex={0}
+                >
+                  <SettingsIcon size={17} />
+                  <span>Settings</span>
                 </div>
               )}
-              <div style={{ display: 'flex', gap: '0.25rem', backgroundColor: 'var(--bg-secondary)', padding: '0.2rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', flexDirection: isSidebarCollapsed ? 'column' : 'row' }}>
-                <button 
-                  title="Light Mode"
-                  aria-label="Switch to Light Theme"
-                  onClick={() => setTheme('light')}
-                  style={{ background: theme === 'light' ? 'var(--primary-light)' : 'transparent', color: theme === 'light' ? 'var(--primary)' : 'var(--text-tertiary)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '0.3rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
-                >
-                  <Sun size={14} />
-                </button>
-                <button 
-                  title="Dark Mode"
-                  aria-label="Switch to Dark Theme"
-                  onClick={() => setTheme('dark')}
-                  style={{ background: theme === 'dark' ? 'var(--primary-light)' : 'transparent', color: theme === 'dark' ? 'var(--primary)' : 'var(--text-tertiary)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '0.3rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
-                >
-                  <Moon size={14} />
-                </button>
-              </div>
+              <button
+                className="side-icon"
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+                aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              >
+                {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+              </button>
+              <button
+                className="side-icon desktop-only-toggle"
+                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              >
+                <PanelLeft size={17} />
+              </button>
             </div>
-
-            <button 
-              className="btn btn-secondary btn-icon"
-              style={{ width: '100%', padding: '0.45rem', color: 'var(--danger)', borderColor: 'var(--border-color)', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: isSidebarCollapsed ? 'center' : 'flex-start', alignItems: 'center', gap: '0.5rem' }}
-              onClick={handleLogout}
-              title="Sign Out"
-              aria-label="Sign Out"
-            >
-              <LogOut size={14} />
-              {!isSidebarCollapsed && <span style={{ fontSize: '0.78rem' }}>Sign Out</span>}
-            </button>
-
-            {/* Collapse toggle button */}
-            <button 
-              className="btn btn-secondary btn-icon desktop-only-toggle"
-              style={{ width: '100%', padding: '0.45rem', borderColor: 'var(--border-color)', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: isSidebarCollapsed ? 'center' : 'flex-start', alignItems: 'center', gap: '0.5rem' }}
-              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-              aria-label={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-            >
-              {isSidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-              {!isSidebarCollapsed && <span style={{ fontSize: '0.78rem' }}>Collapse Sidebar</span>}
-            </button>
           </div>
         </aside>
 
@@ -1685,25 +1614,15 @@ export default function App() {
             flexWrap: 'wrap', 
             gap: '1rem', 
             position: 'relative',
-            ...(activeTab === 'projects' ? {
-              paddingBottom: '0',
-              marginBottom: '0',
-              borderBottom: 'none',
-              paddingTop: '1rem'
-            } : {
-              paddingBottom: '1rem',
-              borderBottom: '1px solid var(--border-color)',
-              marginBottom: '1.5rem'
-            })
           }}>
             <div className="page-title-section" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: '1rem', flex: 1 }}>
               {activeTab === 'projects' && selectedProjectId ? (
-                <button className="btn btn-secondary btn-icon" onClick={() => setSelectedProjectId(null)} title="Back to Projects" style={{ flexShrink: 0, width: 'auto', padding: '0.5rem 1rem 0.5rem 0', display: 'flex', gap: '0.5rem', alignItems: 'center', background: 'transparent', border: 'none', boxShadow: 'none' }}>
-                  <ArrowLeft size={16} /> <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Back to Projects</span>
+                <button className="back-link" onClick={() => setSelectedProjectId(null)} title="Back to projects">
+                  <ArrowLeft size={15} /> <span>All projects</span>
                 </button>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <h1 style={{ fontSize: '1.3rem', textTransform: 'capitalize', letterSpacing: '-0.02em', margin: 0 }}>
+                  <h1 style={{ fontSize: '24px', fontWeight: 650, lineHeight: 1.25, textTransform: 'capitalize', letterSpacing: '-0.02em', margin: 0 }}>
                     {activeTab}
                   </h1>
                   <span className="page-subtitle" style={{ display: 'block', margin: 0, marginTop: '0.25rem' }}>
@@ -1733,7 +1652,7 @@ export default function App() {
             </div>
           </header>
 
-          <div className="content-pane" style={{ paddingTop: activeTab === 'projects' ? '0.5rem' : '' }}>
+          <div className="content-pane">
             {renderContent()}
           </div>
         </main>

@@ -9,7 +9,7 @@ import {
   Plus, Calendar, Trash2, Edit2, ChevronDown, ChevronRight, ChevronUp,
   RefreshCw, User, X, Clock, FolderKanban, Pencil,
   Folder, Briefcase, Target, Rocket, Star, Layout, Check, Download,
-  Pin, AlertTriangle, Lightbulb, Zap, Bell, CheckCircle, Search, Copy
+  Pin, AlertTriangle, Lightbulb, Zap, Bell, CheckCircle, Search, Copy, MoreHorizontal
 } from 'lucide-react';
 import { exportProjectToExcel } from '../utils/exportToExcel';
 import { exportConsultantCalendar, consultantSummary, type CalendarFormat, type CustomerTaskMode } from '../utils/exportToIcs';
@@ -104,6 +104,7 @@ export default function ProjectDetails({
   const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isTemplateSaveModalOpen, setIsTemplateSaveModalOpen] = useState(false);
 
   const [duplicateForm, setDuplicateForm] = useState({ name: '', clientName: '', startDate: '', copyAssignments: true });
@@ -788,132 +789,108 @@ export default function ProjectDetails({
 
 
       {activeProject ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-          {/* Tabs Navigation & Actions */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-            <div style={{ display: 'flex', gap: '0.3rem', backgroundColor: 'var(--bg-secondary)', padding: '0.35rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)', width: 'fit-content', flexWrap: 'wrap' }}>
+          {/* Tabs + actions on one hairline bar; rarely used actions sit under "More" */}
+          <div className="tabbar">
+            <div className="tabs" role="tablist">
               {([
                 { id: 'overview', label: 'Overview' },
                 { id: 'tasks-v2', label: 'Tasks' },
                 { id: 'gantt', label: 'Gantt' },
                 { id: 'rag', label: 'RAG', customerHidden: true },
-                { id: 'communications', label: 'Project Notes', customerHidden: true }
+                { id: 'communications', label: 'Project notes', customerHidden: true }
               ] as const).filter(tab => !('customerHidden' in tab && tab.customerHidden && userIsCustomer)).map(tab => (
                 <button
                   key={tab.id}
+                  role="tab"
+                  aria-selected={activeProjectTab === tab.id}
+                  className={activeProjectTab === tab.id ? 'active' : ''}
                   onClick={() => setActiveProjectTab(tab.id as any)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '0.45rem',
-                    padding: '0.5rem 1.05rem',
-                    borderRadius: 'var(--radius-md)',
-                    fontSize: '0.95rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    border: 'none',
-                    transition: 'all 0.15s ease',
-                    backgroundColor: activeProjectTab === tab.id ? 'var(--primary)' : 'transparent',
-                    color: activeProjectTab === tab.id ? 'white' : 'var(--text-secondary)',
-                    boxShadow: activeProjectTab === tab.id ? '0 1px 4px rgba(45,74,101,0.25)' : 'none',
-                    whiteSpace: 'nowrap'
-                  }}
                 >
                   {tab.label}
                 </button>
               ))}
             </div>
 
-            <div style={{ display: 'flex', gap: '0.4rem', paddingBottom: '0.25rem' }}>
-                {!userIsCustomer && (
-                <button
-                  className="btn btn-ghost"
-                  onClick={handleExport}
-                  disabled={isExporting}
-                  title="Export to Excel"
-                  style={{ padding: '0.5rem 0.85rem', fontSize: '0.9rem' }}
-                >
-                  <Download size={15} /> {isExporting ? 'Exporting…' : 'Export'}
+            {!userIsCustomer && (
+            <div className="tabbar-actions">
+              {canEditProject(activeUser, activeProject) && (
+                <button className="btn btn-secondary" onClick={() => setIsEditProjectModalOpen(true)} title="Amend project">
+                  <Edit2 size={14} /> Amend
                 </button>
+              )}
+              <button className="btn btn-secondary" onClick={handleExport} disabled={isExporting} title="Export to Excel">
+                <Download size={14} /> {isExporting ? 'Exporting…' : 'Export'}
+              </button>
+              <div className="menu-anchor">
+                <button
+                  className="btn btn-secondary btn-icon"
+                  onClick={() => setIsMoreMenuOpen(o => !o)}
+                  title="More actions"
+                  aria-label="More actions"
+                  aria-haspopup="menu"
+                  aria-expanded={isMoreMenuOpen}
+                >
+                  <MoreHorizontal size={16} />
+                </button>
+                {isMoreMenuOpen && (
+                  <>
+                    <div className="menu-dismiss" onClick={() => setIsMoreMenuOpen(false)} />
+                    <div className="menu" role="menu" onClick={() => setIsMoreMenuOpen(false)}>
+                      <button role="menuitem" onClick={() => {
+                        setCalendarForm({
+                          consultantId: '', fromDate: formatDate(new Date()), toDate: '', format: 'ics',
+                          includeCustomer: false, onlyCustomer: false,
+                        });
+                        setIsCalendarModalOpen(true);
+                      }}>
+                        <Calendar size={15} /> Export to calendar
+                      </button>
+                      {canEditProject(activeUser, activeProject) && (
+                        <>
+                          <button role="menuitem" onClick={() => {
+                            setDuplicateForm({
+                              name: `${activeProject.name} (Copy)`,
+                              clientName: activeProject.clientName,
+                              startDate: activeProject.startDate,
+                              copyAssignments: true
+                            });
+                            setIsDuplicateModalOpen(true);
+                          }}>
+                            <RefreshCw size={15} /> Duplicate project
+                          </button>
+                          <button role="menuitem" onClick={() => {
+                            setTemplateForm({ name: `${activeProject.name} Template` });
+                            setIsTemplateSaveModalOpen(true);
+                          }}>
+                            <FolderKanban size={15} /> Save as template
+                          </button>
+                          <div className="menu-sep" />
+                          <button role="menuitem" className="danger" onClick={() => {
+                            if (confirm(`Are you sure you want to delete project "${activeProject.name}" and all its tasks?`)) {
+                              onDeleteProject(activeProject.id);
+                              onSelectProject(null);
+                              onAddToast('Project deleted successfully.', 'warning');
+                            }
+                          }}>
+                            <Trash2 size={15} /> Delete project
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </>
                 )}
-                {!userIsCustomer && (
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => {
-                    setCalendarForm({
-                      consultantId: '', fromDate: formatDate(new Date()), toDate: '', format: 'ics',
-                      includeCustomer: false, onlyCustomer: false,
-                    });
-                    setIsCalendarModalOpen(true);
-                  }}
-                  title="Export tasks as Outlook calendar appointments"
-                  style={{ padding: '0.5rem 0.85rem', fontSize: '0.9rem' }}
-                >
-                  <Calendar size={15} /> Export Calendar
-                </button>
-                )}
-            {activeProject && canEditProject(activeUser, activeProject) && (
-              <>
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => {
-                    setDuplicateForm({
-                      name: `${activeProject.name} (Copy)`,
-                      clientName: activeProject.clientName,
-                      startDate: activeProject.startDate,
-                      copyAssignments: true
-                    });
-                    setIsDuplicateModalOpen(true);
-                  }}
-                  title="Duplicate Project"
-                  style={{ padding: '0.5rem 0.85rem', fontSize: '0.9rem' }}
-                >
-                  <RefreshCw size={15} /> Duplicate
-                </button>
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => {
-                    setTemplateForm({ name: `${activeProject.name} Template` });
-                    setIsTemplateSaveModalOpen(true);
-                  }}
-                  title="Save as Template"
-                  style={{ padding: '0.5rem 0.85rem', fontSize: '0.9rem' }}
-                >
-                  <FolderKanban size={15} /> Template
-                </button>
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => {
-                    setIsEditProjectModalOpen(true);
-                  }}
-                  title="Amend Project"
-                  style={{ padding: '0.5rem 0.85rem', fontSize: '0.9rem' }}
-                >
-                  <Edit2 size={15} /> Amend
-                </button>
-                <button
-                  className="btn btn-ghost"
-                  style={{ color: 'var(--danger)', padding: '0.5rem 0.85rem', fontSize: '0.9rem' }}
-                  onClick={() => {
-                    if (confirm(`Are you sure you want to delete project "${activeProject.name}" and all its tasks?`)) {
-                      onDeleteProject(activeProject.id);
-                      onSelectProject(null);
-                      onAddToast('Project deleted successfully.', 'warning');
-                    }
-                  }}
-                  title="Delete Project"
-                >
-                  <Trash2 size={15} /> Delete
-                </button>
-              </>
-            )}
+              </div>
             </div>
+            )}
           </div>
 
           {activeProjectTab === 'overview' && (
              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
 
               {/* HERO: identity + status badges + quick-link icons */}
-              <div className="card" style={{ padding: '1.5rem', borderTop: `5px solid ${getProjectAccent(activeProject)}` }}>
+              <div className="card" style={{ padding: '1.5rem' }}>
                 <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'flex-start' }}>
                   {(() => {
                     const matched = activeProject.icon ? PROJECT_ICONS.find(i => i.name === activeProject.icon) : null;
@@ -1277,7 +1254,7 @@ export default function ProjectDetails({
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               {/* Summary hero */}
-              <div className="card" style={{ padding: '2rem', display: 'flex', alignItems: 'center', gap: '1.75rem', borderTop: `5px solid ${overallMeta.color}`, flexWrap: 'wrap' }}>
+              <div className="card" style={{ padding: '2rem', display: 'flex', alignItems: 'center', gap: '1.75rem', flexWrap: 'wrap' }}>
                 <div style={{ width: '76px', height: '76px', borderRadius: '50%', backgroundColor: `${overallMeta.color}20`, border: `3px solid ${overallMeta.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: overallMeta.color, boxShadow: `0 0 12px ${overallMeta.color}` }} />
                 </div>
@@ -1300,7 +1277,7 @@ export default function ProjectDetails({
                   const risks = (activeProject[cat.risksKey] as { id: string; text: string; done: boolean }[] | undefined) || [];
                   const reason = (activeProject[cat.reasonKey] as string | undefined) || '';
                   return (
-                    <div key={cat.key as string} className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', borderTop: `3px solid ${meta.color}` }}>
+                    <div key={cat.key as string} className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                       {/* Header */}
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
                         <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{cat.label}</span>
@@ -2046,8 +2023,7 @@ export default function ProjectDetails({
             transform: 'translateX(-50%)',
             backgroundColor: 'var(--bg-secondary)',
             border: '1px solid var(--border-color)',
-            borderTop: '3px solid var(--accent)',
-            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+            boxShadow: 'var(--shadow-md)',
             borderRadius: 'var(--radius-lg)',
             padding: '0.75rem 1.5rem',
             display: 'flex',

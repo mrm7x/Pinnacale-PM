@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import type { Project, Task, Consultant } from '../types';
 import {
   FolderKanban, Clock, CheckSquare, Users, AlertTriangle,
-  User, Calendar, CheckCircle2, Circle, ChevronLeft, ChevronRight,
-  BarChart3, Activity, Gauge, Flag, PieChart, Layers, AlertCircle, CalendarClock, Briefcase
+  Calendar, CheckCircle2, Circle, ChevronLeft, ChevronRight,
+  BarChart3, Activity, Gauge, Flag, PieChart, Layers, AlertCircle, CalendarClock
 } from 'lucide-react';
 import { isCustomer as isCustomerUser, isManager as isManagerUser, isAdmin, type ActiveUser } from '../utils/permissions';
 import PmDashboard from './PmDashboard';
@@ -316,41 +316,33 @@ export default function Dashboard({
 
   return (
     <div>
-      {/* Dashboard Toggle — pill tab bar */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '2rem', backgroundColor: 'var(--bg-secondary)', padding: '0.35rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)', width: 'fit-content', maxWidth: '100%' }}>
+      {/* Dashboard views — underline tabs */}
+      <div className="tabbar" style={{ marginBottom: '24px' }}>
+      <div className="tabs" role="tablist">
         {([
-          ...(canSeePmOverview ? [{ id: 'pm', icon: <Briefcase size={17} />, label: 'PM Overview', internalOnly: true }] : []),
-          { id: 'team', icon: <Users size={17} />, label: 'Team Overview', internalOnly: true },
-          { id: 'analytics', icon: <BarChart3 size={17} />, label: 'Analytics', internalOnly: true },
-          { id: 'health', icon: <Activity size={17} />, label: 'Health', internalOnly: true },
-          { id: 'resource', icon: <Gauge size={17} />, label: 'Resources', internalOnly: true },
-          { id: 'timeline', icon: <Flag size={17} />, label: 'Timeline', internalOnly: true },
-          { id: 'projects', icon: <FolderKanban size={17} />, label: 'Projects' },
-          { id: 'calendar', icon: <Calendar size={17} />, label: 'Calendar', internalOnly: true },
-          ...(isConsultant ? [{ id: 'personal', icon: <User size={17} />, label: 'My Agenda', internalOnly: false }] : [])
-        ] as { id: string; icon: React.ReactNode; label: string; internalOnly?: boolean }[])
+          ...(canSeePmOverview ? [{ id: 'pm', label: 'PM Overview', internalOnly: true }] : []),
+          { id: 'team', label: 'Team Overview', internalOnly: true },
+          { id: 'analytics', label: 'Analytics', internalOnly: true },
+          { id: 'health', label: 'Health', internalOnly: true },
+          { id: 'resource', label: 'Resources', internalOnly: true },
+          { id: 'timeline', label: 'Timeline', internalOnly: true },
+          { id: 'projects', label: 'Projects' },
+          { id: 'calendar', label: 'Calendar', internalOnly: true },
+          ...(isConsultant ? [{ id: 'personal', label: 'My Agenda', internalOnly: false }] : [])
+        ] as { id: string; label: string; internalOnly?: boolean }[])
         .filter(tab => !userIsCustomer || !tab.internalOnly)
         .map(tab => (
           <button
             key={tab.id}
+            role="tab"
+            aria-selected={dashboardMode === tab.id}
+            className={dashboardMode === tab.id ? 'active' : ''}
             onClick={() => setDashboardMode(tab.id as typeof dashboardMode)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.45rem',
-              padding: '0.55rem 1.1rem',
-              borderRadius: 'var(--radius-md)',
-              fontSize: '0.92rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              border: 'none',
-              transition: 'all 0.15s ease',
-              backgroundColor: dashboardMode === tab.id ? 'var(--primary)' : 'transparent',
-              color: dashboardMode === tab.id ? 'white' : 'var(--text-secondary)',
-              boxShadow: dashboardMode === tab.id ? '0 2px 8px color-mix(in srgb, var(--primary) 35%, transparent)' : 'none'
-            }}
           >
-            {tab.icon} {tab.label}
+            {tab.label}
           </button>
         ))}
+      </div>
       </div>
 
       {dashboardMode === 'personal' && activeUser && (
