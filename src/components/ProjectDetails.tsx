@@ -20,7 +20,7 @@ import { WinDatePicker } from './winui/WinDatePicker';
 import GanttChart from './GanttChart';
 import EditProjectModal from './EditProjectModal';
 import TaskListV2 from './TaskListV2';
-import { formatDateFriendly, formatDateTimeFriendly } from './Dashboard';
+import { formatDateFriendly, formatDateTimeFriendly } from '../utils/dates';
 import { resolvePhaseMeta, getProjectAccent } from '../utils/phases';
 
 interface ProjectDetailsProps {

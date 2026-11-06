@@ -1864,17 +1864,18 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
 }
 .tv2-badge:hover:not(:disabled) { filter: brightness(0.95); }
 .tv2-badge:disabled { cursor: default; }
-.tv2-badge-primary { background-color: var(--primary); color: white; }
-.tv2-badge-success { background-color: var(--success); color: white; }
-.tv2-badge-warning { background-color: var(--warning); color: #3a2e00; }
-:root.dark .tv2-badge-warning { color: #1a1500; }
-.tv2-badge-secondary { background-color: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color); }
-.tv2-badge-danger { background-color: var(--danger); color: white; }
+/* Tinted pills with a status dot: a column of solid navy/green blocks
+   shouted louder than the task names. Tints keep status scannable but quiet. */
+.tv2-badge { display: inline-flex; align-items: center; gap: 0.4rem; border: 1px solid transparent; border-radius: 999px; padding: 0.2rem 0.6rem 0.2rem 0.5rem; }
+.tv2-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.tv2-badge:hover:not(:disabled) { filter: none; border-color: currentColor; }
+.tv2-badge-primary { background-color: color-mix(in srgb, #2563EB 10%, var(--bg-secondary)); color: #1D4ED8; }
+.tv2-badge-success { background-color: var(--success-light); color: var(--success); }
+.tv2-badge-warning { background-color: var(--warning-light); color: var(--warning); }
+.tv2-badge-secondary { background-color: var(--bg-tertiary); color: var(--text-secondary); border-color: var(--border-color); }
+.tv2-badge-danger { background-color: var(--danger-light); color: var(--danger); }
 .tv2-badge-static { cursor: default; pointer-events: none; }
-/* Dark theme: semantic fills are light tints — switch to a dark foreground. */
-:root.dark .tv2-badge-primary,
-:root.dark .tv2-badge-success,
-:root.dark .tv2-badge-danger { color: #11132a; }
+:root.dark .tv2-badge-primary { background-color: color-mix(in srgb, #60A5FA 14%, var(--bg-secondary)); color: #93C5FD; }
 
 /* Inline editors */
 .tv2-inline-edit { display: flex; align-items: center; gap: 0.3rem; width: 100%; }
@@ -2680,9 +2681,9 @@ tr:has(+ .tv2-import-notes) td { border-bottom: none; }
 /* ── Shared primitives (match the Intacct Toolkit) ─────────────────────── */
 /* One flat row of controls above a list: search, filters, count, actions. */
 .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; position: relative; z-index: 20; }
-.toolbar-filter { flex: 1 1 120px; max-width: 172px; }
+.toolbar-filter { flex: 1 1 104px; max-width: 160px; }
 .toolbar-count { margin-left: auto; padding: 0 4px; font-size: 12.5px; color: var(--text-tertiary); white-space: nowrap; }
-.search-field { position: relative; flex: 1 1 180px; max-width: 280px; }
+.search-field { position: relative; flex: 1 1 160px; max-width: 280px; }
 .search-field > svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--text-tertiary); pointer-events: none; }
 .search-field > .form-input { padding-left: 33px; }
 
@@ -2740,3 +2741,55 @@ tr:has(+ .tv2-import-notes) td { border-bottom: none; }
 .menu > button:hover { background: var(--hover); }
 .menu > button.danger, .menu > button.danger svg { color: var(--danger); }
 .menu-sep { height: 1px; margin: 4px 2px; background: var(--border-color); }
+
+/* Clear-filters button sits with the filters it resets. */
+.toolbar-clear { display: inline-flex; align-items: center; gap: 4px; padding: 6px 9px; font-size: 12.5px; }
+.toolbar-clear:hover { color: var(--text-primary); background: var(--hover); }
+
+/* Pills: phase / health labels in tables. Never wrap. */
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border: 1px solid transparent; border-radius: 999px;
+  font-size: 12px; font-weight: 600; line-height: 1.3; white-space: nowrap; }
+.pill-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+/* Data table: compact rows, one line per cell, quiet header. */
+.data-table-wrap { padding: 0; overflow-x: auto; }
+.data-table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 13.5px; }
+.data-table th { position: sticky; top: 0; padding: 10px 12px; text-align: left; white-space: nowrap;
+  background: var(--bg-tertiary); border-bottom: 1px solid var(--border-color);
+  font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text-tertiary); }
+.data-table td { padding: 11px 12px; border-bottom: 1px solid var(--border-color); vertical-align: middle; white-space: nowrap; color: var(--text-secondary); }
+.data-table tbody tr:last-child td { border-bottom: 0; }
+.data-table tbody tr { cursor: pointer; transition: background-color var(--transition-fast); }
+.data-table tbody tr:hover { background: var(--hover); }
+.data-table tbody tr.is-selected { background: var(--accent-light); }
+.data-table tbody tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.data-table .dt-check { width: 44px; padding-right: 0; }
+.data-table .dt-num { text-align: right; font-variant-numeric: tabular-nums; }
+.data-table .dt-project { display: flex; align-items: center; gap: 10px; white-space: normal; min-width: 220px; }
+.data-table td:nth-child(2) { width: 34%; }
+.dt-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dt-title { display: block; font-weight: 600; color: var(--text-primary); line-height: 1.35; }
+.dt-sub { display: block; margin-top: 1px; font-size: 12px; color: var(--text-tertiary); }
+.dt-strong { color: var(--text-primary); font-weight: 600; }
+.dt-muted { color: var(--text-tertiary); }
+.dt-over, .dt-sub.dt-over, .pl-over { color: var(--danger) !important; }
+.dt-progress { display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.dt-bar { width: 72px; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
+.dt-bar > div { height: 100%; border-radius: 3px; }
+.dt-person { display: inline-flex; align-items: center; gap: 8px; color: var(--text-primary); }
+.dt-avatar { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%;
+  color: #fff; font-size: 10.5px; font-weight: 700; flex-shrink: 0; }
+.data-table tr.dt-empty { cursor: default; }
+.data-table tr.dt-empty:hover { background: none; }
+
+/* Empty state: say what happened and offer the way out. */
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 48px 24px; text-align: center;
+  color: var(--text-secondary); white-space: normal; }
+.empty-state > svg { color: var(--text-tertiary); margin-bottom: 6px; }
+.empty-state > strong { color: var(--text-primary); font-size: 15px; }
+.empty-state > span { max-width: 360px; font-size: 13px; }
+.empty-state > .btn { margin-top: 10px; }
+
+/* Project status chip on grid cards (was a hard-coded "Active"). */
+.pl-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: capitalize; }
+.pl-status > span { width: 7px; height: 7px; border-radius: 50%; }

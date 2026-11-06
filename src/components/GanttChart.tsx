@@ -1,7 +1,7 @@
 import { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import type { Project, Task, Consultant } from '../types';
 import { getSchedulePoint, parseDate, isWeekend, effectiveDurationDays } from '../utils/scheduler';
-import { formatDateFriendly } from './Dashboard';
+import { formatDateFriendly } from '../utils/dates';
 import { getProjectAccent } from '../utils/phases';
 import {
   HelpCircle, ZoomIn, ZoomOut, ChevronLeft, ChevronRight,

@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { Project, Consultant, Task, ActiveUser } from '../types';
-import { formatDateFriendly } from './Dashboard';
-import { Plus, Search, Trash2, LayoutGrid, List, AlertCircle, Users, CheckCircle2, Columns3 } from 'lucide-react';
+import { formatDateFriendly } from '../utils/dates';
+import { Plus, Search, Trash2, LayoutGrid, List, Users, CheckCircle2, Columns3, FolderSearch, X } from 'lucide-react';
 import { WinComboBox } from './winui/WinComboBox';
 import { resolvePhaseMeta, PHASE_ORDER } from '../utils/phases';
 import { canSeeRag } from '../utils/permissions';
@@ -106,14 +106,20 @@ export default function ProjectsList({
 
   // Calculate project metrics
   const getProjectMetrics = (projectId: string, budgetDays: number) => {
+    // Leaf tasks only (parents are roll-ups), and planned effort excludes
+    // Customer-owned days — the same numbers the project Overview shows.
     const projectTasks = tasks.filter(t => t.projectId === projectId);
-    const completedTasks = projectTasks.filter(t => t.status === 'completed');
-    
-    const progress = projectTasks.length > 0 ? Math.round((completedTasks.length / projectTasks.length) * 100) : 0;
-    const daysUsed = billableDays(completedTasks);
-    const budgetPercentage = budgetDays > 0 ? Math.round((daysUsed / budgetDays) * 100) : 0;
-    
-    return { progress, daysUsed, budgetPercentage, taskCount: projectTasks.length };
+    const parentIds = new Set(projectTasks.map(t => t.parentId).filter(Boolean));
+    const leaves = projectTasks.filter(t => !parentIds.has(t.id));
+    const completed = leaves.filter(t => t.status === 'completed');
+
+    const progress = leaves.length > 0 ? Math.round((completed.length / leaves.length) * 100) : 0;
+    const daysPlanned = Math.round(billableDays(leaves) * 10) / 10;
+    const daysUsed = Math.round(billableDays(completed) * 10) / 10;
+    const budgetPercentage = budgetDays > 0 ? Math.round((daysPlanned / budgetDays) * 100) : 0;
+    const overBudget = budgetDays > 0 && daysPlanned > budgetDays;
+
+    return { progress, daysUsed, daysPlanned, budgetPercentage, overBudget, taskCount: leaves.length };
   };
 
   const getHealthColors = (ragOverall?: string) => {
@@ -140,7 +146,8 @@ export default function ProjectsList({
     }
   };
 
-  const kanbanColumns = useMemo<ProjectKanbanColumn[]>(() => {
+  // filteredProjects is rebuilt each render, so memoizing on it never hit.
+  const kanbanColumns = ((): ProjectKanbanColumn[] => {
     if (kanbanGroupMode === 'phase') {
       const customPhases = Array.from(new Set(filteredProjects.map(p => resolvePhaseMeta({ phase: p.phase, status: p.status }).label)))
         .filter(phase => !PHASE_ORDER.includes(phase));
@@ -176,7 +183,7 @@ export default function ProjectsList({
       label: rag.label,
       projects: filteredProjects.filter(p => (p.ragOverall || 'green').toLowerCase() === rag.value)
     }));
-  }, [filteredProjects, kanbanGroupMode, consultants]);
+  })();
 
   const applyKanbanDrop = (columnId: string) => {
     if (!kanbanDragId) return;
@@ -316,7 +323,7 @@ export default function ProjectsList({
         </div>
         <div className="pl-kanban-meta">
           <span>{metrics.taskCount} tasks</span>
-          <span>{metrics.daysUsed}/{project.budgetDays}d</span>
+          <span className={metrics.overBudget ? 'pl-over' : undefined} title="Planned effort / budget">{metrics.daysPlanned}/{project.budgetDays}d</span>
           <span>{daysRemaining >= 0 ? `${daysRemaining}d left` : `${Math.abs(daysRemaining)}d overdue`}</span>
         </div>
         <div className="pl-kanban-footer">
@@ -334,6 +341,37 @@ export default function ProjectsList({
     );
   };
 
+  const filtersActive = searchTerm.trim() !== '' || statusFilter !== 'all' || phaseFilter !== 'all'
+    || healthFilter !== 'all' || leadConsultantFilter !== 'all';
+  const clearFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('all');
+    setPhaseFilter('all');
+    setHealthFilter('all');
+    setLeadConsultantFilter('all');
+  };
+  const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  const goLiveHint = (days: number) => days === 0 ? 'Today' : days > 0 ? `in ${days}d` : `${Math.abs(days)}d overdue`;
+
+  const emptyState = (
+    <div className="empty-state">
+      <FolderSearch size={28} aria-hidden="true" />
+      {filtersActive ? (
+        <>
+          <strong>No projects match these filters</strong>
+          <span>Try a different search or clear the filters to see everything.</span>
+          <button type="button" className="btn btn-secondary" onClick={clearFilters}><X size={15} /> Clear filters</button>
+        </>
+      ) : (
+        <>
+          <strong>No projects yet</strong>
+          <span>Create your first implementation project to start planning tasks.</span>
+          <button type="button" className="btn btn-primary" onClick={() => setIsNewProjectModalOpen(true)}><Plus size={15} /> New project</button>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* Toolbar: search, filters, view switch, count, primary action */}
@@ -343,7 +381,7 @@ export default function ProjectsList({
           <input
             type="search"
             className="form-input"
-            placeholder="Search projects, clients"
+            placeholder="Search projects…"
             aria-label="Search projects"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
@@ -411,6 +449,12 @@ export default function ProjectsList({
               ]}
             />
           </div>
+        )}
+
+        {filtersActive && (
+          <button type="button" className="btn btn-ghost toolbar-clear" onClick={clearFilters}>
+            <X size={14} /> Clear
+          </button>
         )}
 
         <span className="toolbar-count">{filteredProjects.length} of {activeProjects.length} projects</span>
@@ -509,7 +553,6 @@ export default function ProjectsList({
             const phaseColors = getPhaseColors(project.phase, project.status);
             const projectCode = `PRJ-${project.id.substring(0, 5).toUpperCase()}`;
             const daysRemaining = calculateDaysRemaining(project.targetGoLiveDate, project.startDate);
-            const risks = (project.ragOverall || '').toLowerCase() === 'red' ? 4 : (project.ragOverall || '').toLowerCase() === 'amber' ? 2 : 0;
 
             return (
               <div
@@ -538,10 +581,10 @@ export default function ProjectsList({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                     <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-tertiary)', letterSpacing: '0.02em' }}>{projectCode}</span>
-                    <span style={{ fontSize: '0.8rem', padding: '0.2rem 0.7rem', borderRadius: '12px', backgroundColor: 'rgba(16, 185, 129, 0.12)', color: '#10b981', fontWeight: 700 }}>Active</span>
+                    <span className="pl-status"><span style={{ backgroundColor: getStatusDotColor(project.status) }} />{project.status}</span>
                   </div>
                   <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.01em', lineHeight: 1.25 }}>{project.name}</h3>
-                  <span style={{ fontSize: '0.95rem', color: 'var(--text-secondary)' }}>{project.clientName} · PM Software Implementation</span>
+                  <span style={{ fontSize: '0.95rem', color: 'var(--text-secondary)' }}>{project.clientName}</span>
                 </div>
 
                 {/* Badges */}
@@ -573,9 +616,9 @@ export default function ProjectsList({
                 {/* Budget and Go-Live Info */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '0.85rem 1rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>Budget Used</span>
-                    <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>{metrics.daysUsed} Days</span>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>of {project.budgetDays} days · {metrics.budgetPercentage}%</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>Planned effort</span>
+                    <span style={{ fontSize: '1.1rem', fontWeight: 800, color: metrics.overBudget ? 'var(--danger)' : 'var(--text-primary)' }}>{metrics.daysPlanned} days</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>of {project.budgetDays} budget · {metrics.budgetPercentage}%</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', textAlign: 'right' }}>
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>Go-Live Target</span>
@@ -590,9 +633,6 @@ export default function ProjectsList({
                     <CheckCircle2 size={16} /> {metrics.taskCount} tasks
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: 'var(--text-tertiary)', fontSize: '0.9rem', fontWeight: 500 }}>
-                    <AlertCircle size={16} /> {risks} risks
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: 'var(--text-tertiary)', fontSize: '0.9rem', fontWeight: 500 }}>
                     <Users size={16} /> {1 + (project.projectResourceIds?.length || 0) + (project.leadConsultantId ? 1 : 0)} team
                   </div>
                 </div>
@@ -600,32 +640,30 @@ export default function ProjectsList({
             );
           })}
           {filteredProjects.length === 0 && (
-             <div style={{ gridColumn: '1 / -1', padding: '4rem', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '1.05rem' }}>
-               No projects found matching your criteria.
-             </div>
+            <div style={{ gridColumn: '1 / -1' }} className="card">{emptyState}</div>
           )}
         </div>
       ) : viewMode === 'list' ? (
-        <div className="card" style={{ overflowX: 'auto', padding: 0 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
+        <div className="card data-table-wrap">
+          <table className="data-table">
             <thead>
-              <tr style={{ borderBottom: '2px solid var(--border-strong)', textAlign: 'left', backgroundColor: 'var(--bg-tertiary)', fontSize: '0.85rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
-                <th style={{ padding: '1.1rem 0.6rem 1.1rem 1.5rem', width: '48px' }}>
+              <tr>
+                <th className="dt-check">
                   <input
                     type="checkbox"
                     className="win-checkbox"
+                    aria-label="Select all projects"
                     checked={selectedProjectIds.length === filteredProjects.length && filteredProjects.length > 0}
                     onChange={handleSelectAll}
                   />
                 </th>
-                <th style={{ padding: '1.1rem' }}>Project</th>
-                <th style={{ padding: '1.1rem' }}>Industry</th>
-                <th style={{ padding: '1.1rem' }}>Phase</th>
-                <th style={{ padding: '1.1rem' }}>Health</th>
-                <th style={{ padding: '1.1rem', width: '180px' }}>Progress</th>
-                <th style={{ padding: '1.1rem' }}>Budget</th>
-                <th style={{ padding: '1.1rem' }}>Go-Live</th>
-                <th style={{ padding: '1.1rem' }}>PM</th>
+                <th>Project</th>
+                <th>Phase</th>
+                {!hideRag && <th>Health</th>}
+                <th>Progress</th>
+                <th className="dt-num" title="Planned billable effort vs. budget">Effort / budget</th>
+                <th>Go-live</th>
+                <th>PM</th>
               </tr>
             </thead>
             <tbody>
@@ -635,83 +673,79 @@ export default function ProjectsList({
                 const healthColors = getHealthColors(project.ragOverall);
                 const phaseColors = getPhaseColors(project.phase, project.status);
                 const projectCode = `PRJ-${project.id.substring(0, 5).toUpperCase()}`;
+                const daysRemaining = calculateDaysRemaining(project.targetGoLiveDate, project.startDate);
+                const selected = selectedProjectIds.includes(project.id);
 
                 return (
                   <tr
                     key={project.id}
-                    style={{ borderBottom: '1px solid var(--border-color)', cursor: 'pointer', transition: 'background-color 0.15s' }}
-                    onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'}
-                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                    className={selected ? 'is-selected' : undefined}
+                    tabIndex={0}
+                    aria-label={`Open ${project.name}`}
                     onClick={() => onSelectProject(project.id)}
+                    onKeyDown={e => { if (e.key === 'Enter' && e.target === e.currentTarget) onSelectProject(project.id); }}
                   >
-                    <td style={{ padding: '1.1rem 0.6rem 1.1rem 1.5rem' }} onClick={e => e.stopPropagation()}>
+                    <td className="dt-check" onClick={e => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         className="win-checkbox"
-                        checked={selectedProjectIds.includes(project.id)}
+                        aria-label={`Select ${project.name}`}
+                        checked={selected}
                         onChange={() => handleSelectOne(project.id)}
                       />
                     </td>
-                    <td style={{ padding: '1.1rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: getStatusDotColor(project.status), flexShrink: 0 }} />
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', fontWeight: 700 }}>{projectCode}</span>
-                          <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '1rem' }}>{project.name}</span>
-                        </div>
+                    <td>
+                      <div className="dt-project">
+                      <span className="dt-dot" style={{ backgroundColor: getStatusDotColor(project.status) }} title={`Status: ${project.status}`} />
+                      <div>
+                        <span className="dt-title">{project.name}</span>
+                        <span className="dt-sub">{project.clientName} · {projectCode}</span>
+                      </div>
                       </div>
                     </td>
-                    <td style={{ padding: '1.1rem', fontSize: '0.95rem', color: 'var(--text-secondary)' }}>{project.clientName}</td>
-                    <td style={{ padding: '1.1rem' }}>
-                      <span style={{ fontSize: '0.85rem', padding: '0.3rem 0.85rem', borderRadius: '12px', backgroundColor: phaseColors.bg, color: phaseColors.text, fontWeight: 700, border: `1px solid ${phaseColors.text}30` }}>
+                    <td>
+                      <span className="pill" style={{ backgroundColor: phaseColors.bg, color: phaseColors.text, borderColor: `${phaseColors.text}30` }}>
                         {phaseColors.label}
                       </span>
                     </td>
-                    <td style={{ padding: '1.1rem' }}>
-                      {!hideRag ? (
-                      <span style={{ fontSize: '0.85rem', padding: '0.3rem 0.85rem', borderRadius: '12px', backgroundColor: healthColors.bg, color: healthColors.text, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem', width: 'fit-content' }}>
-                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: healthColors.dot }} />
-                        {healthColors.label}
-                      </span>
-                      ) : '—'}
-                    </td>
-                    <td style={{ padding: '1.1rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                        <div style={{ width: '90px', height: '8px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', backgroundColor: getStatusDotColor(project.status), width: `${metrics.progress}%`, borderRadius: '4px' }} />
-                        </div>
-                        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-secondary)' }}>{metrics.progress}%</span>
+                    {!hideRag && (
+                      <td>
+                        <span className="pill" style={{ backgroundColor: healthColors.bg, color: healthColors.text }}>
+                          <span className="pill-dot" style={{ backgroundColor: healthColors.dot }} />
+                          {healthColors.label}
+                        </span>
+                      </td>
+                    )}
+                    <td>
+                      <div className="dt-progress">
+                        <div className="dt-bar"><div style={{ width: `${metrics.progress}%`, backgroundColor: getStatusDotColor(project.status) }} /></div>
+                        <span>{metrics.progress}%</span>
                       </div>
                     </td>
-                    <td style={{ padding: '1.1rem' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{metrics.daysUsed} d</span>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>/ {project.budgetDays} d</span>
-                      </div>
+                    <td className="dt-num">
+                      <span className={metrics.overBudget ? 'dt-strong dt-over' : 'dt-strong'}>{metrics.daysPlanned}</span>
+                      <span className="dt-muted"> / {project.budgetDays}d</span>
                     </td>
-                    <td style={{ padding: '1.1rem', fontSize: '0.95rem', color: 'var(--text-secondary)' }}>
-                      {formatDateFriendly(project.targetGoLiveDate || project.startDate)}
+                    <td>
+                      <span className="dt-strong">{formatDateFriendly(project.targetGoLiveDate || project.startDate)}</span>
+                      <span className={`dt-sub ${daysRemaining < 0 ? 'dt-over' : ''}`}>{goLiveHint(daysRemaining)}</span>
                     </td>
-                    <td style={{ padding: '1.1rem', fontSize: '0.95rem' }}>
+                    <td>
                       {pm ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                          <span style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: pm.avatarColor, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>
-                            {pm.name.charAt(0)}
-                          </span>
-                          <span style={{ color: 'var(--text-secondary)' }}>{pm.name.split(' ')[0]} {pm.name.split(' ')[1]?.[0] || ''}</span>
-                        </div>
+                        <span className="dt-person">
+                          <span className="dt-avatar" style={{ backgroundColor: pm.avatarColor }}>{initials(pm.name)}</span>
+                          {pm.name}
+                        </span>
                       ) : (
-                        <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Unassigned</span>
+                        <span className="dt-muted">Unassigned</span>
                       )}
                     </td>
                   </tr>
                 );
               })}
               {filteredProjects.length === 0 && (
-                <tr>
-                  <td colSpan={9} style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '1.05rem' }}>
-                    No projects found matching your criteria.
-                  </td>
+                <tr className="dt-empty">
+                  <td colSpan={hideRag ? 7 : 8}>{emptyState}</td>
                 </tr>
               )}
             </tbody>
@@ -720,7 +754,7 @@ export default function ProjectsList({
       ) : (
         <div className="card pl-kanban">
           {filteredProjects.length === 0 ? (
-            <div className="pl-kanban-empty-board">No projects found matching your criteria.</div>
+            <div className="card">{emptyState}</div>
           ) : (
             <div className="pl-kanban-scroll">
               {kanbanColumns.map(column => (

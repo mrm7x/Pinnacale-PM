@@ -9,6 +9,7 @@ import { isCustomer as isCustomerUser, isManager as isManagerUser, isAdmin, type
 import PmDashboard from './PmDashboard';
 import { getProjectAccent, resolvePhase, resolvePhaseMeta, PHASE_ORDER } from '../utils/phases';
 import { billableDays } from '../utils/scheduler';
+import { formatDateFriendly } from '../utils/dates';
 
 // Status metadata shared across analytics/health views
 const STATUS_META: Record<Task['status'], { label: string; color: string }> = {
@@ -74,59 +75,6 @@ function Pill({ children, color }: { children: React.ReactNode; color: string })
   );
 }
 
-export function formatDateFriendly(dateStr?: string | null): string {
-  if (!dateStr) return '—';
-  const parts = dateStr.split('-');
-  if (parts.length !== 3) return dateStr;
-  const monthIndex = parseInt(parts[1]) - 1;
-  const day = parseInt(parts[2]);
-  
-  const months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-  
-  const getOrdinalSuffix = (d: number) => {
-    if (d > 3 && d < 21) return 'th';
-    switch (d % 10) {
-      case 1:  return "st";
-      case 2:  return "nd";
-      case 3:  return "rd";
-      default: return "th";
-    }
-  };
-  
-  return `${day}${getOrdinalSuffix(day)} of ${months[monthIndex]}`;
-}
-
-/** Format an ISO datetime string as e.g. "1st June 2026 at 2:30 PM" */
-export function formatDateTimeFriendly(dateStr?: string | null): string {
-  if (!dateStr) return '—';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return dateStr;
-
-  const months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-  const getOrdinalSuffix = (n: number) => {
-    if (n > 3 && n < 21) return 'th';
-    switch (n % 10) {
-      case 1: return 'st';
-      case 2: return 'nd';
-      case 3: return 'rd';
-      default: return 'th';
-    }
-  };
-
-  const day = d.getDate();
-  const month = months[d.getMonth()];
-  const year = d.getFullYear();
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-
-  return `${day}${getOrdinalSuffix(day)} ${month} ${year} at ${time}`;
-}
-
 interface DashboardProps {
   projects: Project[];
   tasks: Task[];
@@ -140,7 +88,7 @@ interface DashboardProps {
 
 export default function Dashboard({
   projects,
-  tasks,
+  tasks: allTasks,
   consultants,
   activeUserId,
   activeUser,
@@ -148,12 +96,19 @@ export default function Dashboard({
   onUpdateTask,
   onAddToast
 }: DashboardProps) {
+  // Only tasks of the projects shown here: templates and archived projects
+  // have tasks too, and counting them inflated workload and budget figures.
+  const tasks = React.useMemo(() => {
+    const ids = new Set(projects.map(p => p.id));
+    return allTasks.filter(t => ids.has(t.projectId));
+  }, [allTasks, projects]);
   const isConsultant = activeUserId !== 'admin';
   // PM Overview is for Project Managers, Managers and admins (internal only).
   const canSeePmOverview = !isCustomerUser(activeUser) && (isManagerUser(activeUser) || isAdmin(activeUser));
   const [dashboardMode, setDashboardMode] = useState<'pm' | 'team' | 'personal' | 'projects' | 'calendar' | 'analytics' | 'health' | 'resource' | 'timeline'>(
     () => activeUser?.role === 'Project Manager' ? 'pm' : (isConsultant ? 'personal' : 'team')
   );
+  const [lastViewByGroup, setLastViewByGroup] = useState<Record<string, typeof dashboardMode>>({});
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
@@ -214,22 +169,22 @@ export default function Dashboard({
 
   // Team Dashboard calculations
   const totalProjects = projects.length;
-  const totalTasks = tasks.length;
-  const completedTasks = tasks.filter(t => t.status === 'completed').length;
+  // Leaf tasks only: parents are roll-ups, so counting them double-counts
+  // both completion and effort. Matches the project Overview KPIs.
+  const parentIds = new Set(tasks.map(t => t.parentId).filter(Boolean));
+  const teamLeafTasks = tasks.filter(t => !parentIds.has(t.id));
+  const totalTasks = teamLeafTasks.length;
+  const completedTasks = teamLeafTasks.filter(t => t.status === 'completed').length;
   const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-  
+
   const totalBudgetDays = projects.reduce((acc, p) => acc + p.budgetDays, 0);
-  const totalAllocatedDays = tasks.reduce((acc, t) => {
-    const isParent = tasks.some(c => c.parentId === t.id);
-    return isParent ? acc : acc + t.durationDays;
-  }, 0);
+  // Customer-owned days don't count toward the budget (see billableDays).
+  const totalAllocatedDays = Math.round(billableDays(teamLeafTasks) * 10) / 10;
 
   const consultantWorkload = consultants.map(c => {
-    const assignedTasks = tasks.filter(t => t.assignedConsultantId === c.id);
-    const totalDays = assignedTasks.reduce((acc, t) => {
-      const isParent = tasks.some(sub => sub.parentId === t.id);
-      return isParent ? acc : acc + t.durationDays;
-    }, 0);
+    // Leaf tasks only: a parent's duration is the roll-up of its children.
+    const assignedTasks = teamLeafTasks.filter(t => t.assignedConsultantId === c.id);
+    const totalDays = Math.round(assignedTasks.reduce((acc, t) => acc + t.durationDays, 0) * 10) / 10;
     return {
       ...c,
       totalDays,
@@ -314,36 +269,67 @@ export default function Dashboard({
 
   const projectStats = projects.map(p => ({ project: p, stats: computeProjectStats(p) }));
 
+  // Nine flat tabs were hard to scan and several overlapped, so related views
+  // share a tab and switch with a segmented control underneath.
+  type DashboardMode = typeof dashboardMode;
+  type DashView = { id: DashboardMode; label: string; internalOnly?: boolean };
+  const dashboardGroups: { id: string; label: string; views: DashView[] }[] = [
+    ...(canSeePmOverview ? [{ id: 'pm', label: 'PM Overview', views: [{ id: 'pm' as const, label: 'PM Overview', internalOnly: true }] }] : []),
+    { id: 'team', label: 'Team', views: [
+      { id: 'team', label: 'Overview', internalOnly: true },
+      { id: 'analytics', label: 'Analytics', internalOnly: true },
+    ] },
+    { id: 'health', label: 'Health', views: [{ id: 'health', label: 'Health', internalOnly: true }] },
+    { id: 'resource', label: 'Resources', views: [{ id: 'resource', label: 'Resources', internalOnly: true }] },
+    { id: 'schedule', label: 'Schedule', views: [
+      { id: 'timeline', label: 'Milestones', internalOnly: true },
+      { id: 'projects', label: 'Projects' },
+      { id: 'calendar', label: 'Calendar', internalOnly: true },
+    ] },
+    ...(isConsultant ? [{ id: 'personal', label: 'My Agenda', views: [{ id: 'personal' as const, label: 'My Agenda' }] }] : []),
+  ];
+  const visibleGroups = dashboardGroups
+    .map(g => ({ ...g, views: g.views.filter(v => !userIsCustomer || !v.internalOnly) }))
+    .filter(g => g.views.length > 0);
+  const activeGroup = visibleGroups.find(g => g.views.some(v => v.id === dashboardMode));
+
   return (
     <div>
-      {/* Dashboard views — underline tabs */}
+      {/* Dashboard views — underline tabs, sub-views as a segmented control */}
       <div className="tabbar" style={{ marginBottom: '24px' }}>
       <div className="tabs" role="tablist">
-        {([
-          ...(canSeePmOverview ? [{ id: 'pm', label: 'PM Overview', internalOnly: true }] : []),
-          { id: 'team', label: 'Team Overview', internalOnly: true },
-          { id: 'analytics', label: 'Analytics', internalOnly: true },
-          { id: 'health', label: 'Health', internalOnly: true },
-          { id: 'resource', label: 'Resources', internalOnly: true },
-          { id: 'timeline', label: 'Timeline', internalOnly: true },
-          { id: 'projects', label: 'Projects' },
-          { id: 'calendar', label: 'Calendar', internalOnly: true },
-          ...(isConsultant ? [{ id: 'personal', label: 'My Agenda', internalOnly: false }] : [])
-        ] as { id: string; label: string; internalOnly?: boolean }[])
-        .filter(tab => !userIsCustomer || !tab.internalOnly)
-        .map(tab => (
+        {visibleGroups.map(group => (
           <button
-            key={tab.id}
+            key={group.id}
             role="tab"
-            aria-selected={dashboardMode === tab.id}
-            className={dashboardMode === tab.id ? 'active' : ''}
-            onClick={() => setDashboardMode(tab.id as typeof dashboardMode)}
+            aria-selected={activeGroup?.id === group.id}
+            className={activeGroup?.id === group.id ? 'active' : ''}
+            onClick={() => setDashboardMode(lastViewByGroup[group.id] ?? group.views[0].id)}
           >
-            {tab.label}
+            {group.label}
           </button>
         ))}
       </div>
       </div>
+
+      {activeGroup && activeGroup.views.length > 1 && (
+        <div className="seg" role="group" aria-label={`${activeGroup.label} views`} style={{ marginBottom: '20px' }}>
+          {activeGroup.views.map(view => (
+            <button
+              key={view.id}
+              type="button"
+              className={dashboardMode === view.id ? 'active' : ''}
+              aria-pressed={dashboardMode === view.id}
+              onClick={() => {
+                setDashboardMode(view.id);
+                setLastViewByGroup(prev => ({ ...prev, [activeGroup.id]: view.id }));
+              }}
+            >
+              {view.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {dashboardMode === 'personal' && activeUser && (
         // PERSONAL USER DASHBOARD

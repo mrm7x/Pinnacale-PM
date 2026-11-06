@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import type {
   Project, Task, Consultant, TaskColumnId, TaskView,
   StatusFilter, OwnerFilter, TaskViewMode, KanbanGroupMode
@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { WinComboBox } from './winui/WinComboBox';
 import { WinDatePicker } from './winui/WinDatePicker';
-import { formatDateFriendly } from './Dashboard';
+import { formatDateFriendly } from '../utils/dates';
 import { getProjectAccent } from '../utils/phases';
 import { getQuickAddMode } from '../utils/preferences';
 import TaskImportModal from './TaskImportModal';
@@ -81,12 +81,12 @@ interface ColumnDef {
 
 const COLUMN_DEFS: ColumnDef[] = [
   { id: 'name',     label: 'Task Name', size: 'minmax(260px, 1fr)',     toggleable: false },
-  { id: 'assignee', label: 'Assignee',  size: 'minmax(92px, 0.5fr)',    toggleable: true },
+  { id: 'assignee', label: 'Assignee',  size: 'minmax(96px, 128px)',    toggleable: true },
   { id: 'duration', label: 'Dur.',      size: '58px',                   toggleable: true },
-  { id: 'start',    label: 'Start',     size: '100px',                  toggleable: true },
-  { id: 'due',      label: 'Due',       size: '100px',                  toggleable: true },
+  { id: 'start',    label: 'Start',     size: '72px',                   toggleable: true },
+  { id: 'due',      label: 'Due',       size: '72px',                   toggleable: true },
   { id: 'progress', label: 'Progress',  size: '56px',                   toggleable: true },
-  { id: 'status',   label: 'Status',    size: 'minmax(100px, 0.6fr)',   toggleable: true },
+  { id: 'status',   label: 'Status',    size: '124px',                  toggleable: true },
 ];
 
 const DEFAULT_COLUMNS: TaskColumnId[] = ['name', 'assignee', 'duration', 'start', 'due', 'progress', 'status'];
@@ -120,6 +120,16 @@ const OWNER_OPTIONS: { label: string; value: TaskOwner }[] = [
   { label: 'Customer', value: 'Customer' },
   { label: 'Pinnacle / Customer', value: 'Pinnacle/Customer' }
 ];
+
+// Compact grid date ("6 Nov", year added when it isn't this year); the full
+// friendly date stays in the tooltip.
+const formatDateShort = (dateStr: string): string => {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = '2-digit';
+  return d.toLocaleDateString('en-GB', opts);
+};
 
 const statusLabel = (s: Task['status']) =>
   s.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
@@ -236,8 +246,12 @@ export default function TaskListV2({
   const [dropTarget, setDropTarget] = useState<{ type: 'before' | 'after' | 'into'; id: string } | null>(null);
   const [kanbanDragId, setKanbanDragId] = useState<string | null>(null);
 
-  // Reset ephemeral state when the project changes.
-  useEffect(() => {
+  // Reset ephemeral state when the project (or user) changes. Done during
+  // render, as React recommends, rather than in an effect that renders twice.
+  const resetKey = `${project.id}|${activeUserId}`;
+  const [lastResetKey, setLastResetKey] = useState(resetKey);
+  if (lastResetKey !== resetKey) {
+    setLastResetKey(resetKey);
     setSelectedIds([]);
     setModalTaskId(null);
     setCreateParentId(null);
@@ -256,7 +270,7 @@ export default function TaskListV2({
     setViews(nextViews);
     const first = nextViews[0] ?? makeDefaultView();
     applyView(first);
-  }, [project.id, activeUserId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   // Close modal on Escape.
   useEffect(() => {
@@ -373,7 +387,7 @@ export default function TaskListV2({
   }, [showColumnsPanel]);
 
   /** Load a view's columns/filters/font into the live working state. */
-  const applyView = useCallback((view: TaskView) => {
+  function applyView(view: TaskView) {
     setActiveViewId(view.id);
     setVisibleColumns(sanitizeColumns(view.columns));
     setHideCompleted(view.hideCompleted);
@@ -384,7 +398,7 @@ export default function TaskListV2({
     setViewMode(view.viewMode);
     setKanbanGroupMode(view.kanbanGroupMode);
     setFontScale(view.fontScale);
-  }, []);
+  }
 
   /** The active saved view object (or the built-in default). */
   const activeView = views.find(v => v.id === activeViewId) ?? views[0] ?? makeDefaultView();
@@ -503,11 +517,11 @@ export default function TaskListV2({
   }, [hideCompleted, ownerFilter, assigneeFilter, statusFilter, onlyMine, activeUserId, isParent]);
 
   const matchesTree = useCallback((task: Task): boolean => {
-    if (matchesSelf(task)) return true;
-    return childIds(task.id).some(cid => {
-      const child = projectTasks.find(t => t.id === cid);
-      return child ? matchesTree(child) : false;
+    const walk = (t: Task): boolean => matchesSelf(t) || childIds(t.id).some(cid => {
+      const child = projectTasks.find(x => x.id === cid);
+      return child ? walk(child) : false;
     });
+    return walk(task);
   }, [matchesSelf, childIds, projectTasks]);
 
   const kanbanTasks = useMemo(
@@ -580,13 +594,8 @@ export default function TaskListV2({
     if (!dragged || !target) { setDragId(null); setDropTarget(null); return; }
 
     // Determine the new parent + sibling list.
-    let newParentId: string | null;
-    let anchorId: string;
-    let insertBefore: boolean;
-
     if (dropTarget.type === 'into') {
-      newParentId = target.id;
-      const updates = buildReorderUpdates(dragId, target.id, null, false);
+      const updates= buildReorderUpdates(dragId, target.id, null, false);
       if (isDescendant(dragId, target.id)) {
         onAddToast('Cannot move a task under one of its own subtasks.', 'warning');
       } else {
@@ -595,9 +604,9 @@ export default function TaskListV2({
       setDragId(null); setDropTarget(null); return;
     }
 
-    newParentId = target.parentId ?? null;
-    anchorId = target.id;
-    insertBefore = dropTarget.type === 'before';
+    const newParentId = target.parentId ?? null;
+    const anchorId = target.id;
+    const insertBefore = dropTarget.type === 'before';
 
     if (isDescendant(dragId, anchorId)) {
       onAddToast('Cannot reorder a task relative to one of its own subtasks.', 'warning');
@@ -654,7 +663,7 @@ export default function TaskListV2({
     anchorId: string | null,
     insertBefore: boolean
   ): { id: string; sortOrder: number; parentId?: string | null }[] => {
-    let group = projectTasks
+    const group = projectTasks
       .filter(t => (t.parentId ?? null) === newParentId && t.id !== movedId)
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 
@@ -945,18 +954,16 @@ export default function TaskListV2({
                 case 'start':
                   return (
                     <div key="start" className="tv2-cell tv2-cell-start" data-label="Start">
-                      <span className="tv2-readonly">
-                        <Calendar size={12} />
-                        {task.plannedStartDate ? formatDateFriendly(task.plannedStartDate) : <span className="tv2-dash">—</span>}
+                      <span className="tv2-readonly" title={task.plannedStartDate ? formatDateFriendly(task.plannedStartDate) : undefined}>
+                        {task.plannedStartDate ? formatDateShort(task.plannedStartDate) : <span className="tv2-dash">—</span>}
                       </span>
                     </div>
                   );
                 case 'due':
                   return (
                     <div key="due" className="tv2-cell tv2-cell-due" data-label="Due">
-                      <span className={`tv2-readonly ${isOverdue ? 'tv2-readonly-overdue' : ''}`} title={isOverdue ? 'Overdue' : undefined}>
-                        <Calendar size={12} />
-                        {task.dueDate ? formatDateFriendly(task.dueDate) : <span className="tv2-dash">—</span>}
+                      <span className={`tv2-readonly ${isOverdue ? 'tv2-readonly-overdue' : ''}`} title={task.dueDate ? `${isOverdue ? 'Overdue · ' : ''}${formatDateFriendly(task.dueDate)}` : undefined}>
+                        {task.dueDate ? formatDateShort(task.dueDate) : <span className="tv2-dash">—</span>}
                       </span>
                     </div>
                   );
@@ -1493,9 +1500,11 @@ function TaskModal(props: TaskModalProps) {
   const persistTimer = useRef<number | null>(null);
   const pendingForm = useRef<DrawerForm | null>(null);
   const onUpdateRef = useRef(onUpdate);
-  onUpdateRef.current = onUpdate;
   const taskRef = useRef(task);
-  taskRef.current = task;
+  useLayoutEffect(() => {
+    onUpdateRef.current = onUpdate;
+    taskRef.current = task;
+  });
 
   const flushPending = () => {
     if (persistTimer.current !== null) { clearTimeout(persistTimer.current); persistTimer.current = null; }
@@ -1505,7 +1514,6 @@ function TaskModal(props: TaskModalProps) {
       pendingForm.current = null;
     }
   };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => flushPending, []);
 
   const update = (patch: Partial<typeof form>) => {

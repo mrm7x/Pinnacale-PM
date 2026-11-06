@@ -8,7 +8,7 @@ import { isAdmin, type ActiveUser } from '../utils/permissions';
 import { getProjectAccent, resolvePhase } from '../utils/phases';
 import { billableDays, effectiveDurationDays, formatDate, isWeekend, parseDate } from '../utils/scheduler';
 import { WinComboBox } from './winui/WinComboBox';
-import { formatDateFriendly } from './Dashboard';
+import { formatDateFriendly } from '../utils/dates';
 import './PmDashboard.css';
 
 /**
