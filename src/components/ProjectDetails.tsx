@@ -33,6 +33,7 @@ interface ProjectDetailsProps {
   onUpdateProject: (project: Project) => void;
   onDeleteProject: (id: string) => void;
   onCreateTask: (task: Omit<Task, 'id'>) => void;
+  onInsertTasks: (tasks: Task[], reorder?: { id: string; sortOrder: number }[]) => void;
   onUpdateTask: (task: Task) => void;
   onDeleteTask: (id: string) => void;
   onBulkUpdateTasks: (ids: string[], updates: Partial<Task>) => void;
@@ -79,6 +80,7 @@ export default function ProjectDetails({
   onUpdateProject,
   onDeleteProject,
   onCreateTask,
+  onInsertTasks,
   onUpdateTask,
   onDeleteTask,
   onBulkUpdateTasks,
@@ -1205,6 +1207,7 @@ export default function ProjectDetails({
               activeUserId={activeUserId}
               activeUser={activeUser}
               onCreateTask={onCreateTask}
+              onInsertTasks={onInsertTasks}
               onUpdateTask={onUpdateTask}
               onDeleteTask={onDeleteTask}
               onBulkUpdateTasks={onBulkUpdateTasks}

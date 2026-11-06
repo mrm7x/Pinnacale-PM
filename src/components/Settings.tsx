@@ -4,8 +4,9 @@ import type { Tier, ActiveUser } from '../utils/permissions';
 import { canManageUsers, canEditUsers, canManageDatabase, canManageCustomers } from '../utils/permissions';
 import {
   Users, ShieldCheck, Download, Upload, Trash2, Plus,
-  RefreshCw, CheckCircle, Database, FolderKanban, Edit2, Lock
+  RefreshCw, CheckCircle, Database, FolderKanban, Edit2, Lock, SlidersHorizontal
 } from 'lucide-react';
+import { getQuickAddMode, setQuickAddMode, type QuickAddMode } from '../utils/preferences';
 import { getSupabaseCredentials, testSupabaseConnection, getSupabaseClient, isSupabaseConfigured, setSupabaseEnabled, inviteUser } from '../utils/supabase';
 
 interface SettingsProps {
@@ -58,6 +59,7 @@ export default function Settings({
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [quickAddMode, setQuickAddModeState] = useState<QuickAddMode>(() => getQuickAddMode(activeUserId));
 
   const handleChangeOwnPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -397,6 +399,44 @@ REVOKE ALL ON tasks FROM anon;
                 <span>Update Password</span>
               </button>
             </form>
+          </div>
+
+          {/* Preferences (browser-local, per user) */}
+          <div className="card" style={{ marginTop: '1.25rem' }}>
+            <div className="card-header">
+              <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <SlidersHorizontal size={20} /> Preferences
+              </h3>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Quick-add behaviour</div>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                What happens when you click the <b>+</b> that appears above or below a task in the task list.
+              </p>
+              <div role="radiogroup" aria-label="Quick-add behaviour" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+                {([
+                  { value: 'inline', label: 'Inline row', hint: 'Type a name, press Enter' },
+                  { value: 'form', label: 'Open Add Task form', hint: 'Fill in every field first' },
+                ] as { value: QuickAddMode; label: string; hint: string }[]).map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={quickAddMode === opt.value}
+                    className={`btn ${quickAddMode === opt.value ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.1rem', padding: '0.55rem 0.9rem' }}
+                    onClick={() => {
+                      setQuickAddModeState(opt.value);
+                      setQuickAddMode(currentUser.id, opt.value);
+                      onAddToast(`Quick-add set to "${opt.label}".`, 'success');
+                    }}
+                  >
+                    <span style={{ fontWeight: 600 }}>{opt.label}</span>
+                    <span style={{ fontSize: '0.72rem', opacity: 0.8 }}>{opt.hint}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
       )}

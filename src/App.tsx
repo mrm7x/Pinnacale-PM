@@ -733,6 +733,23 @@ export default function App() {
     await rescheduleProjectTasks(taskData.projectId, activeProj.startDate, updatedTasksList);
   };
 
+  // Insert one or more fully-formed tasks (ids already assigned) and, in the
+  // same write, shift existing sibling sortOrders to open a gap for them. Used
+  // by the list's hover quick-add and by Excel/CSV import. Doing both in one
+  // reschedule avoids racing two state updates against a stale `tasks`.
+  const handleInsertTasks = async (
+    newTasks: Task[],
+    reorder: { id: string; sortOrder: number }[] = []
+  ) => {
+    if (newTasks.length === 0) return;
+    const activeProj = projects.find(p => p.id === newTasks[0].projectId);
+    if (!activeProj) return;
+
+    const reorderMap = new Map(reorder.map(r => [r.id, r.sortOrder]));
+    const shifted = tasks.map(t => reorderMap.has(t.id) ? { ...t, sortOrder: reorderMap.get(t.id) } : t);
+    await rescheduleProjectTasks(activeProj.id, activeProj.startDate, [...shifted, ...newTasks]);
+  };
+
   const handleUpdateTask = async (task: Task) => {
     const activeProj = projects.find(p => p.id === task.projectId);
     if (!activeProj) return;
@@ -1259,6 +1276,7 @@ export default function App() {
             onUpdateProject={handleUpdateProject}
             onDeleteProject={handleDeleteProject}
             onCreateTask={handleCreateTask}
+            onInsertTasks={handleInsertTasks}
             onUpdateTask={handleUpdateTask}
             onDeleteTask={handleDeleteTask}
             onBulkUpdateTasks={handleBulkUpdateTasks}

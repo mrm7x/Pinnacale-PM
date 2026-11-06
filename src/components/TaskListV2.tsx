@@ -7,12 +7,20 @@ import { canCreateTask, canEditTask, canEditAnyTask, type ActiveUser } from '../
 import {
   Plus, ChevronDown, ChevronRight, X, Clock, Calendar, Trash2,
   Link2, AlertTriangle, ListChecks, Filter, GripVertical, CornerDownRight,
-  Columns3, List, Minus, Save, Copy
+  Columns3, List, Minus, Save, Copy, Upload
 } from 'lucide-react';
 import { WinComboBox } from './winui/WinComboBox';
 import { WinDatePicker } from './winui/WinDatePicker';
 import { formatDateFriendly } from './Dashboard';
 import { getProjectAccent } from '../utils/phases';
+import { getQuickAddMode } from '../utils/preferences';
+import TaskImportModal from './TaskImportModal';
+
+/** Where a hover quick-add inserts relative to the hovered task. */
+type QuickAddPlacement = 'before' | 'after' | 'firstChild';
+
+/** Client-side task id, same shape App.tsx uses for new tasks. */
+const newTaskId = () => `t-${Math.random().toString(36).substring(2, 9)}`;
 
 /**
  * Tasks v2 — a re-imagined implementation-task tree.
@@ -38,6 +46,8 @@ interface TaskListV2Props {
   activeUserId: string;
   activeUser: ActiveUser | null;
   onCreateTask: (task: Omit<Task, 'id'>) => void;
+  /** Insert tasks (ids pre-assigned) and shift sibling sortOrders in one write. */
+  onInsertTasks: (tasks: Task[], reorder?: { id: string; sortOrder: number }[]) => void;
   onUpdateTask: (task: Task) => void;
   onDeleteTask: (id: string) => void;
   onBulkUpdateTasks: (ids: string[], updates: Partial<Task>) => void;
@@ -129,6 +139,7 @@ export default function TaskListV2({
   activeUserId,
   activeUser,
   onCreateTask,
+  onInsertTasks,
   onUpdateTask,
   onDeleteTask,
   onBulkUpdateTasks,
@@ -192,6 +203,12 @@ export default function TaskListV2({
   const [createParentId, setCreateParentId] = useState<string | null>(null);
   const [inlineEdit, setInlineEdit] = useState<{ id: string; field: 'duration' | 'status' | 'assignee'; value: string } | null>(null);
 
+  // Hover quick-add. `quickAdd` drives the inline name row; `pendingInsert`
+  // remembers the target position while the full Add Task form is open.
+  const [quickAdd, setQuickAdd] = useState<{ anchorId: string; placement: QuickAddPlacement; name: string } | null>(null);
+  const [pendingInsert, setPendingInsert] = useState<{ anchorId: string; placement: QuickAddPlacement } | null>(null);
+  const [showImport, setShowImport] = useState(false);
+
   // Filters
   const [hideCompleted, setHideCompleted] = useState(false);
   const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>('all');
@@ -225,6 +242,9 @@ export default function TaskListV2({
     setModalTaskId(null);
     setCreateParentId(null);
     setInlineEdit(null);
+    setQuickAdd(null);
+    setPendingInsert(null);
+    setShowImport(false);
     setDragId(null);
     setDropTarget(null);
     setKanbanDragId(null);
@@ -241,7 +261,7 @@ export default function TaskListV2({
   // Close modal on Escape.
   useEffect(() => {
     if (!modalTaskId && !createParentId) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setModalTaskId(null); setCreateParentId(null); } };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setModalTaskId(null); setCreateParentId(null); setPendingInsert(null); } };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [modalTaskId, createParentId]);
@@ -254,6 +274,79 @@ export default function TaskListV2({
   const openCreate = (parentId: string | null = null) => {
     setCreateParentId(parentId ?? '');
     setModalTaskId(null);
+    setPendingInsert(null);
+  };
+
+  // ---- Hover quick-add ------------------------------------------------------
+  /** Parent the new task gets for a given anchor + placement. */
+  const quickAddParent = (anchor: Task, placement: QuickAddPlacement): string | null =>
+    placement === 'firstChild' ? anchor.id : (anchor.parentId ?? null);
+
+  /**
+   * Plan an insert: the new task's sortOrder, plus sortOrder rewrites for the
+   * existing siblings so the group stays evenly spaced at 10, 20, 30…
+   * Only siblings whose value actually changes are returned.
+   */
+  const planInsert = (anchorId: string, placement: QuickAddPlacement) => {
+    const anchor = projectTasks.find(t => t.id === anchorId);
+    if (!anchor) return null;
+    const parentId = quickAddParent(anchor, placement);
+    const group = projectTasks
+      .filter(t => (t.parentId ?? null) === parentId)
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    const anchorIdx = group.findIndex(t => t.id === anchorId);
+    const insertIdx = placement === 'firstChild' ? 0
+      : placement === 'before' ? anchorIdx
+      : anchorIdx + 1;
+    const reorder: { id: string; sortOrder: number }[] = [];
+    group.forEach((t, i) => {
+      const next = (i < insertIdx ? i + 1 : i + 2) * 10;
+      if (t.sortOrder !== next) reorder.push({ id: t.id, sortOrder: next });
+    });
+    return { parentId, sortOrder: (insertIdx + 1) * 10, reorder };
+  };
+
+  const startQuickAdd = (anchor: Task, placement: QuickAddPlacement) => {
+    if (getQuickAddMode(activeUserId) === 'form') {
+      setModalTaskId(null);
+      setPendingInsert({ anchorId: anchor.id, placement });
+      setCreateParentId(quickAddParent(anchor, placement) ?? '');
+    } else {
+      setInlineEdit(null);
+      quickAddDone.current = false;
+      setQuickAdd({ anchorId: anchor.id, placement, name: '' });
+    }
+    if (placement === 'firstChild') setExpanded(prev => ({ ...prev, [anchor.id]: true }));
+  };
+
+  /** Insert a task built from `fields` at the planned position. Returns false if the anchor vanished. */
+  const insertAt = (anchorId: string, placement: QuickAddPlacement, fields: Omit<Task, 'id'>): boolean => {
+    const plan = planInsert(anchorId, placement);
+    if (!plan) return false;
+    onInsertTasks(
+      [{ ...fields, id: newTaskId(), projectId: project.id, parentId: plan.parentId, sortOrder: plan.sortOrder }],
+      plan.reorder
+    );
+    return true;
+  };
+
+  // Enter commits and unmounts the input, which can also fire blur with the
+  // same (stale) quickAdd — this guard makes the second call a no-op.
+  // Reset by startQuickAdd each time a new inline row opens.
+  const quickAddDone = useRef(false);
+
+  const commitQuickAdd = () => {
+    if (!quickAdd || quickAddDone.current) return;
+    quickAddDone.current = true;
+    const name = quickAdd.name.trim();
+    if (!name) { setQuickAdd(null); return; }
+    const ok = insertAt(quickAdd.anchorId, quickAdd.placement, {
+      projectId: project.id, parentId: null, name, description: '',
+      durationDays: 0, assignedConsultantId: null, predecessorIds: [],
+      status: 'not_started', taskOwner: 'Pinnacle', progress: 0,
+    });
+    if (ok) onAddToast(`Task "${name}" added.`, 'success');
+    setQuickAdd(null);
   };
 
   // ---- Saved views: persistence + management --------------------------------
@@ -691,7 +784,13 @@ export default function TaskListV2({
       const isDropAfter = dropTarget?.type === 'after' && dropTarget.id === task.id;
       const isDropInto = dropTarget?.type === 'into' && dropTarget.id === task.id;
       const isDragging = dragId === task.id;
+      const quickAddHere = quickAdd?.anchorId === task.id ? quickAdd.placement : null;
+      // Below an expanded parent the gap visually sits above its first child,
+      // so "+" there adds a sub-task at the top rather than a sibling after
+      // the whole subtree.
+      const belowPlacement: QuickAddPlacement = taskIsParent && isExpanded ? 'firstChild' : 'after';
 
+      if (quickAddHere === 'before') rows.push(renderQuickAddRow(depth));
       rows.push(
         <div key={task.id} className="tv2-row-wrap">
           {/* before drop indicator */}
@@ -717,6 +816,27 @@ export default function TaskListV2({
             onDrop={(e) => { e.preventDefault(); applyDrop(); }}
             style={{ '--tv2-depth': depth, gridTemplateColumns } as React.CSSProperties}
           >
+            {canQuickAdd && !dragId && (
+              <>
+                <button type="button" className="tv2-qa-btn tv2-qa-top"
+                  title="Add task above" aria-label={`Add task above ${task.name}`}
+                  draggable={false}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); startQuickAdd(task, 'before'); }}
+                >
+                  <Plus size={11} strokeWidth={3} />
+                </button>
+                <button type="button" className="tv2-qa-btn tv2-qa-bottom"
+                  title={belowPlacement === 'firstChild' ? 'Add sub-task at the top' : 'Add task below'}
+                  aria-label={belowPlacement === 'firstChild' ? `Add sub-task under ${task.name}` : `Add task below ${task.name}`}
+                  draggable={false}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); startQuickAdd(task, belowPlacement); }}
+                >
+                  <Plus size={11} strokeWidth={3} />
+                </button>
+              </>
+            )}
             {visibleColumns.map(colId => {
               switch (colId) {
                 case 'name':
@@ -888,14 +1008,42 @@ export default function TaskListV2({
 
           {taskIsParent && isExpanded && (
             <div className="tv2-children">
+              {quickAddHere === 'firstChild' && renderQuickAddRow(depth + 1)}
               {renderTree(task.id, depth + 1, taskNumber, [...depthIsLast, isLastSibling])}
             </div>
           )}
         </div>
       );
+      if (quickAddHere === 'after') rows.push(renderQuickAddRow(depth));
     });
     return rows;
   };
+
+  const canQuickAdd = canCreateTask(activeUser, project);
+
+  /** The inline "type a name" row shown in place of a hover quick-add. */
+  function renderQuickAddRow(depth: number) {
+    return (
+      <div key="__quickadd" className="tv2-quickadd-row">
+        <div className="tv2-quickadd-inner" style={{ paddingLeft: `calc(1rem + ${depth * 20}px)` }}>
+          <Plus size={14} className="tv2-quickadd-icon" />
+          <input
+            autoFocus
+            className="form-input tv2-quickadd-input"
+            placeholder="New task name — Enter to save, Esc to cancel"
+            value={quickAdd?.name ?? ''}
+            onChange={(e) => setQuickAdd(q => q ? { ...q, name: e.target.value } : q)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); commitQuickAdd(); }
+              if (e.key === 'Escape') { e.stopPropagation(); setQuickAdd(null); }
+            }}
+            // Clicking away with a name typed still saves it; empty just closes.
+            onBlur={commitQuickAdd}
+          />
+        </div>
+      </div>
+    );
+  }
 
   const renderKanbanCard = (task: Task) => {
     const assigned = consultants.find(c => c.id === task.assignedConsultantId);
@@ -1000,6 +1148,12 @@ export default function TaskListV2({
               onClick={() => openCreate(null)}
             >
               <Plus size={15} /> Add Task
+            </button>
+          )}
+          {canCreateTask(activeUser, project) && (
+            <button className="btn btn-secondary tv2-add-btn" onClick={() => setShowImport(true)}
+              title="Import tasks from an Excel (.xlsx) or CSV file">
+              <Upload size={15} /> Import
             </button>
           )}
         </div>
@@ -1230,9 +1384,17 @@ export default function TaskListV2({
           isParent={isParent}
           isDescendant={isDescendant}
           progressFor={progressFor}
-          onClose={() => { setModalTaskId(null); setCreateParentId(null); }}
+          onClose={() => { setModalTaskId(null); setCreateParentId(null); setPendingInsert(null); }}
           onSave={(t) => {
-            onCreateTask(t);
+            // Opened from a hover "+": insert at that spot, unless the user
+            // changed the parent in the form (then fall back to appending).
+            const anchor = pendingInsert ? projectTasks.find(x => x.id === pendingInsert.anchorId) : null;
+            if (pendingInsert && anchor && (t.parentId ?? null) === quickAddParent(anchor, pendingInsert.placement)) {
+              insertAt(pendingInsert.anchorId, pendingInsert.placement, t);
+            } else {
+              onCreateTask(t);
+            }
+            setPendingInsert(null);
             setModalTaskId(null);
             setCreateParentId(null);
             onAddToast('Task created successfully!', 'success');
@@ -1248,6 +1410,21 @@ export default function TaskListV2({
             setExpanded(prev => ({ ...prev, [parentId]: true }));
           }}
           renderDependencyTree={renderDependencyTree}
+        />
+      )}
+
+      {showImport && (
+        <TaskImportModal
+          project={project}
+          existingTasks={projectTasks}
+          consultants={consultants}
+          accent={accent}
+          onClose={() => setShowImport(false)}
+          onImport={(newTasks) => {
+            onInsertTasks(newTasks);
+            setShowImport(false);
+            onAddToast(`Imported ${newTasks.length} task${newTasks.length === 1 ? '' : 's'}.`, 'success');
+          }}
         />
       )}
 

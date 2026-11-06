@@ -2295,6 +2295,122 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
   white-space: nowrap;
 }
 
+/* Hover quick-add: small "+" discs on the row's top and bottom edges. */
+.tv2-row { position: relative; }
+.tv2-qa-btn {
+  position: absolute;
+  left: 0.2rem;
+  z-index: 3;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent, var(--primary)) 55%, transparent);
+  background-color: var(--bg-elevated);
+  color: var(--accent, var(--primary));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.85);
+  transition: opacity var(--transition-fast), transform var(--transition-fast), background-color var(--transition-fast);
+}
+.tv2-qa-top { top: -9px; }
+.tv2-qa-bottom { bottom: -9px; }
+.tv2-row:hover > .tv2-qa-btn,
+.tv2-qa-btn:focus-visible { opacity: 1; transform: scale(1); }
+.tv2-qa-btn:hover {
+  background-color: var(--accent, var(--primary));
+  color: white;
+  transform: scale(1.1);
+}
+/* Touch screens have no hover: keep the discs hidden there. */
+@media (hover: none) { .tv2-qa-btn { display: none; } }
+
+.tv2-quickadd-row {
+  border-bottom: 1px solid var(--border-color);
+  background-color: color-mix(in srgb, var(--accent, var(--primary)) 6%, var(--bg-secondary));
+  box-shadow: inset 3px 0 0 var(--accent, var(--primary));
+  padding: 0.4rem 1rem 0.4rem 0;
+}
+.tv2-quickadd-inner { display: flex; align-items: center; gap: 0.5rem; }
+.tv2-quickadd-icon { color: var(--accent, var(--primary)); flex-shrink: 0; }
+.tv2-quickadd-input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  font-size: 0.9em;
+}
+
+/* ---- Task import modal ---- */
+.tv2-import-modal { width: min(820px, calc(100vw - 2rem)); }
+.tv2-import-intro { margin: 0; font-size: 0.88rem; color: var(--text-secondary); line-height: 1.5; }
+.tv2-import-template { align-self: flex-start; display: inline-flex; align-items: center; gap: 0.4rem; }
+.tv2-import-drop {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 2rem 1rem;
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-tertiary);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+.tv2-import-drop:hover,
+.tv2-import-drop-active {
+  border-color: var(--accent, var(--primary));
+  background-color: color-mix(in srgb, var(--accent, var(--primary)) 6%, var(--bg-tertiary));
+}
+.tv2-import-drop:focus-within { outline: 2px solid var(--primary); outline-offset: 2px; }
+.tv2-import-file { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.tv2-import-drop-title { font-weight: 600; color: var(--text-primary); }
+.tv2-import-drop-hint { font-size: 0.78rem; color: var(--text-tertiary); }
+.tv2-import-alert {
+  display: flex; align-items: flex-start; gap: 0.5rem;
+  padding: 0.6rem 0.8rem; border-radius: var(--radius-md); font-size: 0.85rem;
+}
+.tv2-import-alert-error { color: var(--danger); background-color: color-mix(in srgb, var(--danger) 10%, transparent); border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent); }
+.tv2-import-filebar { display: flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); font-size: 0.85rem; }
+.tv2-import-filename { font-weight: 600; color: var(--text-primary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv2-import-summary { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.tv2-import-stat {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600;
+}
+.tv2-import-stat-ok { color: #047857; background-color: rgba(16, 185, 129, 0.12); }
+.tv2-import-stat-warn { color: #b45309; background-color: rgba(245, 158, 11, 0.14); }
+.tv2-import-stat-err { color: var(--danger); background-color: color-mix(in srgb, var(--danger) 12%, transparent); }
+:root.dark .tv2-import-stat-ok { color: #6ee7b7; }
+:root.dark .tv2-import-stat-warn { color: #fcd34d; }
+.tv2-import-note { margin: 0; font-size: 0.78rem; color: var(--text-tertiary); }
+.tv2-import-table-wrap { overflow: auto; max-height: 46vh; border: 1px solid var(--border-color); border-radius: var(--radius-md); }
+.tv2-import-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.tv2-import-table th {
+  position: sticky; top: 0; z-index: 1;
+  text-align: left; padding: 0.45rem 0.6rem;
+  background-color: var(--bg-tertiary); color: var(--text-tertiary);
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-strong);
+}
+.tv2-import-table td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border-color); color: var(--text-primary); vertical-align: top; }
+.tv2-import-rownum { color: var(--text-tertiary); font-variant-numeric: tabular-nums; width: 3rem; }
+.tv2-import-name { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 500; }
+.tv2-import-sub { color: var(--text-tertiary); flex-shrink: 0; }
+.tv2-import-parent { display: block; font-size: 0.72rem; color: var(--text-tertiary); padding-left: 1rem; }
+.tv2-import-row-skip td { opacity: 0.55; text-decoration: line-through; }
+.tv2-import-row-skip td.tv2-import-rownum { text-decoration: none; }
+.tv2-import-notes td { padding-top: 0; font-size: 0.75rem; border-bottom: 1px solid var(--border-color); }
+.tv2-import-row-skip + .tv2-import-notes td,
+tr:has(+ .tv2-import-notes) td { border-bottom: none; }
+.tv2-import-notes-warn td { color: #b45309; }
+.tv2-import-notes-err td { color: var(--danger); }
+:root.dark .tv2-import-notes-warn td { color: #fcd34d; }
+
 /* Drop zones (between/around rows) — reorder shows a solid bar; nest is on the row itself */
 .tv2-drop-zone {
   height: 6px;

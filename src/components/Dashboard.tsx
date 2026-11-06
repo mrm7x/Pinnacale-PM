@@ -3,9 +3,10 @@ import type { Project, Task, Consultant } from '../types';
 import {
   FolderKanban, Clock, CheckSquare, Users, AlertTriangle,
   User, Calendar, CheckCircle2, Circle, ChevronLeft, ChevronRight,
-  BarChart3, Activity, Gauge, Flag, PieChart, Layers, AlertCircle, CalendarClock
+  BarChart3, Activity, Gauge, Flag, PieChart, Layers, AlertCircle, CalendarClock, Briefcase
 } from 'lucide-react';
-import { isCustomer as isCustomerUser, type ActiveUser } from '../utils/permissions';
+import { isCustomer as isCustomerUser, isManager as isManagerUser, isAdmin, type ActiveUser } from '../utils/permissions';
+import PmDashboard from './PmDashboard';
 import { getProjectAccent, resolvePhase, resolvePhaseMeta, PHASE_ORDER } from '../utils/phases';
 import { billableDays } from '../utils/scheduler';
 
@@ -148,7 +149,11 @@ export default function Dashboard({
   onAddToast
 }: DashboardProps) {
   const isConsultant = activeUserId !== 'admin';
-  const [dashboardMode, setDashboardMode] = useState<'team' | 'personal' | 'projects' | 'calendar' | 'analytics' | 'health' | 'resource' | 'timeline'>(isConsultant ? 'personal' : 'team');
+  // PM Overview is for Project Managers, Managers and admins (internal only).
+  const canSeePmOverview = !isCustomerUser(activeUser) && (isManagerUser(activeUser) || isAdmin(activeUser));
+  const [dashboardMode, setDashboardMode] = useState<'pm' | 'team' | 'personal' | 'projects' | 'calendar' | 'analytics' | 'health' | 'resource' | 'timeline'>(
+    () => activeUser?.role === 'Project Manager' ? 'pm' : (isConsultant ? 'personal' : 'team')
+  );
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
@@ -314,6 +319,7 @@ export default function Dashboard({
       {/* Dashboard Toggle — pill tab bar */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '2rem', backgroundColor: 'var(--bg-secondary)', padding: '0.35rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)', width: 'fit-content', maxWidth: '100%' }}>
         {([
+          ...(canSeePmOverview ? [{ id: 'pm', icon: <Briefcase size={17} />, label: 'PM Overview', internalOnly: true }] : []),
           { id: 'team', icon: <Users size={17} />, label: 'Team Overview', internalOnly: true },
           { id: 'analytics', icon: <BarChart3 size={17} />, label: 'Analytics', internalOnly: true },
           { id: 'health', icon: <Activity size={17} />, label: 'Health', internalOnly: true },
@@ -576,6 +582,16 @@ export default function Dashboard({
             </div>
           </div>
         </div>
+      )}
+
+      {dashboardMode === 'pm' && canSeePmOverview && (
+        <PmDashboard
+          projects={projects}
+          tasks={tasks}
+          consultants={consultants}
+          activeUser={activeUser}
+          onSelectProject={onSelectProject}
+        />
       )}
 
       {dashboardMode === 'team' && (
