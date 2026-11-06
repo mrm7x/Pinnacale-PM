@@ -171,7 +171,9 @@ export default function Login({ consultants, onLoginSuccess, onAddToast }: Login
 
   const renderLeftHeroPanel = () => (
     <div className="login-hero-panel" style={{
-      background: 'linear-gradient(145deg, var(--primary-dark) 0%, var(--primary) 55%, #7c3aed 100%)',
+      // Fixed Pinnacle navy, not the theme tokens: --primary flips to near-white
+      // in dark mode, which washed this panel out behind its white text.
+      background: 'linear-gradient(145deg, #071A26 0%, #11354A 55%, #1B4A66 100%)',
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'space-between',
@@ -198,7 +200,7 @@ export default function Login({ consultants, onLoginSuccess, onAddToast }: Login
         position: 'absolute', bottom: '160px', right: '40px',
         width: '140px', height: '140px',
         borderRadius: '50%',
-        background: 'rgba(167, 139, 250, 0.22)',
+        background: 'radial-gradient(circle, rgba(249, 130, 49, 0.42) 0%, rgba(249, 130, 49, 0.12) 70%)', /* Pinnacle orange */
         pointerEvents: 'none'
       }} />
 

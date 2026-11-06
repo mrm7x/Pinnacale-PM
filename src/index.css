@@ -2662,11 +2662,11 @@ tr:has(+ .tv2-import-notes) td { border-bottom: none; }
 .g2-pop-value { color: var(--text-primary); font-weight: 500; text-align: right; display: inline-flex; align-items: center; gap: 0.3rem; }
 .g2-pop-status { font-weight: 700; padding: 0.1rem 0.5rem; border-radius: var(--radius-sm); font-size: 0.76rem; }
 .g2-pop-status-not_started { background-color: var(--bg-tertiary); color: var(--text-secondary); }
-.g2-pop-status-in_progress { background-color: var(--primary); color: white; }
-.g2-pop-status-on_hold { background-color: var(--warning); color: #3a2e00; }
-.g2-pop-status-completed { background-color: var(--success); color: white; }
-:root.dark .g2-pop-status-in_progress,
-:root.dark .g2-pop-status-completed { color: #11132a; }
+/* Same tinted status pills as the task list (.tv2-badge-*). */
+.g2-pop-status-in_progress { background-color: color-mix(in srgb, #2563EB 10%, var(--bg-secondary)); color: #1D4ED8; }
+.g2-pop-status-on_hold { background-color: var(--warning-light); color: var(--warning); }
+.g2-pop-status-completed { background-color: var(--success-light); color: var(--success); }
+:root.dark .g2-pop-status-in_progress { background-color: color-mix(in srgb, #60A5FA 14%, var(--bg-secondary)); color: #93C5FD; }
 .g2-pop-progress { display: inline-block; width: 70px; height: 7px; background-color: var(--bg-tertiary); border-radius: 4px; overflow: hidden; }
 .g2-pop-progress-fill { display: block; height: 100%; }
 .g2-pop-list { display: flex; flex-wrap: wrap; gap: 0.3rem; }
