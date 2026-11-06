@@ -33,8 +33,11 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Deploy edge functions
+        # --use-api bundles on Supabase's side instead of pulling the
+        # edge-runtime Docker image, which public.ecr.aws rate-limits on shared
+        # runner IPs ("toomanyrequests: Rate exceeded") and fails the deploy.
         run: |
-          supabase functions deploy invite-user
-          supabase functions deploy delete-user
+          supabase functions deploy invite-user --use-api
+          supabase functions deploy delete-user --use-api
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
