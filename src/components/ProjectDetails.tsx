@@ -33,7 +33,7 @@ interface ProjectDetailsProps {
   onUpdateProject: (project: Project) => void;
   onDeleteProject: (id: string) => void;
   onCreateTask: (task: Omit<Task, 'id'>) => void;
-  onInsertTasks: (tasks: Task[], reorder?: { id: string; sortOrder: number }[]) => void;
+  onInsertTasks: (tasks: Task[], reorder?: { id: string; sortOrder: number }[], replaced?: Task[]) => void;
   onUpdateTask: (task: Task) => void;
   onDeleteTask: (id: string) => void;
   onBulkUpdateTasks: (ids: string[], updates: Partial<Task>) => void;

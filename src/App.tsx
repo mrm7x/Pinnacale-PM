@@ -737,16 +737,23 @@ export default function App() {
   // same write, shift existing sibling sortOrders to open a gap for them. Used
   // by the list's hover quick-add and by Excel/CSV import. Doing both in one
   // reschedule avoids racing two state updates against a stale `tasks`.
+  // `replaced` are full replacements for existing tasks (import updates).
   const handleInsertTasks = async (
     newTasks: Task[],
-    reorder: { id: string; sortOrder: number }[] = []
+    reorder: { id: string; sortOrder: number }[] = [],
+    replaced: Task[] = []
   ) => {
-    if (newTasks.length === 0) return;
-    const activeProj = projects.find(p => p.id === newTasks[0].projectId);
+    const first = newTasks[0] ?? replaced[0];
+    if (!first) return;
+    const activeProj = projects.find(p => p.id === first.projectId);
     if (!activeProj) return;
 
     const reorderMap = new Map(reorder.map(r => [r.id, r.sortOrder]));
-    const shifted = tasks.map(t => reorderMap.has(t.id) ? { ...t, sortOrder: reorderMap.get(t.id) } : t);
+    const replaceMap = new Map(replaced.map(t => [t.id, t]));
+    const shifted = tasks.map(t => {
+      const base = replaceMap.get(t.id) ?? t;
+      return reorderMap.has(t.id) ? { ...base, sortOrder: reorderMap.get(t.id) } : base;
+    });
     await rescheduleProjectTasks(activeProj.id, activeProj.startDate, [...shifted, ...newTasks]);
   };
 

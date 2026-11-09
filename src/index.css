@@ -2081,6 +2081,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
 /* ---- Task import modal ---- */
 .tv2-import-modal { width: min(820px, calc(100vw - 2rem)); }
 .tv2-import-intro { margin: 0; font-size: 0.88rem; color: var(--text-secondary); line-height: 1.5; }
+.tv2-import-downloads { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .tv2-import-template { align-self: flex-start; display: inline-flex; align-items: center; gap: 0.4rem; }
 .tv2-import-drop {
   position: relative;
@@ -2145,6 +2146,18 @@ tr:has(+ .tv2-import-notes) td { border-bottom: none; }
 .tv2-import-notes-warn td { color: #b45309; }
 .tv2-import-notes-err td { color: var(--danger); }
 :root.dark .tv2-import-notes-warn td { color: #fcd34d; }
+.tv2-import-notes-change td { color: var(--text-secondary); }
+.tv2-import-notes-change b { font-weight: 600; color: var(--text-primary); }
+tr:has(+ .tv2-import-notes-change) td,
+.tv2-import-notes-change:has(+ .tv2-import-notes) td { border-bottom: none; }
+.tv2-import-action {
+  display: inline-block; padding: 0.05rem 0.45rem; border-radius: 4px;
+  font-size: 0.7rem; font-weight: 600; white-space: nowrap;
+}
+.tv2-import-action-create { color: var(--success); background-color: var(--success-light); }
+.tv2-import-action-update { color: var(--accent-ink); background-color: var(--accent-light); }
+.tv2-import-action-unchanged { color: var(--text-secondary); background-color: var(--primary-light); }
+.tv2-import-action-skip { color: var(--danger); background-color: color-mix(in srgb, var(--danger) 12%, transparent); }
 
 /* Drop zones (between/around rows) — reorder shows a solid bar; nest is on the row itself */
 .tv2-drop-zone {

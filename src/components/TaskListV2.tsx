@@ -47,7 +47,7 @@ interface TaskListV2Props {
   activeUser: ActiveUser | null;
   onCreateTask: (task: Omit<Task, 'id'>) => void;
   /** Insert tasks (ids pre-assigned) and shift sibling sortOrders in one write. */
-  onInsertTasks: (tasks: Task[], reorder?: { id: string; sortOrder: number }[]) => void;
+  onInsertTasks: (tasks: Task[], reorder?: { id: string; sortOrder: number }[], replaced?: Task[]) => void;
   onUpdateTask: (task: Task) => void;
   onDeleteTask: (id: string) => void;
   onBulkUpdateTasks: (ids: string[], updates: Partial<Task>) => void;
@@ -1420,10 +1420,13 @@ export default function TaskListV2({
           consultants={consultants}
           accent={accent}
           onClose={() => setShowImport(false)}
-          onImport={(newTasks) => {
-            onInsertTasks(newTasks);
+          onImport={(created, updated) => {
+            onInsertTasks(created, [], updated);
             setShowImport(false);
-            onAddToast(`Imported ${newTasks.length} task${newTasks.length === 1 ? '' : 's'}.`, 'success');
+            const n = (k: number) => `${k} task${k === 1 ? '' : 's'}`;
+            const parts = [created.length ? `added ${n(created.length)}` : '', updated.length ? `updated ${n(updated.length)}` : ''].filter(Boolean);
+            const msg = parts.join(' and ');
+            onAddToast(`${msg.charAt(0).toUpperCase()}${msg.slice(1)}.`, 'success');
           }}
         />
       )}
