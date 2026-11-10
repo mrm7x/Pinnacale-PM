@@ -1880,6 +1880,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator:hover {
 /* Inline editors */
 .tv2-inline-edit { display: flex; align-items: center; gap: 0.3rem; width: 100%; }
 .tv2-duration-input { width: 70px; padding: 0.25rem 0.4rem; height: auto; text-align: center; }
+.tv2-start-edit .form-input { padding: 0.25rem 0.4rem !important; font-size: 0.85em; gap: 0.3rem; white-space: nowrap; }
 
 /* ---- Kanban board ---- */
 .tv2-kanban {

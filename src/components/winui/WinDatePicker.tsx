@@ -7,13 +7,23 @@ interface WinDatePickerProps {
   onChange: (value: string) => void;
   className?: string;
   disabled?: boolean;
+  /** Open the calendar immediately on mount (used by inline cell editors). */
+  defaultOpen?: boolean;
+  /** Called when the calendar is dismissed without picking a date (outside click / Escape). */
+  onClose?: () => void;
+  /** When provided, shows a "Clear" action in the calendar footer. */
+  onClear?: () => void;
+  clearLabel?: string;
 }
 
-export function WinDatePicker({ value, onChange, className = '', disabled = false }: WinDatePickerProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function WinDatePicker({ value, onChange, className = '', disabled = false, defaultOpen = false, onClose, onClear, clearLabel = 'Clear' }: WinDatePickerProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  // Ref so the long-lived document listeners always see the latest callback.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   
   // Track currently viewed month in the calendar
   const [viewDate, setViewDate] = useState(() => {
@@ -32,11 +42,26 @@ export function WinDatePicker({ value, onChange, className = '', disabled = fals
         menuRef.current && !menuRef.current.contains(event.target as Node)
       ) {
         setIsOpen(false);
+        onCloseRef.current?.();
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Escape dismisses the open calendar.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setIsOpen(false);
+        onCloseRef.current?.();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isOpen]);
 
   // Use useLayoutEffect so position is set before the browser paints.
   const computeMenuStyle = () => {
@@ -178,6 +203,19 @@ export function WinDatePicker({ value, onChange, className = '', disabled = fals
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
           {days}
         </div>
+
+        {onClear && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border-color)' }}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ fontSize: '0.8rem', padding: '0.25rem 0.6rem' }}
+              onClick={(e) => { e.stopPropagation(); setIsOpen(false); onClear(); }}
+            >
+              {clearLabel}
+            </button>
+          </div>
+        )}
       </div>
     );
   };

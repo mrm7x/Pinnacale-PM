@@ -211,7 +211,7 @@ export default function TaskListV2({
   const [modalTaskId, setModalTaskId] = useState<string | null>(null);
   // When non-null, the create modal is open with this as the preset parent (empty string = top-level).
   const [createParentId, setCreateParentId] = useState<string | null>(null);
-  const [inlineEdit, setInlineEdit] = useState<{ id: string; field: 'duration' | 'status' | 'assignee'; value: string } | null>(null);
+  const [inlineEdit, setInlineEdit] = useState<{ id: string; field: 'duration' | 'status' | 'assignee' | 'start'; value: string } | null>(null);
 
   // Hover quick-add. `quickAdd` drives the inline name row; `pendingInsert`
   // remembers the target position while the full Add Task form is open.
@@ -568,6 +568,17 @@ export default function TaskListV2({
       onUpdateTask({ ...task, assignedConsultantId: value === '' ? null : value });
     }
     setInlineEdit(null);
+  };
+
+  // Pin (or un-pin with null) a task's start date. The scheduler treats
+  // customStartDate as a hard start; clearing it reverts to auto-scheduling.
+  const commitInlineStart = (id: string, value: string | null) => {
+    const task = projectTasks.find(t => t.id === id);
+    setInlineEdit(null);
+    if (!task) return;
+    const next = value || null;
+    if ((task.customStartDate || null) === next) return;
+    onUpdateTask({ ...task, customStartDate: next });
   };
 
   // ---- Drag-and-drop handlers ----------------------------------------------
@@ -954,9 +965,28 @@ export default function TaskListV2({
                 case 'start':
                   return (
                     <div key="start" className="tv2-cell tv2-cell-start" data-label="Start">
-                      <span className="tv2-readonly" title={task.plannedStartDate ? formatDateFriendly(task.plannedStartDate) : undefined}>
-                        {task.plannedStartDate ? formatDateShort(task.plannedStartDate) : <span className="tv2-dash">—</span>}
-                      </span>
+                      {inlineEdit?.id === task.id && inlineEdit.field === 'start' ? (
+                        <div className="tv2-inline-edit tv2-start-edit" onClick={(e) => e.stopPropagation()}>
+                          <WinDatePicker
+                            defaultOpen
+                            value={inlineEdit.value}
+                            onChange={(v) => commitInlineStart(task.id, v)}
+                            onClose={() => setInlineEdit(null)}
+                            onClear={task.customStartDate ? () => commitInlineStart(task.id, null) : undefined}
+                            clearLabel="Clear (auto-schedule)"
+                          />
+                        </div>
+                      ) : (
+                        <button type="button" className="tv2-cell-btn tv2-cell-btn-center"
+                          disabled={!canEditThisTask(task)}
+                          title={task.plannedStartDate
+                            ? `${formatDateFriendly(task.plannedStartDate)}${task.customStartDate ? ' · fixed start' : ''} — click to change`
+                            : 'Set start date'}
+                          onClick={(e) => { e.stopPropagation(); setInlineEdit({ id: task.id, field: 'start', value: task.customStartDate || task.plannedStartDate || '' }); }}
+                        >
+                          {task.plannedStartDate ? formatDateShort(task.plannedStartDate) : <span className="tv2-dash">—</span>}
+                        </button>
+                      )}
                     </div>
                   );
                 case 'due':
