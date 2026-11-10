@@ -2807,3 +2807,70 @@ tr:has(+ .tv2-import-notes-change) td,
 /* Project status chip on grid cards (was a hard-coded "Active"). */
 .pl-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: capitalize; }
 .pl-status > span { width: 7px; height: 7px; border-radius: 50%; }
+
+/* ── Navigation: project-aware sidebar ─────────────────────────────────── */
+.nav-rag-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.nav-project-head { display: flex; align-items: center; gap: 8px; margin: 18px 0 4px; padding: 0 10px;
+  font-size: 12.5px; font-weight: 600; color: var(--text-primary); overflow: hidden; }
+.nav-project-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-project-tabs .nav-item-sub { padding-left: 14px; font-size: 13px; }
+.nav-recent { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.sidebar.collapsed .nav-project-head { justify-content: center; padding: 0; margin: 14px 0 6px; }
+.sidebar.collapsed .nav-project-name { display: none; }
+.sidebar.collapsed .nav-project-tabs .nav-item-sub { padding-left: 0; }
+
+/* Project page when the sidebar lists the views: title instead of tabs. */
+.tabbar.tabbar-no-tabs { align-items: center; }
+.tabbar-title { margin: 0 0 8px; font-size: 18px; font-weight: 650; letter-spacing: -0.01em; }
+
+/* ── Navigation: top bar ───────────────────────────────────────────────── */
+.app-container.layout-topbar { display: flex; flex-direction: column; }
+.app-container.layout-topbar .main-content { flex: 1; min-height: 0; height: auto; }
+.topnav { display: flex; align-items: center; gap: 16px; height: 52px; flex: none; padding: 0 20px;
+  background: var(--side-bg); border-bottom: 1px solid var(--border-color); position: relative; z-index: 120; }
+.topnav-brand { display: flex; align-items: center; padding: 0; border: 0; background: none; color: var(--text-primary); cursor: pointer; }
+.topnav-logo-mark { display: none; }
+.topnav-tabs { display: flex; align-self: stretch; gap: 4px; }
+.topnav-tabs > button { display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; margin-bottom: -1px; border: 0;
+  border-bottom: 2px solid transparent; background: none; color: var(--text-secondary); font: 600 13.5px var(--font-body); cursor: pointer; }
+.topnav-tabs > button:hover { color: var(--text-primary); }
+.topnav-tabs > button.active { color: var(--text-primary); border-bottom-color: var(--accent); }
+.topnav-tabs > button.active svg { color: var(--accent-ink); }
+.topnav-switcher { min-width: 0; }
+.topnav-switcher-btn { display: inline-flex; align-items: center; gap: 8px; max-width: 340px; height: 32px; padding: 0 10px;
+  border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary);
+  font: 500 13px var(--font-body); cursor: pointer; }
+.topnav-switcher-btn:hover { border-color: var(--border-strong); }
+.topnav-switcher-btn > svg { color: var(--text-secondary); flex: none; }
+.topnav-switcher-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.switcher-menu { left: 0; right: auto; width: 440px; max-width: calc(100vw - 24px); padding: 6px; }
+.switcher-search { position: relative; margin-bottom: 4px; }
+.switcher-search > svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-tertiary); pointer-events: none; }
+.switcher-search > .form-input { padding-left: 30px; height: 34px; }
+.switcher-list { max-height: min(420px, 60vh); overflow-y: auto; overflow-x: hidden; }
+.switcher-list > button { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 7px 10px;
+  border: 0; border-radius: 6px; background: none; color: var(--text-primary); font: 500 13px var(--font-body);
+  text-align: left; cursor: pointer; }
+.switcher-list > button:hover, .switcher-list > button:focus-visible { background: var(--hover); outline: none; }
+.switcher-list > button.current { background: var(--side-hover); }
+.switcher-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.switcher-client { flex: 0 1 auto; padding-left: 8px; font-size: 12px; font-weight: 400; color: var(--text-tertiary); white-space: nowrap; max-width: 40%; overflow: hidden; text-overflow: ellipsis; }
+.switcher-check { color: var(--accent-ink); flex: none; }
+.switcher-label { padding: 6px 10px 2px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-tertiary); }
+.switcher-empty { padding: 10px; font-size: 13px; color: var(--text-secondary); }
+.topnav-account { margin-left: auto; }
+.topnav-avatar { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 8px; color: #fff;
+  font: 700 11px var(--font-body); letter-spacing: .02em; cursor: pointer; }
+.topnav-avatar:hover { box-shadow: 0 0 0 2px var(--border-strong); }
+.topnav-who { display: flex; flex-direction: column; padding: 6px 10px 4px; line-height: 1.3; }
+
+@media (max-width: 768px) {
+  .topnav { gap: 10px; padding: 0 12px; height: 52px; }
+  .topnav-logo-full { display: none; }
+  .topnav-logo-mark { display: block; }
+  .topnav-tabs > button { padding: 0 8px; }
+  .topnav-tabs > button > span { display: none; }
+  .topnav-switcher { flex: 1; }
+  .topnav-switcher-btn { max-width: 100%; width: 100%; }
+  .app-container.layout-topbar .main-content { height: auto !important; }
+}

@@ -9,14 +9,14 @@ import ProjectsList from './components/ProjectsList';
 import Settings from './components/Settings';
 import Login from './components/Login';
 import Logo from './components/Logo';
-import CroppedLogo from './components/CroppedLogo';
+import { SideNav, TopNav } from './components/AppNav';
 import NewProjectModal from './components/NewProjectModal';
 import { WinComboBox } from './components/winui/WinComboBox';
+import { X, Menu, ArrowLeft } from 'lucide-react';
 import {
-  FolderKanban, LayoutDashboard, Settings as SettingsIcon, 
-  Sun, Moon, X, LogOut, Menu, PanelLeft,
-  ArrowLeft
-} from 'lucide-react';
+  getNavLayout, saveNavLayout, getRecentProjectIds, withRecentProject, saveRecentProjectIds,
+  type NavLayout, type ProjectTab
+} from './utils/navigation';
 import { api } from './utils/api';
 import { isSupabaseConfigured, getSupabaseClient, inviteUser, deleteAuthUser } from './utils/supabase';
 import {
@@ -114,6 +114,13 @@ export default function App() {
     localStorage.setItem('pinnacle_sidebar_collapsed', String(isSidebarCollapsed));
   }, [isSidebarCollapsed]);
 
+  // Navigation chrome: project-aware sidebar or top bar (Settings > Preferences).
+  const [navLayout, setNavLayoutState] = useState<NavLayout>(getNavLayout);
+  const setNavLayout = (layout: NavLayout) => { saveNavLayout(layout); setNavLayoutState(layout); };
+  // Lives here (not in ProjectDetails) so the sidebar can switch project views.
+  const [projectTab, setProjectTab] = useState<ProjectTab>('overview');
+  const [recentProjectIds, setRecentProjectIds] = useState<string[]>(getRecentProjectIds);
+
   // Password reset modal state
   const [showPasswordReset, setShowPasswordReset] = useState<boolean>(false);
   const [resetUserId, setResetUserId] = useState<string>('');
@@ -145,6 +152,12 @@ export default function App() {
       localStorage.removeItem('pinnacle_selected_project_id');
     }
   }, [selectedProjectId]);
+  // Track opened projects. Adjusted during render (not in an effect) so the
+  // list is current on the same paint the project opens.
+  if (selectedProjectId && recentProjectIds[0] !== selectedProjectId) {
+    setRecentProjectIds(prev => withRecentProject(prev, selectedProjectId));
+  }
+  useEffect(() => { saveRecentProjectIds(recentProjectIds); }, [recentProjectIds]);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   // Migrate old sagepulse_ keys to pinnacle_ prefix (one-time)
@@ -1307,6 +1320,9 @@ export default function App() {
               await api.communications.delete(id);
             }}
             setIsNewProjectModalOpen={setIsNewProjectModalOpen}
+            activeProjectTab={projectTab}
+            onProjectTabChange={setProjectTab}
+            hideTabs={navLayout === 'sidebar'}
           />
         );
       case 'settings':
@@ -1328,6 +1344,8 @@ export default function App() {
             onAddToast={addToast}
             projectTemplates={projectTemplates}
             onDeleteTemplate={handleDeleteTemplate}
+            navLayout={navLayout}
+            onNavLayoutChange={setNavLayout}
           />
         );
       default:
@@ -1396,8 +1414,23 @@ export default function App() {
       );
     }
 
+    const navProps = {
+      activeTab,
+      onNavigate: (tab: 'dashboard' | 'projects' | 'settings') => { setActiveTab(tab); setIsMobileMenuOpen(false); },
+      projects: filteredProjects,
+      selectedProjectId,
+      onSelectProject: (id: string | null) => { setSelectedProjectId(id); setIsMobileMenuOpen(false); },
+      projectTab,
+      onProjectTabChange: (tab: ProjectTab) => { setProjectTab(tab); setIsMobileMenuOpen(false); },
+      recentProjectIds,
+      activeUser,
+      theme,
+      onToggleTheme: () => setTheme(theme === 'dark' ? 'light' : 'dark'),
+      onLogout: handleLogout,
+    };
+
     return (
-      <div className={`app-container ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+      <div className={`app-container ${navLayout === 'topbar' ? 'layout-topbar' : (isSidebarCollapsed ? 'sidebar-collapsed' : '')}`}>
         {/* Password Reset Modal */}
         {showPasswordReset && (
           <PasswordReset
@@ -1426,7 +1459,8 @@ export default function App() {
           />
         )}
 
-        {/* Mobile Header Bar */}
+        {/* Mobile Header Bar (sidebar layout only; the top bar is its own header) */}
+        {navLayout === 'sidebar' && (
         <header className="mobile-header">
           <button 
             className="hamburger-btn"
@@ -1452,165 +1486,24 @@ export default function App() {
             </span>
           </div>
         </header>
+        )}
 
         {/* Mobile Sidebar Backdrop Overlay */}
-        {isMobileMenuOpen && (
+        {navLayout === 'sidebar' && isMobileMenuOpen && (
           <div className="sidebar-overlay" onClick={() => setIsMobileMenuOpen(false)} />
         )}
 
-        {/* Sidebar navigation */}
-        <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''} ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            <div className="brand-section">
-              {!isSidebarCollapsed ? (
-                <Logo style={{ height: '24px', width: 'auto' }} />
-              ) : (
-                <CroppedLogo style={{ height: '24px', width: 'auto' }} />
-              )}
-            </div>
-
-            <nav style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-              <ul className="nav-list">
-                {!isCustomer(activeUser) && (
-                <li
-                  className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
-                  onClick={() => {
-                    setActiveTab('dashboard');
-                    setIsMobileMenuOpen(false);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      setActiveTab('dashboard');
-                      setIsMobileMenuOpen(false);
-                    }
-                  }}
-                  title="Dashboard"
-                  aria-label="Navigate to Dashboard"
-                  role="button"
-                  tabIndex={0}
-                >
-                  <LayoutDashboard size={18} />
-                  <span>Dashboard</span>
-                </li>
-                )}
-                <li>
-                  <div
-                    className={`nav-item ${activeTab === 'projects' && !selectedProjectId ? 'active' : ''}`}
-                    onClick={() => {
-                      setSelectedProjectId(null);
-                      setActiveTab('projects');
-                      setIsMobileMenuOpen(false);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        setSelectedProjectId(null);
-                        setActiveTab('projects');
-                        setIsMobileMenuOpen(false);
-                      }
-                    }}
-                    title="Projects"
-                    aria-label="Navigate to Projects"
-                    role="button"
-                    tabIndex={0}
-                  >
-                    <FolderKanban size={18} />
-                    <span>Projects</span>
-                  </div>
-                </li>
-              </ul>
-
-              {/* Recent projects sub-tree */}
-              {!isSidebarCollapsed && (() => {
-                const recentProjects = filteredProjects
-                  .slice()
-                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                  .slice(0, 10);
-                if (recentProjects.length === 0) return null;
-                return (
-                  <>
-                    <div className="nav-section-label">Recent projects</div>
-                    <ul className="nav-subtree">
-                      {recentProjects.map(p => (
-                        <li
-                          key={p.id}
-                          className={`nav-subitem ${selectedProjectId === p.id ? 'nav-subitem-active' : ''}`}
-                          onClick={() => {
-                            setSelectedProjectId(p.id);
-                            setActiveTab('projects');
-                            setIsMobileMenuOpen(false);
-                          }}
-                          title={p.name}
-                        >
-                          <span className="nav-subitem-dot" />
-                          <span className="nav-subitem-text">{p.name}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                );
-              })()}
-            </nav>
-          </div>
-
-          <div className="side-foot">
-            <div className="acct" title={isSidebarCollapsed ? `${activeUser?.name || 'User'} · ${activeUser?.role || 'User'}` : undefined}>
-              <span
-                className="acct-avatar"
-                style={{ backgroundColor: activeUser?.tier === 'superuser' || activeUser?.tier === 'admin' ? '#11354A' : (activeUser?.avatarColor || '#11354A') }}
-              >
-                {activeUser?.tier === 'superuser' ? 'SU' : activeUser?.tier === 'admin' ? 'AD' : (activeUser?.name.split(' ').map(n => n[0]).join('').slice(0, 2) || 'U')}
-              </span>
-              <span className="acct-who">
-                <span className="acct-name">{activeUser?.name || 'User'}</span>
-                <span className="acct-role">{activeUser?.role || 'User'}</span>
-              </span>
-              <button className="side-icon" onClick={handleLogout} title="Sign out" aria-label="Sign out">
-                <LogOut size={15} />
-              </button>
-            </div>
-
-            <div className="side-row">
-              {!isCustomer(activeUser) && (
-                <div
-                  className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
-                  onClick={() => {
-                    setActiveTab('settings');
-                    setIsMobileMenuOpen(false);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      setActiveTab('settings');
-                      setIsMobileMenuOpen(false);
-                    }
-                  }}
-                  title="Settings"
-                  aria-label="Navigate to Settings"
-                  role="button"
-                  tabIndex={0}
-                >
-                  <SettingsIcon size={17} />
-                  <span>Settings</span>
-                </div>
-              )}
-              <button
-                className="side-icon"
-                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-                aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-              >
-                {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
-              </button>
-              <button
-                className="side-icon desktop-only-toggle"
-                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              >
-                <PanelLeft size={17} />
-              </button>
-            </div>
-          </div>
-        </aside>
+        {/* Navigation: project-aware sidebar or top bar */}
+        {navLayout === 'topbar' ? (
+          <TopNav {...navProps} />
+        ) : (
+          <SideNav
+            {...navProps}
+            collapsed={isSidebarCollapsed}
+            onToggleCollapsed={() => setIsSidebarCollapsed(c => !c)}
+            mobileOpen={isMobileMenuOpen}
+          />
+        )}
 
         {/* Main Panel Viewport */}
         <main className="main-content">
@@ -1642,7 +1535,7 @@ export default function App() {
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'row', gap: '1rem', alignItems: 'center', position: 'relative', zIndex: 100 }}>
-              {activeTab === 'projects' && selectedProjectId && (
+              {navLayout === 'sidebar' && activeTab === 'projects' && selectedProjectId && (
                 <div style={{ width: '300px' }}>
                   <WinComboBox
                     className="form-select"

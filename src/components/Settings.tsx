@@ -6,6 +6,7 @@ import {
   Users, ShieldCheck, Download, Upload, Trash2, Plus,
   RefreshCw, CheckCircle, Database, FolderKanban, Edit2, Lock, SlidersHorizontal
 } from 'lucide-react';
+import type { NavLayout } from '../utils/navigation';
 import { getQuickAddMode, setQuickAddMode, type QuickAddMode } from '../utils/preferences';
 import { getSupabaseCredentials, testSupabaseConnection, getSupabaseClient, isSupabaseConfigured, setSupabaseEnabled, inviteUser } from '../utils/supabase';
 
@@ -26,6 +27,8 @@ interface SettingsProps {
   onAddToast: (msg: string, type: 'success' | 'error' | 'warning' | 'info') => void;
   projectTemplates: Project[];
   onDeleteTemplate: (id: string) => void;
+  navLayout: NavLayout;
+  onNavLayoutChange: (layout: NavLayout) => void;
 }
 
 export default function Settings({
@@ -44,7 +47,9 @@ export default function Settings({
   onResetData,
   onAddToast,
   projectTemplates,
-  onDeleteTemplate
+  onDeleteTemplate,
+  navLayout,
+  onNavLayoutChange
 }: SettingsProps) {
   // Consultant Form
   const [newConsultant, setNewConsultant] = useState<{ name: string; email: string; role: Role; avatarColor: string; tier: Tier }>({ name: '', email: '', role: 'Consultant', avatarColor: '#0d9488', tier: 'normal' });
@@ -429,6 +434,34 @@ REVOKE ALL ON tasks FROM anon;
                       setQuickAddModeState(opt.value);
                       setQuickAddMode(currentUser.id, opt.value);
                       onAddToast(`Quick-add set to "${opt.label}".`, 'success');
+                    }}
+                  >
+                    <span style={{ fontWeight: 600 }}>{opt.label}</span>
+                    <span style={{ fontSize: '0.72rem', opacity: 0.8 }}>{opt.hint}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ fontWeight: 600, fontSize: '0.9rem', marginTop: '1.25rem' }}>Navigation layout</div>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                Where the main navigation sits. Saved in this browser.
+              </p>
+              <div role="radiogroup" aria-label="Navigation layout" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+                {([
+                  { value: 'sidebar', label: 'Sidebar', hint: 'Project views listed on the left' },
+                  { value: 'topbar', label: 'Top bar', hint: 'Full width for Gantt and tables' },
+                ] as { value: NavLayout; label: string; hint: string }[]).map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={navLayout === opt.value}
+                    className={`btn ${navLayout === opt.value ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.1rem', padding: '0.55rem 0.9rem' }}
+                    onClick={() => {
+                      if (navLayout === opt.value) return;
+                      onNavLayoutChange(opt.value);
+                      onAddToast(`Navigation set to "${opt.label}".`, 'success');
                     }}
                   >
                     <span style={{ fontWeight: 600 }}>{opt.label}</span>

@@ -22,6 +22,7 @@ import EditProjectModal from './EditProjectModal';
 import TaskListV2 from './TaskListV2';
 import { formatDateFriendly, formatDateTimeFriendly } from '../utils/dates';
 import { resolvePhaseMeta, getProjectAccent } from '../utils/phases';
+import { visibleProjectTabs, type ProjectTab } from '../utils/navigation';
 
 interface ProjectDetailsProps {
   projects: Project[];
@@ -49,6 +50,11 @@ interface ProjectDetailsProps {
   onSaveCommunication: (comm: Communication) => Promise<void>;
   onDeleteCommunication: (id: string) => Promise<void>;
   setIsNewProjectModalOpen: (val: boolean) => void;
+  /** Controlled by App so the project-aware sidebar can switch views too. */
+  activeProjectTab: ProjectTab;
+  onProjectTabChange: (tab: ProjectTab) => void;
+  /** True when the sidebar already lists the project views. */
+  hideTabs?: boolean;
 }
 
 
@@ -95,12 +101,14 @@ export default function ProjectDetails({
   onReorderTasks,
   onSaveCommunication,
   onDeleteCommunication,
-  setIsNewProjectModalOpen
+  setIsNewProjectModalOpen,
+  activeProjectTab,
+  onProjectTabChange: setActiveProjectTab,
+  hideTabs = false
 }: ProjectDetailsProps) {
   // activeUser (unified, customer-aware) is the source of truth for RBAC.
   const userIsCustomer = isCustomerUser(activeUser);
 
-  const [activeProjectTab, setActiveProjectTab] = useState<'overview' | 'tasks' | 'tasks-v2' | 'gantt' | 'rag' | 'communications'>('overview');
   const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
@@ -792,26 +800,26 @@ export default function ProjectDetails({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
           {/* Tabs + actions on one hairline bar; rarely used actions sit under "More" */}
-          <div className="tabbar">
+          <div className={`tabbar ${hideTabs ? 'tabbar-no-tabs' : ''}`}>
+            {hideTabs ? (
+              <h2 className="tabbar-title">
+                {visibleProjectTabs(userIsCustomer).find(t => t.id === activeProjectTab)?.label ?? 'Overview'}
+              </h2>
+            ) : (
             <div className="tabs" role="tablist">
-              {([
-                { id: 'overview', label: 'Overview' },
-                { id: 'tasks-v2', label: 'Tasks' },
-                { id: 'gantt', label: 'Gantt' },
-                { id: 'rag', label: 'RAG', customerHidden: true },
-                { id: 'communications', label: 'Project notes', customerHidden: true }
-              ] as const).filter(tab => !('customerHidden' in tab && tab.customerHidden && userIsCustomer)).map(tab => (
+              {visibleProjectTabs(userIsCustomer).map(tab => (
                 <button
                   key={tab.id}
                   role="tab"
                   aria-selected={activeProjectTab === tab.id}
                   className={activeProjectTab === tab.id ? 'active' : ''}
-                  onClick={() => setActiveProjectTab(tab.id as any)}
+                  onClick={() => setActiveProjectTab(tab.id)}
                 >
                   {tab.label}
                 </button>
               ))}
             </div>
+            )}
 
             {!userIsCustomer && (
             <div className="tabbar-actions">
