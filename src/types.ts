@@ -157,7 +157,7 @@ export interface TaskView {
 // Holiday / availability tracker — one row per person per project.
 // ---------------------------------------------------------------------------
 
-/** A Available · U Unavailable (holiday) · H Half day · T Training/other · P Public holiday. */
+/** A Available · U Unavailable (holiday) · H Half day · T Other commitment · P Public holiday. */
 export type AvailabilityCode = 'A' | 'U' | 'H' | 'T' | 'P';
 
 export interface ProjectAvailability {

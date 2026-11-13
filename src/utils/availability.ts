@@ -22,7 +22,7 @@ export const AVAILABILITY_CODES: AvailabilityCodeDef[] = [
   { code: 'A', label: 'Available', fill: '#BBF7D0', ink: '#14532D' },
   { code: 'U', label: 'Unavailable / holiday', fill: '#EF4444', ink: '#FFFFFF' },
   { code: 'H', label: 'Half day / partial', fill: '#FCD34D', ink: '#78350F' },
-  { code: 'T', label: 'Training / other commitment', fill: '#93C5FD', ink: '#1E3A8A' },
+  { code: 'T', label: 'Other commitment', fill: '#93C5FD', ink: '#1E3A8A' },
   { code: 'P', label: 'Public holiday / non-working', fill: '#D1D5DB', ink: '#374151' },
 ];
 
