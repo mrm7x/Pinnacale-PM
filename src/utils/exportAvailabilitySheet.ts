@@ -1,14 +1,15 @@
 import type ExcelJS from 'exceljs';
 import type { Project, ProjectAvailability, Task } from '../types';
-import { parseDate } from './scheduler';
 import { AVAILABILITY_CODES, timelineDates, timelineDayCount } from './availability';
+import { TIMELINE_HEADER_ROWS, weekStartBorder, writeTimelineHeader } from './excelDateHeader';
 
 // ---------------------------------------------------------------------------
 // Sheet 3 — Availability (holiday tracker)
 //
-// Same working-day columns as the "Gantt Chart" sheet. People type a code in
-// each day cell (dropdown); conditional formatting colours it. The row of ISO
-// dates above the names lets the app match pasted / imported columns by date.
+// Same working-day columns and date header as the "Gantt Chart" sheet. People
+// type a code in each day cell (dropdown); conditional formatting colours it.
+// A hidden row of ISO dates above the names lets the app match pasted /
+// imported columns by date.
 // ---------------------------------------------------------------------------
 
 /** Name of the sheet; the app's importer looks for it. */
@@ -54,10 +55,10 @@ export function addAvailabilitySheet(
 
   const TITLE_ROW = 1;
   const HELP_ROW = 2;
-  const MONTH_ROW = 3;
-  const DAY_ROW = 4;
-  const DATE_ROW = 5;            // "Name | 2026-06-15 | …" — the paste/import header
-  const FIRST_PERSON = 6;
+  const MONTH_ROW = 3;                              // header rows 3–6 (month, week, weekday, day)
+  const DAY_NUM_ROW = MONTH_ROW + TIMELINE_HEADER_ROWS - 1;
+  const DATE_ROW = DAY_NUM_ROW + 1;                 // hidden "| 2026-06-15 | …" — the paste/import key
+  const FIRST_PERSON = DATE_ROW + 1;
 
   const people = [...availability].sort((a, b) => a.sortOrder - b.sortOrder);
   const personRows = Math.max(15, people.length + 10);
@@ -67,7 +68,6 @@ export function addAvailabilitySheet(
   const GRID = 'FFD6D8DE';
 
   sheet.getColumn(NAME_COL).width = 26;
-  for (let c = FIRST_DAY; c <= LAST_DAY; c++) sheet.getColumn(c).width = 3.2;
 
   // ---- Row 1: title ----
   sheet.mergeCells(TITLE_ROW, 1, TITLE_ROW, TOTAL_COLS);
@@ -89,7 +89,7 @@ export function addAvailabilitySheet(
     rich.push({ text: `${c.label}   `, font: { size: 9, name: FONT, color: { argb: 'FF374151' } } });
   });
   rich.push({
-    text: '\nTo load it into the app: copy from the "Name" cell (A5) to the last filled day and paste into the project\'s Availability tab, or import this workbook there. Weekends are not shown — the days match the Gantt chart.',
+    text: `\nTo load it into the app: copy from the "Person" cell (A${MONTH_ROW}) to the last filled day and paste into the project's Availability tab, or import this workbook there. Weekends are not shown — the days match the Gantt chart.`,
     font: { italic: true, size: 8, name: FONT, color: { argb: 'FF6B7280' } },
   });
   help.value = { richText: rich };
@@ -97,64 +97,34 @@ export function addAvailabilitySheet(
   help.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true, indent: 1 };
   sheet.getRow(HELP_ROW).height = 60;
 
-  // ---- Row 3: month bands (as the Gantt sheet) ----
-  sheet.getRow(MONTH_ROW).height = 18;
-  const headCell = (r: number, c: number, value: string) => {
-    const cell = sheet.getCell(r, c);
-    cell.value = value;
-    cell.font = { bold: true, size: 9, color: { argb: 'FFFFFFFF' }, name: FONT };
-    cell.fill = solid(accentArgb);
-    cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
-  };
-  headCell(MONTH_ROW, NAME_COL, 'Person');
-  let start = FIRST_DAY;
-  for (let i = 0; i <= dates.length; i++) {
-    const key = i < dates.length ? dates[i].slice(0, 7) : '';
-    const prevKey = i > 0 ? dates[i - 1].slice(0, 7) : key;
-    if (i === dates.length || (i > 0 && key !== prevKey)) {
-      const end = FIRST_DAY + i - 1;
-      if (end > start) sheet.mergeCells(MONTH_ROW, start, MONTH_ROW, end);
-      const mc = sheet.getCell(MONTH_ROW, start);
-      mc.value = parseDate(dates[i - 1]).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-      mc.font = { bold: true, size: 8, color: { argb: 'FFFFFFFF' }, name: FONT };
-      mc.fill = solid(accentArgb);
-      mc.alignment = { vertical: 'middle', horizontal: 'center' };
-      for (let c = start; c <= end; c++) sheet.getCell(MONTH_ROW, c).border = { bottom: { style: 'thin', color: { argb: 'FFFFFFFF' } } };
-      start = end + 1;
-    }
+  // ---- Rows 3–6: month / week / weekday / day number (shared with the Gantt sheet) ----
+  if (dates.length > 0) {
+    writeTimelineHeader(sheet, { dates, firstCol: FIRST_DAY, topRow: MONTH_ROW, accentArgb, accentLightArgb, todayStr });
   }
-
-  // ---- Row 4: day headers (as the Gantt sheet) ----
-  sheet.getRow(DAY_ROW).height = 28;
-  headCell(DAY_ROW, NAME_COL, '');
-  dates.forEach((date, i) => {
-    const d = parseDate(date);
-    const isToday = date === todayStr;
-    const cell = sheet.getCell(DAY_ROW, FIRST_DAY + i);
-    cell.value = d.toLocaleDateString('en-US', { weekday: 'narrow' }) + '\n' + d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
-    cell.font = { bold: isToday, size: 7, color: { argb: isToday ? 'FF1F2937' : 'FFFFFFFF' }, name: FONT };
-    cell.fill = solid(isToday ? TODAY_BG : accentArgb);
-    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-    cell.border = {
-      left: d.getDay() === 1 ? { style: 'thin', color: { argb: 'FFFFFFFF' } } : undefined,
-    };
-  });
-
-  // ---- Row 5: machine-readable dates + "Name" header ----
-  sheet.getRow(DATE_ROW).height = 50;
-  const nameHead = sheet.getCell(DATE_ROW, NAME_COL);
+  // Column A: "Person" over the navy bands, "Name" over the light rows.
+  sheet.mergeCells(MONTH_ROW, NAME_COL, MONTH_ROW + 1, NAME_COL);
+  const personHead = sheet.getCell(MONTH_ROW, NAME_COL);
+  personHead.value = 'Person';
+  personHead.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' }, name: FONT };
+  personHead.fill = solid(accentArgb);
+  personHead.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+  sheet.mergeCells(DAY_NUM_ROW - 1, NAME_COL, DAY_NUM_ROW, NAME_COL);
+  const nameHead = sheet.getCell(DAY_NUM_ROW - 1, NAME_COL);
   nameHead.value = 'Name';
-  nameHead.font = { bold: true, size: 9, color: { argb: 'FF1F2937' }, name: FONT };
+  nameHead.font = { bold: true, size: 11, color: { argb: 'FF1F2937' }, name: FONT };
   nameHead.fill = solid(accentLightArgb);
   nameHead.alignment = { vertical: 'bottom', horizontal: 'left', indent: 1 };
   nameHead.border = { bottom: { style: 'medium', color: { argb: accentArgb } } };
+
+  // ---- Row 7 (hidden): machine-readable dates ----
+  // Hidden, not removed: a normal copy in Excel still includes hidden rows,
+  // so a pasted block (and an imported workbook) keeps its date key.
+  const dateRow = sheet.getRow(DATE_ROW);
+  dateRow.hidden = true;
   dates.forEach((date, i) => {
-    const cell = sheet.getCell(DATE_ROW, FIRST_DAY + i);
+    const cell = dateRow.getCell(FIRST_DAY + i);
     cell.value = date; // text on purpose: copies as "2026-06-15" in any locale
-    cell.font = { size: 7, color: { argb: 'FF6B7280' }, name: FONT };
-    cell.fill = solid(date === todayStr ? TODAY_BG : accentLightArgb);
-    cell.alignment = { vertical: 'bottom', horizontal: 'center', textRotation: 90 };
-    cell.border = { bottom: { style: 'medium', color: { argb: accentArgb } } };
+    cell.font = { size: 8, color: { argb: 'FF6B7280' }, name: FONT };
   });
 
   // ---- Rows 6+: people ----
@@ -162,10 +132,10 @@ export function addAvailabilitySheet(
   for (let r = FIRST_PERSON; r <= LAST_PERSON; r++) {
     const person = people[r - FIRST_PERSON];
     const row = sheet.getRow(r);
-    row.height = 18;
+    row.height = 21;
     const nameCell = row.getCell(NAME_COL);
     nameCell.value = person?.personName ?? '';
-    nameCell.font = { size: 10, color: { argb: 'FF1F2937' }, name: FONT };
+    nameCell.font = { size: 11, color: { argb: 'FF1F2937' }, name: FONT };
     nameCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
     nameCell.border = { bottom: { style: 'hair', color: { argb: GRID } }, right: { style: 'thin', color: { argb: GRID } } };
 
@@ -173,13 +143,13 @@ export function addAvailabilitySheet(
       const cell = row.getCell(FIRST_DAY + i);
       const code = person?.days[date];
       if (code) cell.value = code;
-      cell.font = { size: 8, name: FONT };
+      cell.font = { size: 10, name: FONT };
       cell.alignment = { vertical: 'middle', horizontal: 'center' };
       if (date === todayStr) cell.fill = solid(TODAY_BG);
       cell.border = {
         bottom: { style: 'hair', color: { argb: GRID } },
         right: { style: 'hair', color: { argb: GRID } },
-        left: parseDate(date).getDay() === 1 ? { style: 'thin', color: { argb: 'FF94A3B8' } } : undefined,
+        left: weekStartBorder(dates, i, accentArgb),
       };
       cell.dataValidation = {
         type: 'list',

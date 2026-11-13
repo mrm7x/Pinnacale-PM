@@ -1,8 +1,9 @@
 import ExcelJS from 'exceljs';
 import type { Project, Task, Consultant, ProjectAvailability } from '../types';
 import { addAvailabilitySheet } from './exportAvailabilitySheet';
+import { TIMELINE_HEADER_ROWS, weekStartBorder, writeTimelineHeader } from './excelDateHeader';
 import { getProjectAccent } from './phases';
-import { getSchedulePoint, parseDate } from './scheduler';
+import { getSchedulePoint } from './scheduler';
 
 /**
  * AM/PM label for a half-day task, blank for anything a day or longer.
@@ -360,43 +361,28 @@ function addGanttSheet(
 
   interface DayCol {
     dateStr: string;
-    dayName: string;
-    dateLabel: string;
     isToday: boolean;
-    isFriday: boolean;
-    monthKey: string;
-    monthLabel: string;
   }
 
   const dayCols: DayCol[] = [];
   for (let i = 0; i < totalWorkDays; i++) {
     const pt = getSchedulePoint(project.startDate, i * 2);
-    const d = parseDate(pt.date);
-    const dow = d.getDay(); // 5 = Fri
-    dayCols.push({
-      dateStr: pt.date,
-      dayName: d.toLocaleDateString('en-US', { weekday: 'narrow' }),
-      dateLabel: d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }),
-      isToday: pt.date === todayStr,
-      isFriday: dow === 5,
-      monthKey: `${d.getFullYear()}-${d.getMonth()}`,
-      monthLabel: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-    });
+    dayCols.push({ dateStr: pt.date, isToday: pt.date === todayStr });
   }
+  const dates = dayCols.map(c => c.dateStr);
 
-  // Set column widths
+  // Set column widths (day columns are set by writeTimelineHeader)
   sheet.getColumn(1).width = 6;   // #
   sheet.getColumn(2).width = 28;  // Task Name
   sheet.getColumn(3).width = 9;   // AM/PM
   sheet.getColumn(4).width = 11;  // Start
   sheet.getColumn(5).width = 11;  // End
-  dayCols.forEach((_, i) => {
-    sheet.getColumn(LEFT_COLS + 1 + i).width = 2.4;
-  });
 
   const TOTAL_COLS = LEFT_COLS + dayCols.length;
   const TODAY_BG   = 'FFFFF3CD';  // pale amber for today
-  const FRIDAY_BG  = 'FFEFF6FF';  // faint blue at week-end boundary
+  const HEADER_TOP = 2;
+  const HEADER_LAST = HEADER_TOP + TIMELINE_HEADER_ROWS - 1;
+  const FIRST_TASK_ROW = HEADER_LAST + 1;
 
   // ---- Row 1: Title ----
   sheet.mergeCells(1, 1, 1, TOTAL_COLS);
@@ -407,91 +393,29 @@ function addGanttSheet(
   titleCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
   sheet.getRow(1).height = 32;
 
-  // ---- Row 2: Month bands ----
-  sheet.getRow(2).height = 18;
-  let monthStart = LEFT_COLS + 1;
-  let curKey = '';
-  let curLabel = '';
-  let curCount = 0;
-
-  const flushMonth = (endCol: number) => {
-    if (!curKey) return;
-    if (curCount === 1) {
-      sheet.getCell(2, monthStart).value = curLabel;
-    } else {
-      sheet.mergeCells(2, monthStart, 2, endCol);
-      sheet.getCell(2, monthStart).value = curLabel;
-    }
-    const mc = sheet.getCell(2, monthStart);
-    mc.font = { bold: true, size: 8, color: { argb: 'FFFFFFFF' }, name: 'Segoe UI' };
-    mc.fill = solidFill(accentArgb);
-    mc.alignment = { vertical: 'middle', horizontal: 'center' };
-    // thin border bottom
-    for (let c = monthStart; c <= endCol; c++) {
-      const cell = sheet.getCell(2, c);
-      cell.border = { bottom: { style: 'thin', color: { argb: 'FFFFFFFF' } } };
-    }
-  };
-
-  dayCols.forEach((col, i) => {
-    const excelCol = LEFT_COLS + 1 + i;
-    if (col.monthKey !== curKey) {
-      flushMonth(excelCol - 1);
-      monthStart = excelCol;
-      curKey = col.monthKey;
-      curLabel = col.monthLabel;
-      curCount = 1;
-    } else {
-      curCount++;
-    }
+  // ---- Rows 2–5: month / week / weekday / day number (shared with the Availability sheet) ----
+  writeTimelineHeader(sheet, {
+    dates, firstCol: LEFT_COLS + 1, topRow: HEADER_TOP, accentArgb, accentLightArgb, todayStr,
   });
-  flushMonth(LEFT_COLS + dayCols.length);
 
-  // Left info header cells for row 2
+  // Left info headers span all four header rows
   ['#', 'Task Name', 'AM/PM', 'Start', 'End'].forEach((h, i) => {
-    const cell = sheet.getCell(2, i + 1);
+    sheet.mergeCells(HEADER_TOP, i + 1, HEADER_LAST, i + 1);
+    const cell = sheet.getCell(HEADER_TOP, i + 1);
     cell.value = h;
-    cell.font = { bold: true, size: 9, color: { argb: 'FFFFFFFF' }, name: 'Segoe UI' };
+    cell.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' }, name: 'Segoe UI' };
     cell.fill = solidFill(accentArgb);
-    cell.alignment = { vertical: 'middle', horizontal: i === 1 ? 'left' : 'center' };
+    cell.alignment = { vertical: 'middle', horizontal: i === 1 ? 'left' : 'center', indent: i === 1 ? 1 : 0 };
   });
 
-  // ---- Row 3: Day headers ----
-  sheet.getRow(3).height = 28;
-
-  // Left header placeholders
-  for (let c = 1; c <= LEFT_COLS; c++) {
-    const cell = sheet.getCell(3, c);
-    cell.fill = solidFill(accentArgb);
-    cell.border = { bottom: { style: 'medium', color: { argb: 'FFFFFFFF' } } };
-  }
-
-  dayCols.forEach((col, i) => {
-    const excelCol = LEFT_COLS + 1 + i;
-    const cell = sheet.getCell(3, excelCol);
-    cell.value = col.dayName + '\n' + col.dateLabel;
-    cell.font = {
-      bold: col.isToday,
-      size: 7,
-      color: { argb: col.isToday ? 'FF1F2937' : 'FFFFFFFF' },
-      name: 'Segoe UI',
-    };
-    cell.fill = solidFill(col.isToday ? TODAY_BG : accentArgb);
-    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-    cell.border = {
-      left: col.isFriday ? { style: 'thin', color: { argb: 'FFFFFFFF' } } : undefined,
-      bottom: { style: 'medium', color: { argb: 'FFFFFFFF' } },
-    };
-  });
-
-  // ---- Rows 4+: Task rows ----
+  // ---- Task rows ----
   const parentIds = new Set<string>();
   flatList.forEach(({ isParent, task }) => { if (isParent) parentIds.add(task.id); });
 
   flatList.forEach(({ task, depth, wbs, isParent }, idx) => {
-    const rowNum = idx + 4;
+    const rowNum = idx + FIRST_TASK_ROW;
     const row = sheet.getRow(rowNum);
-    row.height = isParent ? 18 : 16;
+    row.height = isParent ? 20 : 18;
 
     const isEven = idx % 2 === 0;
     const rowBg = isParent ? accentLightArgb : (isEven ? 'FFFFFFFF' : 'FFF9FAFB');
@@ -557,20 +481,20 @@ function addGanttSheet(
         cell.border = {
           top: { style: 'hair', color: { argb: barArgb } },
           bottom: { style: 'hair', color: { argb: barArgb } },
+          left: weekStartBorder(dates, i, accentArgb),
         };
       } else {
-        const colBg = col.isToday ? TODAY_BG : (col.isFriday ? FRIDAY_BG : rowBg);
-        cell.fill = solidFill(colBg);
+        cell.fill = solidFill(col.isToday ? TODAY_BG : rowBg);
         cell.border = {
           top: HAIR, bottom: HAIR,
-          left: col.isFriday ? { style: 'thin', color: { argb: 'FFCBD5E1' } } : undefined,
+          left: weekStartBorder(dates, i, accentArgb),
         };
       }
     });
 
     // Place the task-name label *beside* the bar (on the light timeline area) with
-    // dark text, so it stays readable regardless of the bar's fill colour. Bars are
-    // only ~2.4 columns wide, so a label written inside them is unreadable and clipped.
+    // dark text, so it stays readable regardless of the bar's fill colour. A label
+    // written inside a short bar would be clipped.
     if (firstBarCol !== -1) {
       const rightCol = lastBarCol + 1;
       if (rightCol <= TOTAL_COLS) {
@@ -588,13 +512,13 @@ function addGanttSheet(
     }
   });
 
-  // Freeze left cols + top 3 rows
+  // Freeze left cols + title and header rows
   sheet.views = [{
     state: 'frozen',
     xSplit: LEFT_COLS,
-    ySplit: 3,
-    topLeftCell: 'F4',
-    activeCell: 'A4',
+    ySplit: HEADER_LAST,
+    topLeftCell: `F${FIRST_TASK_ROW}`,
+    activeCell: `A${FIRST_TASK_ROW}`,
   }];
 }
 

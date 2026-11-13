@@ -465,7 +465,7 @@ function ImportModal({ project, accent, source, dates, existing, onChangeText, o
             {source.kind === 'paste' ? (
               <>
                 <p className="tv2-import-intro">
-                  In the Excel export, open the <b>Availability</b> sheet, select from the <b>Name</b> cell (A5) to the last
+                  In the Excel export, open the <b>Availability</b> sheet, select from the <b>Person</b> cell (A3) to the last
                   filled day, copy, and paste below. Each row is a person; each day holds a code
                   ({AVAILABILITY_CODES.map(c => c.code).join(' / ')}).
                 </p>
