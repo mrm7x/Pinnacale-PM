@@ -22,7 +22,7 @@ export const AVAILABILITY_CODES: AvailabilityCodeDef[] = [
   { code: 'A', label: 'Available', fill: '#BBF7D0', ink: '#14532D' },
   { code: 'U', label: 'Unavailable / holiday', fill: '#EF4444', ink: '#FFFFFF' },
   { code: 'H', label: 'Half day / partial', fill: '#FCD34D', ink: '#78350F' },
-  { code: 'T', label: 'Other commitment', fill: '#93C5FD', ink: '#1E3A8A' },
+  { code: 'O', label: 'Other commitment', fill: '#93C5FD', ink: '#1E3A8A' },
   { code: 'P', label: 'Public holiday / non-working', fill: '#D1D5DB', ink: '#374151' },
 ];
 
@@ -34,7 +34,8 @@ const CODE_ALIASES: Record<string, AvailabilityCode> = {
   a: 'A', available: 'A', y: 'A', yes: 'A',
   u: 'U', unavailable: 'U', holiday: 'U', hol: 'U', off: 'U', x: 'U', leave: 'U', annual: 'U',
   h: 'H', half: 'H', 'half day': 'H', partial: 'H', am: 'H', pm: 'H',
-  t: 'T', training: 'T', other: 'T',
+  o: 'O', other: 'O', 'other commitment': 'O',
+  t: 'O', training: 'O', // T was this code's letter before it became O — older sheets and pastes still use it
   p: 'P', 'public holiday': 'P', 'bank holiday': 'P', bh: 'P', ph: 'P',
 };
 

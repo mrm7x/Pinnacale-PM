@@ -84,13 +84,15 @@ function mapCommunicationToDb(c: Communication) {
 }
 
 function mapAvailabilityFromDb(db: any): ProjectAvailability {
-  const raw = db.days && typeof db.days === 'object' ? db.days : {};
+  const raw: Record<string, string> = db.days && typeof db.days === 'object' ? db.days : {};
+  // "Other commitment" was saved as T before its code became O.
+  const days = Object.fromEntries(Object.entries(raw).map(([d, c]) => [d, c === 'T' ? 'O' : c]));
   return {
     id: db.id,
     projectId: db.project_id,
     personName: db.person_name,
     sortOrder: Number(db.sort_order) || 0,
-    days: raw as Record<string, AvailabilityCode>,
+    days: days as Record<string, AvailabilityCode>,
   };
 }
 
