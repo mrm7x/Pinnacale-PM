@@ -570,7 +570,7 @@ export function parseCsv(text: string): string[][] {
 }
 
 /** Plain value out of an ExcelJS cell value (formulas, rich text, hyperlinks). */
-function excelValue(v: unknown): unknown {
+export function excelValue(v: unknown): unknown {
   if (v === null || v === undefined) return '';
   if (v instanceof Date || typeof v !== 'object') return v;
   const o = v as Record<string, unknown>;

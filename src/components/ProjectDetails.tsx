@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import type { FormEvent, FC } from 'react';
 import type { Project, Task, Consultant, Customer, Communication } from '../types';
 import {
-  canEditProject, canCreateTask, canEditTask, canDeleteTask, canEditGantt,
+  canEditProject, canCreateTask, canEditTask, canDeleteTask, canEditGantt, canManageCommunications,
   isCustomer as isCustomerUser, type ActiveUser
 } from '../utils/permissions';
 import {
@@ -18,6 +18,8 @@ import { safeExternalUrl } from '../utils/url';
 import { WinComboBox } from './winui/WinComboBox';
 import { WinDatePicker } from './winui/WinDatePicker';
 import GanttChart from './GanttChart';
+import AvailabilityTab from './AvailabilityTab';
+import { api } from '../utils/api';
 import EditProjectModal from './EditProjectModal';
 import TaskListV2 from './TaskListV2';
 import { formatDateFriendly, formatDateTimeFriendly } from '../utils/dates';
@@ -172,7 +174,9 @@ export default function ProjectDetails({
     if (!activeProject) return;
     setIsExporting(true);
     try {
-      await exportProjectToExcel(activeProject, tasks, consultants);
+      // Pre-fill the Availability sheet; the export still works if it can't load.
+      const availability = await api.availability.getByProject(activeProject.id).catch(() => []);
+      await exportProjectToExcel(activeProject, tasks, consultants, availability);
       onAddToast('Export downloaded successfully.', 'success');
     } catch {
       onAddToast('Export failed. Please try again.', 'error');
@@ -1212,6 +1216,16 @@ export default function ProjectDetails({
             canEdit={canEditGantt(activeUser)}
           />
         </div>
+      )}
+
+      {activeProjectTab === 'availability' && activeProject && !userIsCustomer && (
+        <AvailabilityTab
+          project={activeProject}
+          tasks={tasks}
+          consultants={consultants}
+          canEdit={canManageCommunications(activeUser, activeProject)}
+          onAddToast={onAddToast}
+        />
       )}
 
       {activeProjectTab === 'rag' && !userIsCustomer && (
