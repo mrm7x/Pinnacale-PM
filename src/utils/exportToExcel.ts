@@ -190,10 +190,9 @@ function addTaskSheet(workbook: ExcelJS.Workbook, ctx: SheetContext, consultants
     { width: 13 },  // G  Start Date
     { width: 13 },  // H  End Date
     { width: 12 },  // I  Progress
-    { width: 10 },  // J  Pink #
-    { width: 46 },  // K  Description
+    { width: 50 },  // J  Description
   ];
-  const TOTAL_COLS = 11;
+  const TOTAL_COLS = 10;
 
   // ---- Rows 1–4: banner, rule, title, meta ----
   const { done, total, pct } = overallProgress(flatList);
@@ -208,11 +207,11 @@ function addTaskSheet(workbook: ExcelJS.Workbook, ctx: SheetContext, consultants
 
   // ---- Column headers ----
   const headers = ['#', 'Task Name', 'Status', 'Owner', 'Assignee', 'AM/PM',
-                   'Start Date', 'End Date', 'Progress', 'Pink #', 'Description'];
+                   'Start Date', 'End Date', 'Progress', 'Description'];
   const hRow = sheet.getRow(HEADER_ROW);
   hRow.height = 26;
   headers.forEach((h, i) => {
-    applyHeaderCell(hRow.getCell(i + 1), h, i === 1 || i === 10 ? 'left' : 'center');
+    applyHeaderCell(hRow.getCell(i + 1), h, i === 1 || i === 9 ? 'left' : 'center');
   });
 
   // ---- Task rows ----
@@ -224,9 +223,9 @@ function addTaskSheet(workbook: ExcelJS.Workbook, ctx: SheetContext, consultants
   flatList.forEach(({ task, depth, wbs, isParent }, idx) => {
     const rowNum = idx + FIRST_TASK_ROW;
     const row = sheet.getRow(rowNum);
-    // Height must grow to fit the wrapped Description (col K, width 46 ≈ 42 chars/line),
+    // Height must grow to fit the wrapped Description (col J, width 50 ≈ 46 chars/line),
     // otherwise multi-line text is clipped and overlaps the next row.
-    const descLines = estimateWrappedLines(task.description || '', 42);
+    const descLines = estimateWrappedLines(task.description || '', 46);
     const baseHeight = isParent ? 24 : 20;
     row.height = Math.min(200, Math.max(baseHeight, descLines * 13.5 + 6));
 
@@ -254,7 +253,6 @@ function addTaskSheet(workbook: ExcelJS.Workbook, ctx: SheetContext, consultants
         value: prog / 100, align: 'center', bold: prog > 0,
         textColor: prog === 100 ? STATUS_STYLE.completed.ink : prog > 0 ? BRAND.orangeInk : BRAND.faint,
       },
-      { value: task.pinkNumber || '', align: 'center' },
       { value: task.description || '', align: 'left', indent: 1, textColor: BRAND.muted, size: 9 },
     ];
 
@@ -266,13 +264,13 @@ function addTaskSheet(workbook: ExcelJS.Workbook, ctx: SheetContext, consultants
         size,
         align,
         indent,
-        wrap: ci === 10,
+        wrap: ci === 9,
       });
     });
 
     row.getCell(9).numFmt = '0%';
     // A wrapped Description reads better top-aligned than vertically centred.
-    row.getCell(11).alignment = { vertical: 'top', horizontal: 'left', wrapText: true, indent: 1 };
+    row.getCell(10).alignment = { vertical: 'top', horizontal: 'left', wrapText: true, indent: 1 };
     // Row-coloured gap either side of the status chip so it reads as a pill, not a column.
     row.getCell(3).border = {
       bottom: HAIRLINE,

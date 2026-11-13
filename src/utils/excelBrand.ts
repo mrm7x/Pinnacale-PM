@@ -1,7 +1,7 @@
 import type ExcelJS from 'exceljs';
 import type { Project, Task } from '../types';
 import { resolvePhaseMeta } from './phases';
-import logoReverseSvg from '../assets/new_logo_pinnacle-flow-reverse.svg?raw';
+import pinnacleLogoSvg from '../assets/logo.svg?raw';
 
 // ---------------------------------------------------------------------------
 // Pinnacle Flow branding for the Excel export.
@@ -50,8 +50,14 @@ export const line = (style: ExcelJS.BorderStyle, argb: string): Partial<ExcelJS.
 // Logo
 // ---------------------------------------------------------------------------
 
-/** Logo aspect ratio (viewBox 133.56 × 27). */
-const LOGO_RATIO = 133.56 / 27;
+/** Logo aspect ratio (viewBox 170 × 27). */
+const LOGO_RATIO = 170 / 27;
+
+/**
+ * The Pinnacle logo for the navy banner: navy "P" frame and PINNACLE wordmark
+ * turned white, ribbon kept orange.
+ */
+const logoReverseSvg = pinnacleLogoSvg.replace(/#11354A/gi, '#FFFFFF');
 
 /**
  * Rasterise the white-on-transparent logo to a PNG data URL (Excel can't embed
