@@ -2,7 +2,10 @@ import ExcelJS from 'exceljs';
 import type { Project, Task, Consultant, ProjectAvailability } from '../types';
 import { addAvailabilitySheet } from './exportAvailabilitySheet';
 import { TIMELINE_HEADER_ROWS, weekStartBorder, writeTimelineHeader } from './excelDateHeader';
-import { getProjectAccent } from './phases';
+import {
+  BRAND, FONT, STATUS_STYLE, applySheetChrome, line, loadLogoPng,
+  projectMeta, solid, writeBrandHeader,
+} from './excelBrand';
 import { getSchedulePoint } from './scheduler';
 
 /**
@@ -18,37 +21,9 @@ function amPmLabel(task: Task): string {
   return task.startPeriod ?? 'AM';
 }
 
-// ---------------------------------------------------------------------------
-// Colour helpers
-// ---------------------------------------------------------------------------
-
-function hexToArgb(hex: string): string {
-  return 'FF' + hex.replace('#', '').toUpperCase();
-}
-
-/** Mix hex colour with white by `factor` (0 = original, 1 = white). */
-function lighten(hex: string, factor = 0.85): string {
-  const h = hex.replace('#', '');
-  const ch = (offset: number) => parseInt(h.slice(offset, offset + 2), 16);
-  const mix = (c: number) => Math.round(c + (255 - c) * factor);
-  return 'FF' + [mix(ch(0)), mix(ch(2)), mix(ch(4))]
-    .map(v => v.toString(16).padStart(2, '0').toUpperCase())
-    .join('');
-}
-
-const STATUS_LABEL: Record<Task['status'], string> = {
-  not_started: 'Not Started',
-  in_progress: 'In Progress',
-  on_hold: 'On Hold',
-  completed: 'Completed',
-};
-
-const STATUS_ARGB: Record<Task['status'], string> = {
-  not_started: 'FF9CA3AF',
-  in_progress: 'FF3B82F6',
-  on_hold: 'FFF59E0B',
-  completed: 'FF10B981',
-};
+const STATUS_LABEL: Record<Task['status'], string> = Object.fromEntries(
+  Object.entries(STATUS_STYLE).map(([k, v]) => [k, v.label]),
+) as Record<Task['status'], string>;
 
 // ---------------------------------------------------------------------------
 // Flat task tree
@@ -128,34 +103,25 @@ function estimateWrappedLines(text: string, charsPerLine: number): number {
   if (!text) return 1;
   return text
     .split(/\r?\n/)
-    .reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / charsPerLine)), 0);
+    .reduce((sum, l) => sum + Math.max(1, Math.ceil(l.length / charsPerLine)), 0);
 }
 
 // ---------------------------------------------------------------------------
 // Shared style helpers
 // ---------------------------------------------------------------------------
 
-type BorderStyle = ExcelJS.BorderStyle;
-const THIN: { style: BorderStyle } = { style: 'thin' };
-const HAIR: { style: BorderStyle } = { style: 'hair' };
-
-function solidFill(argb: string): ExcelJS.Fill {
-  return { type: 'pattern', pattern: 'solid', fgColor: { argb } };
-}
+const HAIRLINE = line('thin', BRAND.border);
 
 function applyHeaderCell(
   cell: ExcelJS.Cell,
   value: string,
-  accentArgb: string,
   align: ExcelJS.Alignment['horizontal'] = 'center',
 ): void {
   cell.value = value;
-  cell.font = { bold: true, size: 10, color: { argb: 'FFFFFFFF' }, name: 'Segoe UI' };
-  cell.fill = solidFill(accentArgb);
-  cell.alignment = { vertical: 'middle', horizontal: align };
-  cell.border = {
-    top: THIN, bottom: THIN, left: THIN, right: THIN,
-  };
+  cell.font = { bold: true, size: 10, color: { argb: BRAND.white }, name: FONT };
+  cell.fill = solid(BRAND.navy);
+  cell.alignment = { vertical: 'middle', horizontal: align, indent: align === 'left' ? 1 : 0 };
+  cell.border = { bottom: line('medium', BRAND.orange) };
 }
 
 function applyDataCell(
@@ -165,189 +131,168 @@ function applyDataCell(
     bgArgb: string;
     textArgb?: string;
     bold?: boolean;
+    size?: number;
     align?: ExcelJS.Alignment['horizontal'];
+    indent?: number;
     wrap?: boolean;
-    border?: boolean;
   },
 ): void {
   cell.value = value;
   cell.font = {
     bold: opts.bold ?? false,
-    size: 10,
-    color: { argb: opts.textArgb ?? 'FF1F2937' },
-    name: 'Segoe UI',
+    size: opts.size ?? 10,
+    color: { argb: opts.textArgb ?? BRAND.text },
+    name: FONT,
   };
-  cell.fill = solidFill(opts.bgArgb);
+  cell.fill = solid(opts.bgArgb);
   cell.alignment = {
     vertical: 'middle',
     horizontal: opts.align ?? 'left',
+    indent: opts.indent,
     wrapText: opts.wrap ?? false,
   };
-  if (opts.border !== false) {
-    cell.border = {
-      top: HAIR, bottom: HAIR, left: THIN, right: THIN,
-    };
-  }
+  cell.border = { bottom: HAIRLINE };
+}
+
+/** Orange bar down the left of a parent (phase / group) row. */
+function markParentRow(row: ExcelJS.Row): void {
+  row.getCell(1).border = { bottom: HAIRLINE, left: line('thick', BRAND.orange) };
+}
+
+/** Overall completion: completed leaf tasks / all leaf tasks. */
+function overallProgress(flatList: FlatTask[]): { done: number; total: number; pct: number } {
+  const leaves = flatList.filter(f => !f.isParent);
+  const done = leaves.filter(f => f.task.status === 'completed').length;
+  return { done, total: leaves.length, pct: leaves.length ? Math.round((done / leaves.length) * 100) : 0 };
+}
+
+interface SheetContext {
+  project: Project;
+  flatList: FlatTask[];
+  logoId?: number;
 }
 
 // ---------------------------------------------------------------------------
 // Sheet 1 — Task List
 // ---------------------------------------------------------------------------
 
-function addTaskSheet(
-  workbook: ExcelJS.Workbook,
-  project: Project,
-  flatList: FlatTask[],
-  consultants: Consultant[],
-  accentArgb: string,
-  accentLightArgb: string,
-  accentMidArgb: string,
-): void {
+function addTaskSheet(workbook: ExcelJS.Workbook, ctx: SheetContext, consultants: Consultant[]): void {
+  const { project, flatList } = ctx;
   const sheet = workbook.addWorksheet('Tasks');
 
   sheet.columns = [
-    { width: 8 },   // A  WBS
-    { width: 38 },  // B  Task Name
+    { width: 7 },   // A  WBS
+    { width: 40 },  // B  Task Name
     { width: 14 },  // C  Status
-    { width: 16 },  // D  Owner
+    { width: 18 },  // D  Owner
     { width: 18 },  // E  Assignee
-    { width: 11 },  // F  AM/PM
+    { width: 9 },   // F  AM/PM
     { width: 13 },  // G  Start Date
     { width: 13 },  // H  End Date
-    { width: 10 },  // I  Progress
+    { width: 12 },  // I  Progress
     { width: 10 },  // J  Pink #
-    { width: 42 },  // K  Description
+    { width: 46 },  // K  Description
   ];
-
   const TOTAL_COLS = 11;
 
-  // ---- Row 1: Project title ----
-  sheet.mergeCells(1, 1, 1, TOTAL_COLS);
-  const titleCell = sheet.getCell(1, 1);
-  titleCell.value = `${project.name}  ·  ${project.clientName}`;
-  titleCell.font = { bold: true, size: 15, color: { argb: 'FFFFFFFF' }, name: 'Segoe UI' };
-  titleCell.fill = solidFill(accentArgb);
-  titleCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
-  sheet.getRow(1).height = 32;
-
-  // ---- Row 2: Meta strip ----
-  sheet.getRow(2).height = 20;
-  const meta: [string, string][] = [
-    ['Status', project.status.charAt(0).toUpperCase() + project.status.slice(1)],
-    ['Start', friendlyDate(project.startDate)],
-    ['Go-Live', friendlyDate(project.targetGoLiveDate) || '—'],
-    ['Phase', project.phase || '—'],
-  ];
-  // Use pairs of columns: (1,2), (3,4), (5,6), (7,8); leave 9-11 as accent strip
-  meta.forEach(([label, value], i) => {
-    const lc = i * 2 + 1;
-    const vc = i * 2 + 2;
-    const lCell = sheet.getCell(2, lc);
-    lCell.value = label;
-    lCell.font = { bold: true, size: 9, color: { argb: 'FFFFFFFF' }, name: 'Segoe UI' };
-    lCell.fill = solidFill(accentMidArgb);
-    lCell.alignment = { vertical: 'middle', horizontal: 'right' };
-
-    const vCell = sheet.getCell(2, vc);
-    vCell.value = value;
-    vCell.font = { bold: false, size: 9, color: { argb: 'FF1F2937' }, name: 'Segoe UI' };
-    vCell.fill = solidFill(accentLightArgb);
-    vCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+  // ---- Rows 1–4: banner, rule, title, meta ----
+  const { done, total, pct } = overallProgress(flatList);
+  const HEADER_ROW = writeBrandHeader(sheet, {
+    lastCol: TOTAL_COLS,
+    sheetLabel: 'Task list',
+    project,
+    logoId: ctx.logoId,
+    meta: projectMeta(project, [['Progress', `${pct}%  (${done} of ${total} tasks)`, BRAND.orangeInk]]),
   });
-  // fill remaining cols
-  for (let c = 9; c <= TOTAL_COLS; c++) {
-    const cell = sheet.getCell(2, c);
-    cell.fill = solidFill(accentLightArgb);
-  }
+  const FIRST_TASK_ROW = HEADER_ROW + 1;
 
-  // ---- Row 3: Column headers ----
+  // ---- Column headers ----
   const headers = ['#', 'Task Name', 'Status', 'Owner', 'Assignee', 'AM/PM',
                    'Start Date', 'End Date', 'Progress', 'Pink #', 'Description'];
-  const hRow = sheet.getRow(3);
-  hRow.height = 22;
+  const hRow = sheet.getRow(HEADER_ROW);
+  hRow.height = 26;
   headers.forEach((h, i) => {
-    applyHeaderCell(hRow.getCell(i + 1), h, accentArgb, i === 1 ? 'left' : 'center');
+    applyHeaderCell(hRow.getCell(i + 1), h, i === 1 || i === 10 ? 'left' : 'center');
   });
 
-  // ---- Rows 4+: Task data ----
+  // ---- Task rows ----
   const parentIds = new Set<string>();
-  flatList.forEach(({ task }) => { if (task.parentId) parentIds.add(task.parentId); });
-  // rebuild parentIds from the full flat list
   flatList.forEach(({ isParent, task }) => { if (isParent) parentIds.add(task.id); });
+  const allTasks = flatList.map(f => f.task);
 
+  let leafIdx = 0;
   flatList.forEach(({ task, depth, wbs, isParent }, idx) => {
-    const rowNum = idx + 4;
+    const rowNum = idx + FIRST_TASK_ROW;
     const row = sheet.getRow(rowNum);
-    // Height must grow to fit the wrapped Description (col K, width 42 ≈ 38 chars/line),
+    // Height must grow to fit the wrapped Description (col K, width 46 ≈ 42 chars/line),
     // otherwise multi-line text is clipped and overlaps the next row.
-    const descLines = estimateWrappedLines(task.description || '', 38);
-    const baseHeight = isParent ? 21 : 18;
-    row.height = Math.min(200, Math.max(baseHeight, descLines * 13.5 + 4));
+    const descLines = estimateWrappedLines(task.description || '', 42);
+    const baseHeight = isParent ? 24 : 20;
+    row.height = Math.min(200, Math.max(baseHeight, descLines * 13.5 + 6));
 
     const assignee = consultants.find(c => c.id === task.assignedConsultantId);
-    const isEven = idx % 2 === 0;
-    const rowBg = isParent ? accentLightArgb : (isEven ? 'FFFFFFFF' : 'FFF9FAFB');
-    const textArgb = isParent ? accentArgb : 'FF1F2937';
-    const indent = '  '.repeat(depth);
+    const rowBg = isParent ? BRAND.navySoft : (leafIdx++ % 2 === 0 ? BRAND.white : BRAND.zebra);
+    const isDone = task.status === 'completed';
+    const textArgb = isParent ? BRAND.navy : (isDone ? BRAND.muted : BRAND.text);
+    const status = STATUS_STYLE[task.status];
+    const prog = progressFor(task, allTasks, parentIds);
 
-    const prog = progressFor(task, flatList.map(f => f.task), parentIds);
-
-    const cells: Array<{ value: ExcelJS.CellValue; align?: ExcelJS.Alignment['horizontal']; bg?: string; textColor?: string }> = [
-      { value: wbs, align: 'center' },
-      { value: indent + task.name, align: 'left' },
-      { value: STATUS_LABEL[task.status], align: 'center', bg: STATUS_ARGB[task.status], textColor: 'FFFFFFFF' },
+    const cells: Array<{
+      value: ExcelJS.CellValue; align?: ExcelJS.Alignment['horizontal']; indent?: number;
+      bg?: string; textColor?: string; bold?: boolean; size?: number;
+    }> = [
+      { value: wbs, align: 'center', textColor: isParent ? BRAND.navy : BRAND.faint, size: 9 },
+      { value: task.name, align: 'left', indent: 1 + depth * 2 },
+      { value: STATUS_LABEL[task.status], align: 'center', bg: status.fill, textColor: status.ink, bold: true, size: 9 },
       { value: task.taskOwner || 'Pinnacle', align: 'center' },
-      { value: assignee?.name || 'Unassigned', align: 'center' },
+      { value: assignee?.name || 'Unassigned', align: 'center', textColor: assignee ? undefined : BRAND.faint },
       { value: amPmLabel(task), align: 'center' },
       { value: friendlyDate(task.plannedStartDate), align: 'center' },
       { value: friendlyDate(task.plannedEndDate), align: 'center' },
-      { value: `${prog}%`, align: 'center' },
+      // Progress: faint at 0%, orange while under way, green when done.
+      {
+        value: prog / 100, align: 'center', bold: prog > 0,
+        textColor: prog === 100 ? STATUS_STYLE.completed.ink : prog > 0 ? BRAND.orangeInk : BRAND.faint,
+      },
       { value: task.pinkNumber || '', align: 'center' },
-      { value: task.description || '', align: 'left' },
+      { value: task.description || '', align: 'left', indent: 1, textColor: BRAND.muted, size: 9 },
     ];
 
-    cells.forEach(({ value, align, bg, textColor }, ci) => {
-      const cell = row.getCell(ci + 1);
-      applyDataCell(cell, value, {
+    cells.forEach(({ value, align, indent, bg, textColor, bold, size }, ci) => {
+      applyDataCell(row.getCell(ci + 1), value, {
         bgArgb: bg ?? rowBg,
         textArgb: textColor ?? textArgb,
-        bold: isParent,
+        bold: bold ?? isParent,
+        size,
         align,
+        indent,
         wrap: ci === 10,
       });
     });
 
+    row.getCell(9).numFmt = '0%';
     // A wrapped Description reads better top-aligned than vertically centred.
-    row.getCell(11).alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
+    row.getCell(11).alignment = { vertical: 'top', horizontal: 'left', wrapText: true, indent: 1 };
+    // Row-coloured gap either side of the status chip so it reads as a pill, not a column.
+    row.getCell(3).border = {
+      bottom: HAIRLINE,
+      top: line('thin', rowBg), left: line('medium', rowBg), right: line('medium', rowBg),
+    };
 
-    // Accent left border on parent rows
-    if (isParent) {
-      row.getCell(1).border = {
-        top: HAIR, bottom: HAIR,
-        left: { style: 'medium', color: { argb: accentArgb } },
-        right: THIN,
-      };
-    }
+    if (isParent) markParentRow(row);
   });
 
-  // Freeze top 3 rows
-  sheet.views = [{ state: 'frozen', xSplit: 0, ySplit: 3, topLeftCell: 'A4', activeCell: 'A4' }];
-
-  // Auto-filter
-  sheet.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: TOTAL_COLS } };
+  sheet.views = [{ state: 'frozen', xSplit: 0, ySplit: HEADER_ROW, topLeftCell: `A${FIRST_TASK_ROW}`, activeCell: `A${FIRST_TASK_ROW}` }];
+  sheet.autoFilter = { from: { row: HEADER_ROW, column: 1 }, to: { row: HEADER_ROW, column: TOTAL_COLS } };
+  applySheetChrome(sheet, { printTitleRows: `${HEADER_ROW}:${HEADER_ROW}` });
 }
 
 // ---------------------------------------------------------------------------
 // Sheet 2 — Gantt Chart
 // ---------------------------------------------------------------------------
 
-function addGanttSheet(
-  workbook: ExcelJS.Workbook,
-  project: Project,
-  flatList: FlatTask[],
-  accentArgb: string,
-  accentLightArgb: string,
-): void {
+function addGanttSheet(workbook: ExcelJS.Workbook, ctx: SheetContext): void {
+  const { project, flatList } = ctx;
   const sheet = workbook.addWorksheet('Gantt Chart');
 
   const LEFT_COLS = 5; // #, Task Name, AM/PM, Start, End
@@ -373,87 +318,87 @@ function addGanttSheet(
 
   // Set column widths (day columns are set by writeTimelineHeader)
   sheet.getColumn(1).width = 6;   // #
-  sheet.getColumn(2).width = 28;  // Task Name
-  sheet.getColumn(3).width = 9;   // AM/PM
-  sheet.getColumn(4).width = 11;  // Start
-  sheet.getColumn(5).width = 11;  // End
+  sheet.getColumn(2).width = 36;  // Task Name
+  sheet.getColumn(3).width = 8;   // AM/PM
+  sheet.getColumn(4).width = 12;  // Start
+  sheet.getColumn(5).width = 12;  // End
 
   const TOTAL_COLS = LEFT_COLS + dayCols.length;
-  const TODAY_BG   = 'FFFFF3CD';  // pale amber for today
-  const HEADER_TOP = 2;
+
+  // ---- Rows 1–4: banner, rule, title, meta + bar legend ----
+  const legend: ExcelJS.RichText[] = [{ text: '\n', font: { size: 10, name: FONT } }];
+  const legendItems: Array<[string, string]> = [
+    ['Phase / group', BRAND.navy],
+    ...Object.values(STATUS_STYLE).map(s => [s.label, s.bar] as [string, string]),
+    ['Today', BRAND.orange],
+  ];
+  legendItems.forEach(([label, argb]) => {
+    legend.push({ text: '■ ', font: { size: 11, color: { argb }, name: FONT } });
+    legend.push({ text: `${label}       `, font: { size: 9, color: { argb: BRAND.muted }, name: FONT } });
+  });
+
+  const HEADER_TOP = writeBrandHeader(sheet, {
+    lastCol: TOTAL_COLS,
+    sheetLabel: 'Gantt chart',
+    project,
+    logoId: ctx.logoId,
+    meta: [...projectMeta(project), ...legend],
+    metaHeight: 40,
+  });
   const HEADER_LAST = HEADER_TOP + TIMELINE_HEADER_ROWS - 1;
   const FIRST_TASK_ROW = HEADER_LAST + 1;
 
-  // ---- Row 1: Title ----
-  sheet.mergeCells(1, 1, 1, TOTAL_COLS);
-  const titleCell = sheet.getCell(1, 1);
-  titleCell.value = `${project.name}  ·  Gantt Chart`;
-  titleCell.font = { bold: true, size: 15, color: { argb: 'FFFFFFFF' }, name: 'Segoe UI' };
-  titleCell.fill = solidFill(accentArgb);
-  titleCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
-  sheet.getRow(1).height = 32;
-
-  // ---- Rows 2–5: month / week / weekday / day number (shared with the Availability sheet) ----
+  // ---- Month / week / weekday / day number (shared with the Availability sheet) ----
   writeTimelineHeader(sheet, {
-    dates, firstCol: LEFT_COLS + 1, topRow: HEADER_TOP, accentArgb, accentLightArgb, todayStr,
+    dates, firstCol: LEFT_COLS + 1, topRow: HEADER_TOP, accentArgb: BRAND.navy, accentLightArgb: BRAND.panelSoft, todayStr,
   });
 
   // Left info headers span all four header rows
   ['#', 'Task Name', 'AM/PM', 'Start', 'End'].forEach((h, i) => {
     sheet.mergeCells(HEADER_TOP, i + 1, HEADER_LAST, i + 1);
-    const cell = sheet.getCell(HEADER_TOP, i + 1);
-    cell.value = h;
-    cell.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' }, name: 'Segoe UI' };
-    cell.fill = solidFill(accentArgb);
-    cell.alignment = { vertical: 'middle', horizontal: i === 1 ? 'left' : 'center', indent: i === 1 ? 1 : 0 };
+    applyHeaderCell(sheet.getCell(HEADER_TOP, i + 1), h, i === 1 ? 'left' : 'center');
   });
 
   // ---- Task rows ----
   const parentIds = new Set<string>();
   flatList.forEach(({ isParent, task }) => { if (isParent) parentIds.add(task.id); });
+  const allTasks = flatList.map(f => f.task);
 
+  let leafIdx = 0;
   flatList.forEach(({ task, depth, wbs, isParent }, idx) => {
     const rowNum = idx + FIRST_TASK_ROW;
     const row = sheet.getRow(rowNum);
-    row.height = isParent ? 20 : 18;
+    row.height = isParent ? 22 : 20;
 
-    const isEven = idx % 2 === 0;
-    const rowBg = isParent ? accentLightArgb : (isEven ? 'FFFFFFFF' : 'FFF9FAFB');
-    const textArgb = isParent ? accentArgb : 'FF1F2937';
-    const indent = '  '.repeat(depth);
+    const rowBg = isParent ? BRAND.navySoft : (leafIdx++ % 2 === 0 ? BRAND.white : BRAND.zebra);
+    const textArgb = isParent ? BRAND.navy : (task.status === 'completed' ? BRAND.muted : BRAND.text);
 
     // Left info columns
-    const leftData: Array<{ v: ExcelJS.CellValue; align: ExcelJS.Alignment['horizontal'] }> = [
+    const leftData: Array<{ v: ExcelJS.CellValue; align: ExcelJS.Alignment['horizontal']; indent?: number }> = [
       { v: wbs, align: 'center' },
-      { v: indent + task.name, align: 'left' },
+      { v: task.name, align: 'left', indent: 1 + depth * 2 },
       { v: amPmLabel(task), align: 'center' },
       { v: friendlyDate(task.plannedStartDate), align: 'center' },
       { v: friendlyDate(task.plannedEndDate), align: 'center' },
     ];
-    leftData.forEach(({ v, align }, ci) => {
+    leftData.forEach(({ v, align, indent }, ci) => {
       applyDataCell(row.getCell(ci + 1), v, {
         bgArgb: rowBg,
-        textArgb,
+        textArgb: ci === 0 && !isParent ? BRAND.faint : textArgb,
         bold: isParent,
+        size: ci === 0 ? 9 : 10,
         align,
+        indent,
       });
     });
-    if (isParent) {
-      row.getCell(1).border = {
-        top: HAIR, bottom: HAIR,
-        left: { style: 'medium', color: { argb: accentArgb } },
-        right: THIN,
-      };
-    }
+    row.getCell(LEFT_COLS).border = { bottom: HAIRLINE, right: line('thin', BRAND.borderStrong) };
+    if (isParent) markParentRow(row);
 
-    // Bar colour: use status colour
-    const barArgb = STATUS_ARGB[task.status];
-    const barLightArgb = lighten(
-      '#' + STATUS_ARGB[task.status].slice(2), // strip leading FF
-      0.65,
-    );
+    // Bars: navy for phases/groups (light navy = still to do), status colour for tasks.
+    const barArgb = isParent ? BRAND.navy : STATUS_STYLE[task.status].bar;
+    const barRestArgb = isParent ? BRAND.navyTint : barArgb;
 
-    const prog = progressFor(task, flatList.map(f => f.task), parentIds);
+    const prog = progressFor(task, allTasks, parentIds);
     const barProgCols = task.plannedStartDate && task.plannedEndDate
       ? dayCols.filter(c => c.dateStr >= task.plannedStartDate! && c.dateStr <= task.plannedEndDate!).length
       : 0;
@@ -465,6 +410,7 @@ function addGanttSheet(
     dayCols.forEach((col, i) => {
       const excelCol = LEFT_COLS + 1 + i;
       const cell = row.getCell(excelCol);
+      const weekLine = weekStartBorder(dates, i, BRAND.borderStrong);
 
       const inBar = !!(task.plannedStartDate && task.plannedEndDate &&
                        col.dateStr >= task.plannedStartDate &&
@@ -473,22 +419,17 @@ function addGanttSheet(
       if (inBar) {
         if (firstBarCol === -1) firstBarCol = excelCol;
         lastBarCol = excelCol;
-
-        const isProgFill = barColIdx < progFillCount;
-        cell.fill = solidFill(isParent ? barArgb : (isProgFill ? barArgb : barLightArgb));
+        cell.fill = solid(barColIdx < progFillCount ? barArgb : barRestArgb);
         barColIdx++;
-
+        // Row-coloured top/bottom borders inset the bar so it reads as a bar, not a filled row.
         cell.border = {
-          top: { style: 'hair', color: { argb: barArgb } },
-          bottom: { style: 'hair', color: { argb: barArgb } },
-          left: weekStartBorder(dates, i, accentArgb),
+          top: line('thick', rowBg),
+          bottom: line('thick', rowBg),
+          left: weekLine,
         };
       } else {
-        cell.fill = solidFill(col.isToday ? TODAY_BG : rowBg);
-        cell.border = {
-          top: HAIR, bottom: HAIR,
-          left: weekStartBorder(dates, i, accentArgb),
-        };
+        cell.fill = solid(col.isToday ? BRAND.orangeSoft : rowBg);
+        cell.border = { bottom: HAIRLINE, left: weekLine };
       }
     });
 
@@ -496,17 +437,18 @@ function addGanttSheet(
     // dark text, so it stays readable regardless of the bar's fill colour. A label
     // written inside a short bar would be clipped.
     if (firstBarCol !== -1) {
+      const labelFont: Partial<ExcelJS.Font> = { bold: isParent, size: 8, color: { argb: isParent ? BRAND.navy : BRAND.muted }, name: FONT };
       const rightCol = lastBarCol + 1;
       if (rightCol <= TOTAL_COLS) {
         const lc = row.getCell(rightCol);
         lc.value = task.name;
-        lc.font = { bold: isParent, size: 8, color: { argb: textArgb }, name: 'Segoe UI' };
+        lc.font = labelFont;
         lc.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
       } else if (firstBarCol - 1 > LEFT_COLS) {
         // Bar runs to the right edge — drop the label to its left instead.
         const lc = row.getCell(firstBarCol - 1);
         lc.value = task.name;
-        lc.font = { bold: isParent, size: 8, color: { argb: textArgb }, name: 'Segoe UI' };
+        lc.font = labelFont;
         lc.alignment = { vertical: 'middle', horizontal: 'right', indent: 1 };
       }
     }
@@ -520,11 +462,45 @@ function addGanttSheet(
     topLeftCell: `F${FIRST_TASK_ROW}`,
     activeCell: `A${FIRST_TASK_ROW}`,
   }];
+  applySheetChrome(sheet, { printTitleRows: `${HEADER_TOP}:${HEADER_LAST}` });
 }
 
 // ---------------------------------------------------------------------------
-// Public entry point
+// Public entry points
 // ---------------------------------------------------------------------------
+
+/** Builds the workbook. `logoPng` is a PNG data URL (or bare base64) of the reverse logo. */
+export function buildProjectWorkbook(
+  project: Project,
+  tasks: Task[],
+  consultants: Consultant[],
+  availability: ProjectAvailability[] = [],
+  logoPng?: string | null,
+): ExcelJS.Workbook {
+  const projectTasks = tasks
+    .filter(t => t.projectId === project.id)
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+
+  const flatList = buildFlatList(projectTasks);
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Pinnacle Flow';
+  workbook.company = 'Pinnacle';
+  workbook.title = `${project.name} — ${project.clientName}`;
+  workbook.created = new Date();
+  workbook.properties.date1904 = false;
+
+  const logoId = logoPng
+    ? workbook.addImage({ base64: logoPng.replace(/^data:image\/png;base64,/, ''), extension: 'png' })
+    : undefined;
+
+  const ctx: SheetContext = { project, flatList, logoId };
+  addTaskSheet(workbook, ctx, consultants);
+  addGanttSheet(workbook, ctx);
+  addAvailabilitySheet(workbook, project, projectTasks, availability, logoId);
+
+  return workbook;
+}
 
 export async function exportProjectToExcel(
   project: Project,
@@ -532,25 +508,8 @@ export async function exportProjectToExcel(
   consultants: Consultant[],
   availability: ProjectAvailability[] = [],
 ): Promise<void> {
-  const projectTasks = tasks
-    .filter(t => t.projectId === project.id)
-    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-
-  const flatList = buildFlatList(projectTasks);
-
-  const accent = getProjectAccent(project);
-  const accentArgb = hexToArgb(accent);
-  const accentLightArgb = lighten(accent, 0.88);
-  const accentMidArgb = lighten(accent, 0.55);
-
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Pinnacle Flow';
-  workbook.created = new Date();
-  workbook.properties.date1904 = false;
-
-  addTaskSheet(workbook, project, flatList, consultants, accentArgb, accentLightArgb, accentMidArgb);
-  addGanttSheet(workbook, project, flatList, accentArgb, accentLightArgb);
-  addAvailabilitySheet(workbook, project, projectTasks, availability, accentArgb, accentLightArgb);
+  const logoPng = await loadLogoPng();
+  const workbook = buildProjectWorkbook(project, tasks, consultants, availability, logoPng);
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer as ArrayBuffer], {
@@ -565,3 +524,4 @@ export async function exportProjectToExcel(
   document.body.removeChild(link);
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
+

@@ -1,5 +1,6 @@
 import type ExcelJS from 'exceljs';
 import { parseDate } from './scheduler';
+import { BRAND } from './excelBrand';
 
 // ---------------------------------------------------------------------------
 // Shared timeline header for the "Gantt Chart" and "Availability" sheets.
@@ -20,7 +21,7 @@ export const DAY_COL_WIDTH = 5.5;
 export const TIMELINE_HEADER_ROWS = 4;
 
 const FONT = 'Segoe UI';
-const TODAY_BG = 'FFFFF3CD';
+const TODAY_BG = BRAND.orangeSoft;
 const WHITE = 'FFFFFFFF';
 const solid = (a: string): ExcelJS.Fill => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: a } });
 
@@ -117,7 +118,7 @@ export function writeTimelineHeader(sheet: ExcelJS.Worksheet, o: TimelineHeaderO
 
   // ---- Weekday + day number ----
   const weekLine: Partial<ExcelJS.Border> = { style: 'medium', color: { argb: accentArgb } };
-  const bottomLine: Partial<ExcelJS.Border> = { style: 'medium', color: { argb: accentArgb } };
+  const bottomLine: Partial<ExcelJS.Border> = { style: 'medium', color: { argb: BRAND.orange } };
   dates.forEach((date, i) => {
     const d = parseDate(date);
     const isToday = date === todayStr;
@@ -126,14 +127,14 @@ export function writeTimelineHeader(sheet: ExcelJS.Worksheet, o: TimelineHeaderO
 
     const wd = sheet.getCell(WDAY, firstCol + i);
     wd.value = d.toLocaleDateString('en-US', { weekday: 'short' });
-    wd.font = { size: 9, color: { argb: 'FF4B5563' }, bold: isToday, name: FONT };
+    wd.font = { size: 9, color: { argb: isToday ? BRAND.orangeInk : BRAND.muted }, bold: isToday, name: FONT };
     wd.fill = bg;
     wd.alignment = { vertical: 'bottom', horizontal: 'center' };
     wd.border = { left };
 
     const dn = sheet.getCell(DAY, firstCol + i);
     dn.value = d.getDate();
-    dn.font = { size: 14, bold: true, color: { argb: 'FF1F2937' }, name: FONT };
+    dn.font = { size: 14, bold: true, color: { argb: isToday ? BRAND.orangeInk : BRAND.ink }, name: FONT };
     dn.fill = bg;
     dn.alignment = { vertical: 'middle', horizontal: 'center' };
     dn.border = { left, bottom: bottomLine };

@@ -8,6 +8,7 @@ import { api } from '../utils/api';
 import { parseDate } from '../utils/scheduler';
 import { getProjectAccent } from '../utils/phases';
 import { exportProjectToExcel } from '../utils/exportToExcel';
+import { AVAILABILITY_PERSON_ROW } from '../utils/exportAvailabilitySheet';
 import {
   AVAILABILITY_CODES, CODE_META, mergeAvailability, parseAvailabilityGrid, parseClipboardGrid,
   readAvailabilityWorkbook, timelineDates, timelineDayCount,
@@ -465,7 +466,7 @@ function ImportModal({ project, accent, source, dates, existing, onChangeText, o
             {source.kind === 'paste' ? (
               <>
                 <p className="tv2-import-intro">
-                  In the Excel export, open the <b>Availability</b> sheet, select from the <b>Person</b> cell (A3) to the last
+                  In the Excel export, open the <b>Availability</b> sheet, select from the <b>Person</b> cell (A{AVAILABILITY_PERSON_ROW}) to the last
                   filled day, copy, and paste below. Each row is a person; each day holds a code
                   ({AVAILABILITY_CODES.map(c => c.code).join(' / ')}).
                 </p>
