@@ -1,5 +1,5 @@
 import { getSupabaseClient, isSupabaseConfigured } from './supabase';
-import type { Project, Task, Consultant, Communication, Customer } from '../types';
+import type { Project, Task, Consultant, Communication, Customer, ProjectAvailability, AvailabilityCode } from '../types';
 
 // Helper translations: database (snake_case) <-> client (camelCase)
 
@@ -82,6 +82,35 @@ function mapCommunicationToDb(c: Communication) {
     created_at: c.createdAt
   };
 }
+
+function mapAvailabilityFromDb(db: any): ProjectAvailability {
+  const raw = db.days && typeof db.days === 'object' ? db.days : {};
+  return {
+    id: db.id,
+    projectId: db.project_id,
+    personName: db.person_name,
+    sortOrder: Number(db.sort_order) || 0,
+    days: raw as Record<string, AvailabilityCode>,
+  };
+}
+
+function mapAvailabilityToDb(a: ProjectAvailability) {
+  return {
+    id: a.id,
+    project_id: a.projectId,
+    person_name: a.personName,
+    sort_order: a.sortOrder,
+    days: a.days,
+  };
+}
+
+// Offline (no Supabase) storage: every project's rows in one localStorage key.
+const AVAILABILITY_KEY = 'pinnacle_availability';
+const readLocalAvailability = (): ProjectAvailability[] => {
+  try { return JSON.parse(localStorage.getItem(AVAILABILITY_KEY) || '[]'); } catch { return []; }
+};
+const writeLocalAvailability = (rows: ProjectAvailability[]) =>
+  localStorage.setItem(AVAILABILITY_KEY, JSON.stringify(rows));
 
 function mapTaskFromDb(db: any): Task {
   return {
@@ -364,6 +393,43 @@ export const api = {
         const { error } = await client.from('customers').delete().eq('id', id);
         if (error) throw error;
       }
+    }
+  },
+
+  availability: {
+    getByProject: async (projectId: string): Promise<ProjectAvailability[]> => {
+      if (isSupabaseConfigured()) {
+        const client = getSupabaseClient() as any;
+        const { data, error } = await client.from('project_availability').select('*')
+          .eq('project_id', projectId).order('sort_order', { ascending: true });
+        if (error) throw error;
+        return (data || []).map(mapAvailabilityFromDb);
+      }
+      return readLocalAvailability()
+        .filter(r => r.projectId === projectId)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+    },
+    saveMany: async (rows: ProjectAvailability[]): Promise<void> => {
+      if (rows.length === 0) return;
+      if (isSupabaseConfigured()) {
+        const client = getSupabaseClient() as any;
+        const { error } = await client.from('project_availability').upsert(rows.map(mapAvailabilityToDb));
+        if (error) throw error;
+        return;
+      }
+      const ids = new Set(rows.map(r => r.id));
+      writeLocalAvailability([...readLocalAvailability().filter(r => !ids.has(r.id)), ...rows]);
+    },
+    deleteMany: async (ids: string[]): Promise<void> => {
+      if (ids.length === 0) return;
+      if (isSupabaseConfigured()) {
+        const client = getSupabaseClient() as any;
+        const { error } = await client.from('project_availability').delete().in('id', ids);
+        if (error) throw error;
+        return;
+      }
+      const drop = new Set(ids);
+      writeLocalAvailability(readLocalAvailability().filter(r => !drop.has(r.id)));
     }
   },
 

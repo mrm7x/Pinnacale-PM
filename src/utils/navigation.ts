@@ -1,9 +1,9 @@
-import { LayoutDashboard, ListChecks, GanttChartSquare, Gauge, MessageSquareText } from 'lucide-react';
+import { LayoutDashboard, ListChecks, GanttChartSquare, Gauge, MessageSquareText, CalendarDays } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 // The views inside a project. 'tasks' is the legacy task list, kept in the
 // type so old code paths still compile; it has no tab of its own.
-export type ProjectTab = 'overview' | 'tasks' | 'tasks-v2' | 'gantt' | 'rag' | 'communications';
+export type ProjectTab = 'overview' | 'tasks' | 'tasks-v2' | 'gantt' | 'availability' | 'rag' | 'communications';
 
 export interface ProjectTabDef {
   id: ProjectTab;
@@ -18,6 +18,7 @@ export const PROJECT_TABS: ProjectTabDef[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'tasks-v2', label: 'Tasks', icon: ListChecks },
   { id: 'gantt', label: 'Gantt', icon: GanttChartSquare },
+  { id: 'availability', label: 'Holiday / Availability', icon: CalendarDays, customerHidden: true },
   { id: 'rag', label: 'RAG', icon: Gauge, customerHidden: true },
   { id: 'communications', label: 'Project notes', icon: MessageSquareText, customerHidden: true },
 ];

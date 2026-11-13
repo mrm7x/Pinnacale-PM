@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
-import type { Project, Task, Consultant } from '../types';
+import type { Project, Task, Consultant, ProjectAvailability } from '../types';
+import { addAvailabilitySheet } from './exportAvailabilitySheet';
 import { getProjectAccent } from './phases';
 import { getSchedulePoint, parseDate, effectiveDurationDays } from './scheduler';
 
@@ -592,6 +593,7 @@ export async function exportProjectToExcel(
   project: Project,
   tasks: Task[],
   consultants: Consultant[],
+  availability: ProjectAvailability[] = [],
 ): Promise<void> {
   const projectTasks = tasks
     .filter(t => t.projectId === project.id)
@@ -611,6 +613,7 @@ export async function exportProjectToExcel(
 
   addTaskSheet(workbook, project, flatList, consultants, accentArgb, accentLightArgb, accentMidArgb);
   addGanttSheet(workbook, project, flatList, accentArgb, accentLightArgb);
+  addAvailabilitySheet(workbook, project, projectTasks, availability, accentArgb, accentLightArgb);
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer as ArrayBuffer], {

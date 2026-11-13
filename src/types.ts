@@ -152,3 +152,19 @@ export interface TaskView {
   fontScale: number;              // 1 = default; 0.8–1.5 range
   isBuiltIn?: boolean;            // the seeded "Default View" cannot be deleted
 }
+
+// ---------------------------------------------------------------------------
+// Holiday / availability tracker — one row per person per project.
+// ---------------------------------------------------------------------------
+
+/** A Available · U Unavailable (holiday) · H Half day · T Training/other · P Public holiday. */
+export type AvailabilityCode = 'A' | 'U' | 'H' | 'T' | 'P';
+
+export interface ProjectAvailability {
+  id: string;
+  projectId: string;
+  personName: string;
+  sortOrder: number;
+  /** Day (YYYY-MM-DD) → code. Days without an entry are blank. */
+  days: Record<string, AvailabilityCode>;
+}
