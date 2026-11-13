@@ -1,7 +1,20 @@
 import ExcelJS from 'exceljs';
 import type { Project, Task, Consultant } from '../types';
 import { getProjectAccent } from './phases';
-import { getSchedulePoint, parseDate, effectiveDurationDays } from './scheduler';
+import { getSchedulePoint, parseDate } from './scheduler';
+
+/**
+ * AM/PM label for a half-day task, blank for anything a day or longer.
+ * Same rule as the Outlook export (halfDayPeriod in exportToIcs.ts): a task is
+ * half-day when it starts and ends on the same half-day slot; it shows the
+ * period chosen in the task form, and tasks saved before that option existed
+ * default to AM. Kept local so the two exports don't depend on each other.
+ */
+function amPmLabel(task: Task): string {
+  const { startHalfDay: s, endHalfDay: e } = task;
+  if (!Number.isFinite(s) || !Number.isFinite(e) || s !== e) return '';
+  return task.startPeriod ?? 'AM';
+}
 
 // ---------------------------------------------------------------------------
 // Colour helpers
@@ -196,7 +209,7 @@ function addTaskSheet(
     { width: 14 },  // C  Status
     { width: 16 },  // D  Owner
     { width: 18 },  // E  Assignee
-    { width: 11 },  // F  Duration
+    { width: 11 },  // F  AM/PM
     { width: 13 },  // G  Start Date
     { width: 13 },  // H  End Date
     { width: 10 },  // I  Progress
@@ -246,7 +259,7 @@ function addTaskSheet(
   }
 
   // ---- Row 3: Column headers ----
-  const headers = ['#', 'Task Name', 'Status', 'Owner', 'Assignee', 'Duration (d)',
+  const headers = ['#', 'Task Name', 'Status', 'Owner', 'Assignee', 'AM/PM',
                    'Start Date', 'End Date', 'Progress', 'Pink #', 'Description'];
   const hRow = sheet.getRow(3);
   hRow.height = 22;
@@ -283,7 +296,7 @@ function addTaskSheet(
       { value: STATUS_LABEL[task.status], align: 'center', bg: STATUS_ARGB[task.status], textColor: 'FFFFFFFF' },
       { value: task.taskOwner || 'Pinnacle', align: 'center' },
       { value: assignee?.name || 'Unassigned', align: 'center' },
-      { value: effectiveDurationDays(task), align: 'center' },
+      { value: amPmLabel(task), align: 'center' },
       { value: friendlyDate(task.plannedStartDate), align: 'center' },
       { value: friendlyDate(task.plannedEndDate), align: 'center' },
       { value: `${prog}%`, align: 'center' },
@@ -335,7 +348,7 @@ function addGanttSheet(
 ): void {
   const sheet = workbook.addWorksheet('Gantt Chart');
 
-  const LEFT_COLS = 5; // #, Task Name, Duration, Start, End
+  const LEFT_COLS = 5; // #, Task Name, AM/PM, Start, End
 
   // Compute working-day columns (same logic as GanttChart.tsx)
   const scheduledTasks = flatList.map(f => f.task);
@@ -373,7 +386,7 @@ function addGanttSheet(
   // Set column widths
   sheet.getColumn(1).width = 6;   // #
   sheet.getColumn(2).width = 28;  // Task Name
-  sheet.getColumn(3).width = 9;   // Duration
+  sheet.getColumn(3).width = 9;   // AM/PM
   sheet.getColumn(4).width = 11;  // Start
   sheet.getColumn(5).width = 11;  // End
   dayCols.forEach((_, i) => {
@@ -434,7 +447,7 @@ function addGanttSheet(
   flushMonth(LEFT_COLS + dayCols.length);
 
   // Left info header cells for row 2
-  ['#', 'Task Name', 'Dur.', 'Start', 'End'].forEach((h, i) => {
+  ['#', 'Task Name', 'AM/PM', 'Start', 'End'].forEach((h, i) => {
     const cell = sheet.getCell(2, i + 1);
     cell.value = h;
     cell.font = { bold: true, size: 9, color: { argb: 'FFFFFFFF' }, name: 'Segoe UI' };
@@ -488,7 +501,7 @@ function addGanttSheet(
     const leftData: Array<{ v: ExcelJS.CellValue; align: ExcelJS.Alignment['horizontal'] }> = [
       { v: wbs, align: 'center' },
       { v: indent + task.name, align: 'left' },
-      { v: effectiveDurationDays(task), align: 'center' },
+      { v: amPmLabel(task), align: 'center' },
       { v: friendlyDate(task.plannedStartDate), align: 'center' },
       { v: friendlyDate(task.plannedEndDate), align: 'center' },
     ];
